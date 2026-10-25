@@ -1,0 +1,111 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SpellsChess</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Экран выбора героев -->
+    <div id="setup" class="overlay">
+        <div class="setup-card">
+            <h1>SpellsChess</h1>
+            <p id="setupNet" class="sub hidden"></p>
+            <p class="sub">Каждая сторона выбирает героя. В свой ход можно либо походить фигурой, либо применить способность героя. Все способности стартуют с перезарядкой 3.</p>
+            <div class="pick-row">
+                <section class="side-pick" data-side="w">
+                    <h2>Белые</h2>
+                    <div class="hero-list"></div>
+                </section>
+                <section class="side-pick" data-side="b">
+                    <h2>Чёрные</h2>
+                    <div class="hero-list"></div>
+                </section>
+            </div>
+            <button id="startBtn" class="big-btn">Начать партию</button>
+        </div>
+    </div>
+
+
+    <!-- Выбор режима: один экран или онлайн -->
+    <div id="lobby" class="overlay">
+        <div class="setup-card lobby-card">
+            <h1>SpellsChess</h1>
+            <p class="sub">Как будете играть?</p>
+            <button id="lobbyLocal" class="big-btn">Вдвоём за одним экраном</button>
+            <div class="lobby-sep">онлайн</div>
+            <button id="lobbyQuick" class="big-btn">Быстрая игра: найти соперника</button>
+            <div class="lobby-sep">или с другом по коду</div>
+            <button id="lobbyHost" class="big-btn">Создать комнату</button>
+            <div id="hostBox" class="hidden">Код комнаты: <b id="roomCode"></b> <button id="copyCode" class="small-btn">Копировать</button></div>
+            <div class="join-row"><input id="joinCode" maxlength="8" placeholder="КОД"><button id="lobbyJoin" class="big-btn">Войти</button></div>
+            <p id="lobbyStatus" class="sub"></p>
+        </div>
+    </div>
+
+    <!-- Игра -->
+    <main id="app" class="game hidden">
+        <div class="board-col">
+            <div id="panel-b" class="panel"></div>
+            <div id="board"></div>
+            <div id="panel-w" class="panel"></div>
+        </div>
+
+        <aside class="side-col">
+            <div id="netInfo" class="hint hidden"></div>
+            <div id="status" class="status"></div>
+            <div id="hint" class="hint"></div>
+
+            <div class="btn-row">
+                <button id="btnDraw" class="small-btn">Ничья</button>
+                <button id="btnResign" class="small-btn">Сдаться</button>
+                <button id="btnNew" class="small-btn">Новая игра</button>
+                <button id="btnSound" class="small-btn" title="Звук">🔊</button>
+                <button id="btnGhost" class="small-btn" title="Подсвечивать иллюзии Экстрасенса">👁</button>
+                <button id="btnTraps" class="small-btn" title="Показывать капканы Охотника">🪤</button>
+                <button id="btnInvis" class="small-btn" title="Показывать невидимые фигуры Самурая">🥷</button>
+                <button id="btnEnd" class="small-btn hidden" disabled title="Архитектор: закончить ход после способностей">Завершить ход</button>
+            </div>
+
+            <h3>Журнал</h3>
+            <ol id="log"></ol>
+
+            <details class="rules">
+                <summary>Особые правила</summary>
+                <ul>
+                    <li>Короли навсегда неуязвимы для магии.</li>
+                    <li>Большинство способностей тратят ход. Те, что ход не тратят, отмечены зелёным кружком справа от названия.</li>
+                    <li>Все способности стартуют с перезарядкой 3.</li>
+                    <li>Описание способности и пассивки видно во всплывающей подсказке при наведении на кнопку.</li>
+                    <li>Если визуально ход сделать невозможно, это не значит, что он невозможен на самом деле: невидимые фигуры, иллюзии, скрытые ловушки и фейки могут менять картину.</li>
+                    <li>После мата можно нажать «Посмотреть доску» и рассмотреть финальную позицию.</li>
+                    <li>Esc отменяет выбор.</li>
+                </ul>
+            </details>
+        </aside>
+    </main>
+
+    <!-- Выбор фигуры при превращении пешки -->
+    <div id="promo" class="overlay hidden">
+        <div class="small-card">
+            <h2>Превращение пешки</h2>
+            <div id="promoBtns" class="promo-row"></div>
+        </div>
+    </div>
+
+    <!-- Конец партии -->
+    <div id="gameover" class="overlay hidden">
+        <div class="small-card">
+            <h2 id="goTitle"></h2>
+            <p id="goText"></p>
+            <button id="goView" class="big-btn secondary">Посмотреть доску</button>
+            <button id="goNew" class="big-btn">Сыграть ещё</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
