@@ -26,6 +26,10 @@
             </div>
             <div class="theme-pick"><h3>Доска</h3><div id="themeRow"></div></div>
             <button id="startBtn" class="big-btn">Начать партию</button>
+            <div class="foot">
+                <a id="donateSetup" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
+                <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a></div>
+            </div>
         </div>
     </div>
 
@@ -43,6 +47,8 @@
             <div id="hostBox" class="hidden">Код комнаты: <b id="roomCode"></b> <button id="copyCode" class="small-btn">Копировать</button></div>
             <div class="join-row"><input id="joinCode" maxlength="8" placeholder="КОД"><button id="lobbyJoin" class="big-btn">Войти</button></div>
             <p id="lobbyStatus" class="sub"></p>
+            <a id="donateLobby" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
+            <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a></div>
         </div>
     </div>
 
@@ -69,6 +75,17 @@
                 <button id="btnTraps" class="small-btn" title="Показывать капканы Охотника">🪤</button>
                 <button id="btnInvis" class="small-btn" title="Показывать невидимые фигуры Самурая">🥷</button>
                 <button id="btnEnd" class="small-btn hidden" disabled title="Архитектор: закончить ход после способностей">Завершить ход</button>
+            </div>
+
+            <div class="foot">
+                <a id="donateGame" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
+                <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a></div>
+            </div>
+
+            <div id="chat" class="chat hidden">
+                <h3>Чат <button id="chatMute" class="small-btn" title="Заглушить соперника">🔔</button></h3>
+                <div id="chatLog"></div>
+                <div class="chat-row"><input id="chatInput" maxlength="300" placeholder="Сообщение..."><button id="chatSend" class="small-btn">➤</button></div>
             </div>
 
             <h3>Журнал</h3>

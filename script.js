@@ -3,12 +3,17 @@
 /* =====================================================================
    НАСТРОЙКИ — можно смело менять числа
    ===================================================================== */
+// ---------- Об авторе и поддержка проекта ----------
+// Вставьте сюда ссылку на вашу страницу доната (Ko-fi, Boosty, DonationAlerts, Buy Me a Coffee и т. п.).
+// Пока строка пустая, кнопка «Поддержать» скрыта.
+const DONATE_URL = 'https://boosty.to/frouzyg';
+
 const CONFIG = {
     // Перезарядка способностей (в ходах владельца)
     cooldown: {
         resurrect: 11, shield: 5, rescue: 9,         // Паладин
         fireball: 6, freeze: 5, copy: 15,            // Маг
-        illusion: 3, hypnosis: 7, confusion: 5,      // Экстрасенс
+        illusion: 3, hypnosis: 7, confusion: 8,      // Экстрасенс
         raise: 8, frankenstein: 6, apocalypse: 8,    // Некромант
         trap: 4, arrow: 3, lure: 7,                  // Охотник
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
@@ -234,7 +239,7 @@ const PASSIVES = {
         desc: 'За ход можно применить несколько способностей, но после первой фигурой ходить нельзя. Потом «Завершить ход».'
     },
     teleport: {
-        icon: '🌀', name: 'Мгновенный шаг',
+        icon: '🌀', name: 'Кагэватари',
         desc: 'Король телепортируется на любое безопасное свободное поле, даже из-под шаха. Второй клик по королю или кнопка. Тратит ход, перезарядка ' + CONFIG.cooldown.teleport + '.'
     },
     timeslow: {
@@ -250,15 +255,15 @@ const PASSIVES = {
 };
 
 const HEROES = {
-    paladin: { icon: '⚜️', name: 'Паладин', tag: 'Свет и сталь', passive: 'brotherhood', abilities: ['resurrect', 'shield', 'rescue', 'guardian'] },
-    mage: { icon: '🔮', name: 'Маг', tag: 'Огонь и лёд', passive: 'aura', abilities: ['fireball', 'freeze', 'copy', 'purify'] },
-    hypnotist: { icon: '🌀', name: 'Экстрасенс', tag: 'Обман и воля', passive: 'doubleVision', abilities: ['illusion', 'hypnosis', 'confusion', 'lie'] },
+    paladin: { icon: '⚜️', name: 'Паладин', tag: 'Защита и святость', passive: 'brotherhood', abilities: ['resurrect', 'shield', 'rescue', 'guardian'] },
+    mage: { icon: '🔮', name: 'Маг', tag: 'Классика', passive: 'aura', abilities: ['fireball', 'freeze', 'copy', 'purify'] },
+    hypnotist: { icon: '🌀', name: 'Экстрасенс', tag: 'Обман и контроль', passive: 'doubleVision', abilities: ['illusion', 'hypnosis', 'confusion', 'lie'] },
     necromancer: { icon: '💀', name: 'Некромант', tag: 'Смерть и сшивка', passive: 'harvest', abilities: ['raise', 'frankenstein', 'apocalypse', 'virus'] },
-    hunter: { icon: '🏹', name: 'Охотник', tag: 'Тропа и добыча', passive: 'aim', abilities: ['trap', 'arrow', 'lure', 'vine'] },
-    phantom: { icon: '👻', name: 'Призрак', tag: 'Тени и шёпот', passive: 'paranormal', abilities: ['phase', 'soulmates', 'scream', 'ritual'] },
-    samurai: { icon: '🗡️', name: 'Самурай', tag: 'Путь клинка', passive: 'teleport', abilities: ['shomen', 'fukashi', 'fenyan', 'bumpuku'] },
-    architect: { icon: '🏗️', name: 'Архитектор', tag: 'Чертежи и пути', passive: 'multi', abilities: ['conveyor', 'portals', 'relocate', 'generator'] },
-    timelord: { icon: '⏳', name: 'Повелитель времени', tag: 'Миг и вечность', passive: 'timeslow', abilities: ['zawarudo', 'misclick', 'superposition', 'groundhog'] }
+    hunter: { icon: '🏹', name: 'Охотник', tag: 'Ловушки и добыча', passive: 'aim', abilities: ['trap', 'arrow', 'lure', 'vine'] },
+    phantom: { icon: '👻', name: 'Призрак', tag: 'Проклятия и скорость', passive: 'paranormal', abilities: ['phase', 'soulmates', 'scream', 'ritual'] },
+    samurai: { icon: '🗡️', name: 'Самурай', tag: 'Всё ради победы', passive: 'teleport', abilities: ['shomen', 'fukashi', 'fenyan', 'bumpuku'] },
+    architect: { icon: '🏗️', name: 'Архитектор', tag: 'Перестройка по своим правилам', passive: 'multi', abilities: ['conveyor', 'portals', 'relocate', 'generator'] },
+    timelord: { icon: '⏳', name: 'Повелитель времени', tag: 'Похититель темпа', passive: 'timeslow', abilities: ['zawarudo', 'misclick', 'superposition', 'groundhog'] }
 };
 
 // Способности, у которых выбор идёт в два шага: сначала фигура, потом клетка
@@ -290,7 +295,7 @@ const sameMove = (a, b) => a.fr === b.fr && a.fc === b.fc && a.tr === b.tr && a.
    ОНЛАЙН: обе стороны получают одни и те же действия и считают игру одинаково.
    Скрытое (капканы, невидимые фигуры, ловушки сурка) просто не рисуется у соперника.
    ===================================================================== */
-const NET = { on: false, me: null, host: false, conn: null, peer: null, lost: false };
+const NET = { on: false, me: null, host: false, conn: null, peer: null, lost: false, ready: false, oppReady: false, oppHero: null, muted: false };
 let pickOverride = null, lastPick = null;    // выбор «рокировка или вселение» передаётся сопернику
 const netSend = m => { if (NET.on && NET.conn && NET.conn.open) NET.conn.send(m); };
 const isActor = () => !NET.on || (!!G && G.turn === NET.me);   // можно ли этому игроку сейчас ходить
@@ -2448,7 +2453,7 @@ function doTeleport(r, c) {
     G.cd[col].teleport = cdOf(col, 'teleport');
     G.ep = null;
     G.mode = null;
-    addLog(col, `🌀 Мгновенный шаг: король ${from} → ${sqName(r, c)}`);
+    addLog(col, `🌀 Кагэватари: король ${from} → ${sqName(r, c)}`);
     endTurn();
 }
 
@@ -2525,7 +2530,7 @@ function doTimeSlow(k) {
     if (CONFIG.timePassiveCostsTurn) { G.ep = null; endTurn(); } else render();
 }
 
-// Можно ли сейчас применить пассивку с кнопкой (Меткий глаз / Мгновенный шаг)
+// Можно ли сейчас применить пассивку с кнопкой (Меткий глаз / Кагэватари)
 function canPassive(col, k) {
     if (G.cd[col][k] > 0 || G.bonus || G.pairStep || G.archUsed) return false;
     if (k === 'teleport' && blockedByForce(col, k)) return false;
@@ -3037,7 +3042,7 @@ function panelHTML(col) {
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span></button>`;
     });
 
-    // Кнопка пассивки (Меткий глаз / Мгновенный шаг): то же, что второй клик по королю
+    // Кнопка пассивки (Меткий глаз / Кагэватари): то же, что второй клик по королю
     if (ACTIVE_PASSIVES.includes(hero.passive)) {
         const pk = hero.passive, cd = G.cd[col][pk];
         const on = active && G.mode && G.mode.type === pk;
@@ -3148,6 +3153,7 @@ function renderStatus() {
     }
     if (NET.on && G.turn !== NET.me) h = NET.lost ? 'Соединение потеряно.' : '⏳ Ход соперника...';
     hi.textContent = h;
+    renderChat();
     const ni = $('#netInfo');
     ni.classList.toggle('hidden', !NET.on);
     if (NET.on) ni.textContent = `Онлайн: вы играете ${NET.me === 'w' ? 'белыми' : 'чёрными'}${G.turn === NET.me ? ' · ваш ход' : ''}${NET.lost ? ' · соединение потеряно' : ''}`;
@@ -3165,7 +3171,15 @@ function renderLog() {
 const openHeroes = new Set();   // у каких героев раскрыто «Подробнее»
 
 function buildSetup() {
+    const sb = $('#startBtn');
+    if (NET.on) sb.textContent = NET.ready ? 'Отменить готовность' : 'Готов';
+    else sb.textContent = 'Начать партию';
     ['w', 'b'].forEach(side => {
+        if (NET.on && side !== NET.me) {          // героя соперника не показываем до начала партии
+            $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML =
+                `<div class="opp-wait">${NET.oppReady ? '✅ Соперник готов' : '⏳ Соперник выбирает героя...'}</div>`;
+            return;
+        }
         $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML = Object.entries(HEROES).map(([id, h]) => {
             const ps = PASSIVES[h.passive], open = openHeroes.has(id);
             return `
@@ -3215,11 +3229,11 @@ function applyTheme(id) {
 
 function openSetup() {
     buildSetup();
-    $('#startBtn').classList.toggle('hidden', NET.on && !NET.host);
+    NET.ready = false; NET.oppReady = false; NET.oppHero = null;
+    buildSetup();
     const sn = $('#setupNet');
     sn.classList.toggle('hidden', !NET.on);
-    if (NET.on) sn.textContent = `Вы играете ${NET.me === 'w' ? 'белыми (левая колонка)' : 'чёрными (правая колонка)'}. ` +
-        (NET.host ? 'Когда оба выбрали героев, нажмите «Начать партию».' : 'Ждите, пока создатель комнаты начнёт партию.');
+    if (NET.on) sn.textContent = `Вы играете ${NET.me === 'w' ? 'белыми' : 'чёрными'}. Выберите героя и нажмите «Готов»: партия начнётся, когда готовы оба. Героя соперника вы увидите только на старте.`;
     $('#gameover').classList.add('hidden');
     $('#promo').classList.add('hidden');
     $('#setup').classList.remove('hidden');
@@ -3236,17 +3250,31 @@ $('#setup').addEventListener('click', e => {
     const card = e.target.closest('.hero-card');
     if (!card) return;
     const side = card.closest('.side-pick').dataset.side;
-    if (NET.on && side !== NET.me) return;          // онлайн: выбираете героя только за себя
+    if (NET.on && (side !== NET.me || NET.ready)) return;   // онлайн: героя выбираете только за себя и до нажатия «Готов»
     selectedHeroes[side] = card.dataset.hero;
     buildSetup();
-    netSend({ t: 'pick', side, hero: card.dataset.hero });
 });
-$('#startBtn').addEventListener('click', () => {
+function toggleReady() {
+    NET.ready = !NET.ready;
+    netSend({ t: 'ready', ready: NET.ready, hero: selectedHeroes[NET.me] });
+    buildSetup();
+    maybeStart();
+}
+
+// Партия начинается, когда оба нажали «Готов». Запускает хозяин комнаты и сообщает героев и общее число для случайностей.
+function maybeStart() {
+    if (!(NET.on && NET.host && NET.ready && NET.oppReady && NET.oppHero)) return;
     _seed = (Math.random() * 2147483647) | 0;
-    if (NET.on) {
-        if (!NET.host) return;                      // начинает партию тот, кто создал комнату
-        netSend({ t: 'start', seed: _seed, heroes: { ...selectedHeroes } });
-    }
+    const heroes = { w: selectedHeroes.w, b: NET.oppHero };
+    netSend({ t: 'start', seed: _seed, heroes });
+    selectedHeroes = heroes;
+    NET.ready = false; NET.oppReady = false;
+    startGame();
+}
+
+$('#startBtn').addEventListener('click', () => {
+    if (NET.on) { toggleReady(); return; }
+    _seed = (Math.random() * 2147483647) | 0;
     startGame();
 });
 
@@ -3330,6 +3358,29 @@ const PEER_OPTS = {
         ]
     }
 };
+/* ---------- Чат с соперником (можно заглушить) ---------- */
+const chatMsgs = [];
+const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+function renderChat() {
+    const el = $('#chatLog');
+    el.innerHTML = chatMsgs.slice(-60).map(m => `<div class="chat-msg ${m.me ? 'me' : 'them'}"><b>${m.me ? 'Вы' : 'Соперник'}:</b> ${esc(m.text)}</div>`).join('') +
+        (NET.muted ? '<div class="chat-note">Сообщения соперника заглушены</div>' : '');
+    el.scrollTop = el.scrollHeight;
+    $('#chat').classList.toggle('hidden', !NET.on);
+    $('#chatMute').textContent = NET.muted ? '🔕' : '🔔';
+}
+
+function sendChat() {
+    const inp = $('#chatInput');
+    const text = String(inp.value || '').trim().slice(0, 300);
+    if (!text || !NET.on || NET.lost) return;
+    inp.value = '';
+    chatMsgs.push({ me: true, text });
+    netSend({ t: 'chat', text });
+    renderChat();
+}
+
 const lobbyStatus = t => { $('#lobbyStatus').textContent = t; };
 const newCode = () => Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
 
@@ -3410,7 +3461,6 @@ function attachConn(c) {
         NET.me = NET.host ? 'w' : 'b';
         $('#lobby').classList.add('hidden');
         openSetup();
-        netSend({ t: 'pick', side: NET.me, hero: selectedHeroes[NET.me] });
     });
     c.on('data', netRecv);
     c.on('close', () => {
@@ -3423,11 +3473,17 @@ function attachConn(c) {
 
 function netRecv(m) {
     switch (m.t) {
-        case 'pick':
-            if (m.side === other(NET.me)) { selectedHeroes[m.side] = m.hero; buildSetup(); }
+        case 'ready':
+            NET.oppReady = !!m.ready;
+            NET.oppHero = m.ready ? m.hero : null;
+            buildSetup();
+            maybeStart();
             break;
         case 'start':
-            if (!NET.host) { selectedHeroes = { ...m.heroes }; _seed = m.seed; startGame(); }
+            if (!NET.host) { selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
+            break;
+        case 'chat':
+            if (!NET.muted && typeof m.text === 'string') { chatMsgs.push({ me: false, text: m.text.slice(0, 300) }); renderChat(); }
             break;
         case 'in':
             if (G && !G.over && G.turn !== NET.me) applyInput(m.m);
@@ -3443,6 +3499,9 @@ function netRecv(m) {
     }
 }
 
+$('#chatSend').addEventListener('click', sendChat);
+$('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+$('#chatMute').addEventListener('click', () => { NET.muted = !NET.muted; renderChat(); });
 $('#themeRow').addEventListener('click', e => {
     const b = e.target.closest('[data-theme]');
     if (b) applyTheme(b.dataset.theme);
@@ -3467,5 +3526,9 @@ $('#copyCode').addEventListener('click', () => {
     lobbyStatus('Код скопирован: ' + t);
 });
 
+['donateLobby', 'donateSetup', 'donateGame'].forEach(id => {
+    const a = $('#' + id);
+    if (DONATE_URL) { a.href = DONATE_URL; a.classList.remove('hidden'); }
+});
 applyTheme(themeId);
 buildSetup();
