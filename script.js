@@ -14,7 +14,7 @@ const CONFIG = {
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
         conveyor: 5, portals: 8, relocate: 2,        // Архитектор
         shomen: 9, fukashi: 7, fenyan: 3,            // Самурай
-        teleport: 10,                                // пассивка Самурая «Мгновенный шаг»
+        teleport: 10,                                // пассивка Самурая «Кагэватари»
         phase: 5, soulmates: 8, scream: 6,           // Призрак
         zawarudo: 12, misclick: 15, superposition: 6,  // Повелитель времени
         groundhog: 6,                                // Ход сурка
@@ -3162,19 +3162,55 @@ function renderLog() {
 /* =====================================================================
    ЭКРАН ВЫБОРА ГЕРОЕВ И ПОДКЛЮЧЕНИЕ СОБЫТИЙ
    ===================================================================== */
+const openHeroes = new Set();   // у каких героев раскрыто «Подробнее»
+
 function buildSetup() {
     ['w', 'b'].forEach(side => {
         $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML = Object.entries(HEROES).map(([id, h]) => {
-            const ps = PASSIVES[h.passive];
+            const ps = PASSIVES[h.passive], open = openHeroes.has(id);
             return `
-      <div class="hero-card ${selectedHeroes[side] === id ? 'chosen' : ''}" data-hero="${id}">
+      <div class="hero-card ${selectedHeroes[side] === id ? 'chosen' : ''} ${open ? 'open' : ''}" data-hero="${id}">
         <div class="hc-head"><span class="hc-icon">${h.icon}</span>
           <div><div class="hc-name">${h.name}</div><div class="hc-tag">${h.tag}</div></div></div>
-        <div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}</b><br><span>${ps.desc}</span></div>
-        <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}</b><br><span>${abilityDesc(k)}</span></li>`).join('')}</ul>
+        <div class="hc-abs"><span class="chip chip-ps">${ps.icon} ${ps.name}</span>${h.abilities.map(k => `<span class="chip">${ABILITIES[k].icon} ${ABILITIES[k].name}</span>`).join('')}</div>
+        <button class="hc-more" type="button">${open ? 'Скрыть ▴' : 'Подробнее ▾'}</button>
+        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}</b><br><span>${ps.desc}</span></div>
+        <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}</b><br><span>${abilityDesc(k)}</span></li>`).join('')}</ul></div>` : ''}
       </div>`;
         }).join('');
     });
+}
+
+/* ---------- Доски (цвета плиток). Это личная настройка: у соперника онлайн она может быть другой ---------- */
+const THEMES = [
+    { id: 'pink', name: 'Розовая', light: '#fff3f8', dark: '#ff6ec7', frame: '#ff3fa4' },
+    { id: 'classic', name: 'Классика', light: '#f0d9b5', dark: '#b58863', frame: '#5b3a1f' },
+    { id: 'green', name: 'Зелёная', light: '#eeeed2', dark: '#769656', frame: '#3b5323' },
+    { id: 'blue', name: 'Голубая', light: '#dee3e6', dark: '#8ca2ad', frame: '#4a6572' },
+    { id: 'night', name: 'Ночная', light: '#8f9bbd', dark: '#2f3b57', frame: '#1c2438' },
+    { id: 'violet', name: 'Фиолетовая', light: '#efe6ff', dark: '#9b7be0', frame: '#6a45c2' }
+];
+let themeId = 'pink';
+try { const saved = localStorage.getItem('spellschess-theme'); if (THEMES.some(t => t.id === saved)) themeId = saved; } catch (e) { /* без сохранения */ }
+
+function renderThemePicker() {
+    $('#themeRow').innerHTML = THEMES.map(t => `
+      <button class="theme-btn ${t.id === themeId ? 'chosen' : ''}" data-theme="${t.id}" type="button">
+        <span class="tp"><i style="background:${t.light}"></i><i style="background:${t.dark}"></i><i style="background:${t.dark}"></i><i style="background:${t.light}"></i></span>
+        <span>${t.name}</span></button>`).join('');
+}
+
+function applyTheme(id) {
+    const t = THEMES.find(x => x.id === id) || THEMES[0];
+    themeId = t.id;
+    const root = document.documentElement;
+    if (root && root.style && root.style.setProperty) {
+        root.style.setProperty('--light', t.light);
+        root.style.setProperty('--dark', t.dark);
+        root.style.setProperty('--frame', t.frame);
+    }
+    try { localStorage.setItem('spellschess-theme', t.id); } catch (e) { /* без сохранения */ }
+    renderThemePicker();
 }
 
 function openSetup() {
@@ -3190,6 +3226,13 @@ function openSetup() {
 }
 
 $('#setup').addEventListener('click', e => {
+    const more = e.target.closest('.hc-more');
+    if (more) {                                      // «Подробнее» не выбирает героя
+        const id = more.closest('.hero-card').dataset.hero;
+        if (openHeroes.has(id)) openHeroes.delete(id); else openHeroes.add(id);
+        buildSetup();
+        return;
+    }
     const card = e.target.closest('.hero-card');
     if (!card) return;
     const side = card.closest('.side-pick').dataset.side;
@@ -3400,6 +3443,11 @@ function netRecv(m) {
     }
 }
 
+$('#themeRow').addEventListener('click', e => {
+    const b = e.target.closest('[data-theme]');
+    if (b) applyTheme(b.dataset.theme);
+});
+$('#btnTheme').addEventListener('click', () => applyTheme(THEMES[(THEMES.findIndex(t => t.id === themeId) + 1) % THEMES.length].id));
 $('#lobbyLocal').addEventListener('click', () => $('#lobby').classList.add('hidden'));
 $('#lobbyHost').addEventListener('click', () => { $('#lobbyHost').disabled = true; hostRoom(); });
 $('#lobbyJoin').addEventListener('click', joinRoom);
@@ -3419,4 +3467,5 @@ $('#copyCode').addEventListener('click', () => {
     lobbyStatus('Код скопирован: ' + t);
 });
 
+applyTheme(themeId);
 buildSetup();
