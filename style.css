@@ -2339,3 +2339,41 @@ button {
     .img-pieces .piece.b.t-p {
         background-image: var(--img-bP);
     }
+
+/* ===== Плашка перезарядки у способностей ===== */
+.ab {
+    position: relative;
+}
+
+.cd-badge {
+    position: absolute;
+    top: -7px;
+    right: -5px;
+    padding: 1px 7px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 18px;
+    color: #fff;
+    background: #c0392b;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+
+.ab:disabled .cd-badge {
+    background: #e74c3c;
+}
+
+.chip .free-dot {
+    width: 8px;
+    height: 8px;
+    margin-left: 5px;
+}
+
+.host-note {
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: 0.75;
+    letter-spacing: 0;
+}

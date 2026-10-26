@@ -13,26 +13,26 @@ const CONFIG = {
     cooldown: {
         resurrect: 11, shield: 5, rescue: 9,         // Паладин
         fireball: 6, freeze: 5, copy: 15,            // Маг
-        illusion: 3, hypnosis: 7, confusion: 8,      // Экстрасенс
-        raise: 8, frankenstein: 6, apocalypse: 8,    // Некромант
+        illusion: 3, hypnosis: 8, confusion: 7,      // Экстрасенс
+        raise: 8, frankenstein: 3, apocalypse: 8,    // Некромант
         trap: 4, arrow: 3, lure: 7,                  // Охотник
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
         conveyor: 5, portals: 8, relocate: 2,        // Архитектор
         shomen: 9, fukashi: 7, fenyan: 3,            // Самурай
         teleport: 10,                                // пассивка Самурая «Кагэватари»
-        phase: 5, soulmates: 8, scream: 6,           // Призрак
+        phase: 4, soulmates: 7, scream: 4,           // Призрак
         zawarudo: 12, misclick: 15, superposition: 6,  // Повелитель времени
         groundhog: 6,                                // Ход сурка
         timeslow: 4,                                 // пассивка Повелителя времени
         guardian: 5, purify: 10, lie: 14, virus: 3,  // новые способности
-        vine: 7, ritual: 2, bumpuku: 5, generator: 7
+        vine: 7, ritual: 5, bumpuku: 6, generator: 7
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
     timePassiveCostsTurn: false,   // true: пассивка Повелителя времени тратит ход
-    guardianTurns: 3,        // Ангел-хранитель: сколько ходов держится самоотверженность
+    guardianTurns: 5,        // Ангел-хранитель: сколько ходов держится самоотверженность
     wardTurns: 3,            // Очищение: сколько ходов держится защита от магии
-    bumpukuTurns: 3,         // Бумпуку: на каком своём ходу взрывается бомба
+    bumpukuTurns: 2,         // Бумпуку: на каком своём ходу взрывается бомба
     hogOnce: true,           // Ход сурка: true — ловушка стоит вечно, но срабатывает один раз и исчезает; false — срабатывает на каждую новую фигуру
     vineTurns: 5,            // Лоза: сколько ходов владельца она стоит
     freezeTurns: 3,   // сколько ходов замороженного игрока фигура стоит на месте
@@ -125,7 +125,7 @@ const ABILITIES = {
     },
     fukashi: {
         icon: '🥷', name: 'Фукаши',
-        desc: 'Фигура невидима для врага, но блокирует ходы: пройти сквозь неё значит срубить её. Раскрывается, если срубила, дала шах или ей грозит пешка.'
+        desc: 'Фигура невидима для врага, но блокирует ходы: пройти сквозь неё значит срубить её. Раскрывается, если срубила, дала шах или ей грозит пешка (по диагонали). Если пешка идёт прямо на неё или фигура, которую она связывает, пытается сойти с линии, невидимка раскрывается, а ход не тратится.'
     },
     fenyan: {
         free: true,
@@ -157,7 +157,7 @@ const ABILITIES = {
     // --- Новые способности
     guardian: {
         icon: '👼', name: 'Ангел-хранитель',
-        desc: 'На ' + CONFIG.guardianTurns + ' хода союзная фигура самоотверженна: если рядом (3×3) рубят другую союзную фигуру, она меняется с ней местами и гибнет вместо неё.'
+        desc: 'На ' + CONFIG.guardianTurns + ' ходов союзная фигура самоотверженна: если рядом (3×3) другую союзную фигуру убивают (рубкой, огненным шаром, стрелой, взрывом и т. п.), она меняется с ней местами и гибнет вместо неё.'
     },
     purify: {
         icon: '✴️', name: 'Очищение',
@@ -176,6 +176,7 @@ const ABILITIES = {
         desc: 'Лоза блокирует путь дальше себя. Исчезает, когда на неё встаёт фигура, или через ' + CONFIG.vineTurns + ' ваших хода.'
     },
     ritual: {
+        free: true,
         icon: '🕯️', name: 'Ритуал',
         desc: 'Призрачная плитка: стоящая на ней фигура прозрачна для ваших фигур.'
     },
@@ -966,9 +967,6 @@ function invisReason(b, r, c) {
         if (q && q.c === enemy && q.t === 'p' && !q.ghost && !(q.frozen > 0) && !(q.snared > 0) &&
             attackSquares(b, i, j).some(([x, y]) => x === r && y === c)) return 'ей угрожает пешка';
     }
-    const d = enemy === 'w' ? -1 : 1;
-    const bh = inb(r - d, c) ? b[r - d][c] : null;
-    if (bh && bh.t === 'p' && bh.c === enemy && !bh.ghost) return 'она встала перед вражеской пешкой';
     const k = findKing(b, enemy);
     if (k && !(p.frozen > 0) && !(p.snared > 0) && attackSquares(b, r, c).some(([x, y]) => x === k[0] && y === k[1])) return 'шах';
     return null;
@@ -993,6 +991,38 @@ function checkInvis() {
     }
 }
 
+// Невидимая вражеская фигура, из-за которой ход d был бы незаконным (связка). Иначе null
+function pinnerOf(p, d) {
+    try {
+        const nb = cloneBoard(G.board);
+        applyMove(nb, d, 'q');
+        const k = findKing(nb, p.c);
+        if (!k) return null;
+        for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+            const q = nb[i][j];
+            if (q && q.c === other(p.c) && q.invis && !q.ghost && !(q.frozen > 0) && !(q.snared > 0) &&
+                attackSquares(nb, i, j).some(([x, y]) => x === k[0] && y === k[1])) return [i, j];
+        }
+    } catch (e) { /* ход нельзя промоделировать: связки нет */ }
+    return null;
+}
+
+// Игрок упёрся в невидимку (пешка идёт прямо на неё или связанная фигура пытается сойти): она раскрывается, ход не тратится
+function bumpInvis(mv) {
+    if (!G.sel) return;
+    const sr = G.sel.r, sc = G.sel.c, p = G.board[sr][sc];
+    let tgt = null, why = '';
+    if (mv.pin) { tgt = mv.pin; why = 'фигура, которую она связывала, попыталась сойти'; }
+    else if (mv.blk && p && p.t === 'p') { tgt = mv.blk; why = 'в неё упёрлась пешка'; }
+    if (!tgt) return;
+    const q = G.board[tgt[0]][tgt[1]];
+    if (!q || !q.invis || q.c === p.c) return;
+    revealPiece(tgt[0], tgt[1], why);
+    G.sel = { r: sr, c: sc };
+    G.moves = selectableMoves(sr, sc);
+    render();
+}
+
 // Вид ходов для игрока: невидимые фигуры «прозрачны». Ходы сквозь них показываются,
 // но по факту ведут в рубку невидимой фигуры (врагом) или не работают (своей фигурой)
 function applyInvisView(p, r, c, mv) {
@@ -1004,9 +1034,13 @@ function applyInvisView(p, r, c, mv) {
         const real = mv.find(m => m.tr === d.tr && m.tc === d.tc);
         if (real) { shown.add(real); return; }
         const blk = moveCells(d).find(([rr, cc]) => { const q = G.board[rr][cc]; return q && q.invis && q !== p; });
-        if (!blk) return;
+        if (!blk) {
+            const pin = p.t !== 'k' ? pinnerOf(p, d) : null;      // фигуру связывает невидимка
+            if (pin) out.push({ ...d, decoy: true, redirect: null, pin });
+            return;
+        }
         const red = mv.find(m => m.tr === blk[0] && m.tc === blk[1]) || null;
-        out.push({ ...d, decoy: true, redirect: red });
+        out.push({ ...d, decoy: true, redirect: red, blk });
     });
     mv.forEach(m => { if (!shown.has(m)) m.hidden = true; });
     return mv.concat(out);
@@ -1567,6 +1601,27 @@ function hasBonusMove(col) {
 let G = null;
 let selectedHeroes = { w: 'paladin', b: 'mage' };
 
+// Ангел-хранитель: самоотверженная фигура в 3×3 от жертвы меняется с ней местами и гибнет вместо неё.
+// unsafe(r, c) — клетки, где жертва тоже погибла бы (туда её не переставляем). Возвращает фигуру, которая теперь стоит на месте жертвы (и должна погибнуть), или null.
+function guardSwap(r, c, unsafe) {
+    const v = G.board[r][c];
+    if (!v || v.t === 'k' || v.ghost) return null;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const ar = r + dr, ac = c + dc;
+        if (!inb(ar, ac)) continue;
+        const a = G.board[ar][ac];
+        if (!a || !(a.altruist > 0) || a.c !== v.c || a.t === 'k' || a.ghost || a.frozen > 0) continue;
+        if (unsafe && unsafe(ar, ac)) continue;
+        G.board[ar][ac] = v;
+        G.board[r][c] = a;
+        G.fx.push({ r: ar, c: ac, type: 'revive' });
+        addLog('n', `👼 Ангел-хранитель: ${pieceSym(a)} с ${sqName(ar, ac)} меняется местами с ${pieceSym(v)} и гибнет вместо неё`);
+        return a;
+    }
+    return null;
+}
+
 function toGrave(p) {
     G.deaths = (G.deaths || 0) + 1;
     G.grave[p.orig || p.c].push({ t: p.t, x: [...(p.x || [])] });
@@ -1641,9 +1696,10 @@ function shomenStrike(f, owner) {
         G.fx.push({ r: rr, c: f.c, type: 'arrowhit' });
         if (!q || magicProof(G.board, rr, f.c)) continue;
         if (q.ghost) { vanishGhost(rr, f.c, 'удар Сёмен-ути'); continue; }
+        const dq = guardSwap(rr, f.c, (ar, ac) => ac === f.c) || q;
         G.board[rr][f.c] = null;
-        toGrave(q);
-        dead.push(`${pieceSym(q)}${sqName(rr, f.c)}`);
+        toGrave(dq);
+        dead.push(`${pieceSym(dq)}${sqName(rr, f.c)}`);
     }
     sfx('boom');
     addLog(owner, `⚔️ Сёмен-ути по вертикали ${'abcdefgh'[f.c]}: ${dead.length ? 'погибли ' + dead.join(', ') : 'никого не задело'}`);
@@ -1665,9 +1721,10 @@ function bombStep(c) {
             const q = G.board[rr][c2];
             if (!q || magicProof(G.board, rr, c2)) continue;
             if (q.ghost) { vanishGhost(rr, c2, 'взрыв', true); continue; }
+            const dq = guardSwap(rr, c2, (ar, ac) => Math.abs(ar - r) <= 1 && Math.abs(ac - cc) <= 1) || q;
             G.board[rr][c2] = null;
-            toGrave(q);
-            dead.push(`${pieceSym(q)}${sqName(rr, c2)}`);
+            toGrave(dq);
+            dead.push(`${pieceSym(dq)}${sqName(rr, c2)}`);
         }
         if (G.board[r][cc] === p) { delete p.bomb; delete p.bombBy; }
         sfx('boom');
@@ -1699,9 +1756,10 @@ function startTurn() {
             vanishGhost(f.r, f.c, arrow ? 'стрела' : 'огонь');
             addLog(c, `${name} на ${sq}`);
         } else {
+            const dp = guardSwap(f.r, f.c) || p;
             G.board[f.r][f.c] = null;
-            toGrave(p);
-            addLog(c, `${name} на ${sq} уничтожает ${pieceSym(p)} (${colorName(p.orig || p.c).toLowerCase()})`);
+            toGrave(dp);
+            addLog(c, `${name} на ${sq} уничтожает ${pieceSym(dp)} (${colorName(dp.orig || dp.c).toLowerCase()})`);
         }
         if (!arrow) { destroyTiles(f.r, f.c); burnTile(f.r, f.c, c); }       // клетка продолжает гореть
     });
@@ -1762,11 +1820,12 @@ function sweepBurn() {
         const p = G.board[t.r][t.c];
         if (!p || magicProof(G.board, t.r, t.c, t.owner, true)) return;
         if (p.ghost) { vanishGhost(t.r, t.c, 'огонь'); return; }
+        const dp = guardSwap(t.r, t.c, (ar, ac) => G.burn.some(x => x.r === ar && x.c === ac)) || p;
         G.board[t.r][t.c] = null;
-        toGrave(p);
+        toGrave(dp);
         G.fx.push({ r: t.r, c: t.c, type: 'boom' });
         sfx('boom');
-        addLog('n', `🔥 ${pieceSym(p)} сгорает на ${sqName(t.r, t.c)}`);
+        addLog('n', `🔥 ${pieceSym(dp)} сгорает на ${sqName(t.r, t.c)}`);
     });
 }
 
@@ -1810,11 +1869,12 @@ function sweepGens() {
     [...plus, ...minus].forEach(g => {
         const p = G.board[g.r][g.c];
         if (!p || magicProof(G.board, g.r, g.c)) return;
+        const dp = guardSwap(g.r, g.c, (ar, ac) => G.gens.some(x => x.r === ar && x.c === ac)) || p;
         G.board[g.r][g.c] = null;
-        toGrave(p);
+        toGrave(dp);
         G.fx.push({ r: g.r, c: g.c, type: 'boom' });
         sfx('zap');
-        addLog('n', `⚡ Генератор: ${pieceSym(p)} на ${sqName(g.r, g.c)} поражена разрядом`);
+        addLog('n', `⚡ Генератор: ${pieceSym(dp)} на ${sqName(g.r, g.c)} поражена разрядом`);
     });
 }
 
@@ -1838,11 +1898,12 @@ function sweepSharp() {
             const home = z.exempt.get(p);
             if (home && home[0] === r && home[1] === c) continue;
             if (p.ghost) { vanishGhost(r, c, 'острая клетка'); continue; }
+            const dp = guardSwap(r, c, (ar, ac) => (ar + ac) % 2 === z.parity) || p;
             G.board[r][c] = null;
-            toGrave(p);
+            toGrave(dp);
             G.fx.push({ r, c, type: 'boom' });
             sfx('capture');
-            addLog('n', `🗡 ${pieceSym(p)} гибнет на острой клетке ${sqName(r, c)}`);
+            addLog('n', `🗡 ${pieceSym(dp)} гибнет на острой клетке ${sqName(r, c)}`);
         }
         z.left--;
     });
@@ -1967,6 +2028,12 @@ function executeMove(mv, promo, ctx) {
     if (!wasGhost && pair && mv.promo && !res.thorn && !res.burned) {
         const gi = findGhost(pair);
         if (gi) vanishGhost(gi.r, gi.c, 'оригинал изменился');
+    }
+
+    // Оригинал срубил фигуру или дал шах: его иллюзия рассеивается
+    if (!wasGhost && pair && !res.thorn && !res.burned && (cap || own || kingAttacked(b, other(col)))) {
+        const gi = findGhost(pair);
+        if (gi) vanishGhost(gi.r, gi.c, cap || own ? 'оригинал срубил фигуру' : 'оригинал дал шах');
     }
 
     // Король ушёл из-под шаха: куда можно поставить его иллюзию
@@ -2165,7 +2232,7 @@ function finishAbility(key, text) {
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = key;
     addLog(col, text);
-    if (key === 'fenyan') { continueTurn(); return; }   // свободное действие: после него обычный ход
+    if (key === 'fenyan' || key === 'ritual') { continueTurn(); return; }   // свободное действие: после него обычный ход
     G.ep = null;
     if (G.hero[col] === 'architect') {      // пассивка «Мастер на все руки»: способности не заканчивают ход
         G.archUsed = true;
@@ -2774,7 +2841,7 @@ function onCell(r, c) {
             lastPick = pick;
             mv = cands.find(m => pick === 'castle' ? m.castle : m.possess);
         }
-        if (mv) { if (!(mv.decoy && !mv.redirect)) tryMove(mv); return; }
+        if (mv) { if (mv.decoy && !mv.redirect) bumpInvis(mv); else tryMove(mv); return; }
         // Пассивка: второй клик по выбранному королю включает прицел
         if (G.sel.r === r && G.sel.c === c) {
             const k = G.board[r][c];
@@ -3025,7 +3092,7 @@ function panelHTML(col) {
         const a = ABILITIES[k], cd = G.cd[col][k];
         if (slowMode) {
             h += `<button class="ab slowable" data-slow="${k}" title="${abilityDesc(k)}">
-      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${(k === 'lie') ? '?' : (cd > 0 ? 'перезарядка: ' + cd : 'готово')} → +1</span></button>`;
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${(k === 'lie') ? '?' : (cd > 0 ? 'перезарядка: ' + cd : 'готово')} → +1</span>${(k !== 'lie' && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
             return;
         }
         const on = active && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
@@ -3039,7 +3106,7 @@ function panelHTML(col) {
         else if (k === 'copy' && can) sub = '→ ' + ABILITIES[G.lastAb[other(col)]].name;
         if ((NET.on ? col !== NET.me : !active) && k === 'lie') sub = 'скрыто';      // применение не должно быть видно по перезарядке
         h += `<button class="ab ${on ? 'on' : ''}" data-ab="${k}" ${can || on ? '' : 'disabled'} title="${abilityDesc(k)}">
-      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span></button>`;
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !(k === 'lie' && (NET.on ? col !== NET.me : !active))) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
     });
 
     // Кнопка пассивки (Меткий глаз / Кагэватари): то же, что второй клик по королю
@@ -3049,7 +3116,7 @@ function panelHTML(col) {
         const can = active && !lock && canPassive(col, pk);
         const sub = cd > 0 ? `перезарядка: ${cd}` : (active && !can ? 'нет целей' : ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? 'бесплатно' : 'готово'));
         h += `<button class="ab passive-btn ${on ? 'on' : ''}" data-ab="${pk}" ${can || on ? '' : 'disabled'} title="${ps.desc}">
-      <span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}${(pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span></button>`;
+      <span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}${(pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${cd > 0 ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
     }
     h += '</div>';
 
@@ -3574,7 +3641,7 @@ const EN = {
     "Сёмен-ути": "Shomen-uchi",
     "Недоступен до первой смерти. Отмечает вертикаль: в начале вашего хода все фигуры на ней погибают.": "Unavailable until the first death. Marks a file: at the start of your turn all pieces on it die.",
     "Фукаши": "Fukashi",
-    "Фигура невидима для врага, но блокирует ходы: пройти сквозь неё значит срубить её. Раскрывается, если срубила, дала шах или ей грозит пешка.": "A piece is invisible to the enemy but blocks moves: passing through it means capturing it. It is revealed if it captures, gives check, or is threatened by a pawn.",
+    "Фигура невидима для врага, но блокирует ходы: пройти сквозь неё значит срубить её. Раскрывается, если срубила, дала шах или ей грозит пешка (по диагонали). Если пешка идёт прямо на неё или фигура, которую она связывает, пытается сойти с линии, невидимка раскрывается, а ход не тратится.": "A piece is invisible to the enemy but blocks moves: passing through it means capturing it. It is revealed if it captures, gives check, or is threatened by a pawn (diagonally). If a pawn moves straight into it, or a piece it pins tries to leave the line, it is revealed and the turn is not spent.",
     "Фен-Янь": "Fen-Yan",
     "Все клетки одного цвета острые на ваш ход и ход врага: вставшая на острую клетку фигура погибает.": "All squares of one colour become sharp for your turn and the enemy's turn: a piece that stops on a sharp square dies.",
     "Конвейер": "Conveyor",
@@ -3588,7 +3655,7 @@ const EN = {
     "Стрела": "Arrow",
     "Метка в радиусе 6 от короля: в начале вашего хода стрела убивает фигуру на ней.": "A mark within 6 squares of your king: at the start of your turn the arrow kills the piece on it.",
     "Ангел-хранитель": "Guardian Angel",
-    " хода союзная фигура самоотверженна: если рядом (3×3) рубят другую союзную фигуру, она меняется с ней местами и гибнет вместо неё.": " turns an allied piece is selfless: if another allied piece next to it (3×3) is captured, it swaps places with it and dies instead.",
+    " ходов союзная фигура самоотверженна: если рядом (3×3) другую союзную фигуру убивают (рубкой, огненным шаром, стрелой, взрывом и т. п.), она меняется с ней местами и гибнет вместо неё.": " turns an allied piece is selfless: if another allied piece next to it (3×3) is killed (by capture, fireball, arrow, explosion, etc.), it swaps places with it and dies instead.",
     "Очищение": "Purification",
     "Снимает с любой фигуры все эффекты (баффы и дебаффы) и на ": "Removes all effects (buffs and debuffs) from any piece and for ",
     " хода даёт защиту от магии.": " turns grants protection from magic.",
@@ -3933,6 +4000,7 @@ const EN = {
     "Создать комнату": "Create room",
     "Код комнаты:": "Room code:",
     "Копировать": "Copy",
+    "Вам, как хозяину комнаты, вводить код не нужно: просто отправьте его другу.": "As the room host you do not need to enter the code: just send it to your friend.",
     "Войти": "Join",
     "Сдаться": "Resign",
     "Новая игра": "New game",
