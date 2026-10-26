@@ -2770,7 +2770,7 @@ function onCell(r, c) {
         const cands = G.moves.filter(m => m.tr === r && m.tc === c);
         let mv = cands[0];
         if (cands.length > 1 && cands.some(m => m.castle) && cands.some(m => m.possess)) {   // Призрак: рокировка и вселение на одну клетку
-            const pick = pickOverride || (confirm('Рокировка (ОК) или обычный ход короля без ладьи (Отмена)?') ? 'castle' : 'possess');
+            const pick = pickOverride || (uiConfirm('Рокировка (ОК) или обычный ход короля без ладьи (Отмена)?') ? 'castle' : 'possess');
             lastPick = pick;
             mv = cands.find(m => pick === 'castle' ? m.castle : m.possess);
         }
@@ -2960,9 +2960,9 @@ function renderBoard() {
             const hg = G.hogs.find(x => x.r === r && x.c === c);
             if (hg && (hg.visible || (showTraps && (NET.on ? hg.owner === NET.me : hg.owner === G.turn)))) html += `<div class="tile-mark hog-mark ${hg.visible ? '' : 'hidden-hog'}">⏳</div>`;
 
-            if (dc) html += `<div class="piece ${dc.col}${showGhosts ? ' ghost' : ''}">${GLYPH[dc.t]}${dc.x && dc.x.length ? `<span class="xs">${dc.x.map(t => GLYPH[t]).join('')}</span>` : ''}</div>`;
+            if (dc) html += `<div class="piece ${dc.col} t-${dc.t}${showGhosts ? ' ghost' : ''}">${GLYPH[dc.t]}${dc.x && dc.x.length ? `<span class="xs">${dc.x.map(t => GLYPH[t]).join('')}</span>` : ''}</div>`;
             if (p && !(p.invis && !(showInvis && (!NET.on || p.c === NET.me)))) {
-                let pc = 'piece ' + p.c;
+                let pc = 'piece ' + p.c + ' t-' + p.t;
                 if (p.shield) pc += ' shielded';
                 if (p.frozen > 0) pc += ' frozen';
                 if (p.snared > 0) pc += ' snared';
@@ -3301,7 +3301,7 @@ $('#promoBtns').addEventListener('click', e => {
 });
 
 $('#btnNew').addEventListener('click', () => {
-    if (!G || G.over || confirm('Начать новую игру? Текущая партия будет потеряна.')) {
+    if (!G || G.over || uiConfirm('Начать новую игру? Текущая партия будет потеряна.')) {
         netSend({ t: 'abort' });
         openSetup();
     }
@@ -3315,15 +3315,15 @@ $('#btnEnd').addEventListener('click', () => {
 $('#btnResign').addEventListener('click', () => {
     if (!G || G.over) return;
     if (NET.on) {
-        if (confirm('Сдаться?')) { netSend({ t: 'resign' }); resignSide(NET.me); }
+        if (uiConfirm('Сдаться?')) { netSend({ t: 'resign' }); resignSide(NET.me); }
         return;
     }
-    if (confirm(`${colorName(G.turn)} сдаются?`)) resignSide(G.turn);
+    if (uiConfirm(`${colorName(G.turn)} сдаются?`)) resignSide(G.turn);
 });
 $('#btnDraw').addEventListener('click', () => {
     if (!G || G.over) return;
-    if (NET.on) { netSend({ t: 'draw' }); alert('Ничья предложена, ждём ответа соперника.'); return; }
-    if (confirm('Оба игрока согласны на ничью?')) drawGame();
+    if (NET.on) { netSend({ t: 'draw' }); uiAlert('Ничья предложена, ждём ответа соперника.'); return; }
+    if (uiConfirm('Оба игрока согласны на ничью?')) drawGame();
 });
 $('#btnSound').addEventListener('click', e => {
     CONFIG.sound = !CONFIG.sound;
@@ -3364,8 +3364,8 @@ const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;
 
 function renderChat() {
     const el = $('#chatLog');
-    el.innerHTML = chatMsgs.slice(-60).map(m => `<div class="chat-msg ${m.me ? 'me' : 'them'}"><b>${m.me ? 'Вы' : 'Соперник'}:</b> ${esc(m.text)}</div>`).join('') +
-        (NET.muted ? '<div class="chat-note">Сообщения соперника заглушены</div>' : '');
+    el.innerHTML = chatMsgs.slice(-60).map(m => `<div class="chat-msg ${m.me ? 'me' : 'them'}"><b>${tr(m.me ? 'Вы' : 'Соперник')}:</b> ${esc(m.text)}</div>`).join('') +
+        (NET.muted ? `<div class="chat-note">${tr('Сообщения соперника заглушены')}</div>` : '');
     el.scrollTop = el.scrollHeight;
     $('#chat').classList.toggle('hidden', !NET.on);
     $('#chatMute').textContent = NET.muted ? '🔕' : '🔔';
@@ -3467,7 +3467,7 @@ function attachConn(c) {
         if (!NET.on) return;
         NET.lost = true;
         if (G) render();
-        alert('Соединение с соперником потеряно.');
+        uiAlert('Соединение с соперником потеряно.');
     });
 }
 
@@ -3490,11 +3490,11 @@ function netRecv(m) {
             break;
         case 'resign': resignSide(other(NET.me)); break;
         case 'draw':
-            if (confirm('Соперник предлагает ничью. Согласны?')) { netSend({ t: 'drawOk' }); drawGame(); }
+            if (uiConfirm('Соперник предлагает ничью. Согласны?')) { netSend({ t: 'drawOk' }); drawGame(); }
             else netSend({ t: 'drawNo' });
             break;
         case 'drawOk': drawGame(); break;
-        case 'drawNo': alert('Соперник отказался от ничьей.'); break;
+        case 'drawNo': uiAlert('Соперник отказался от ничьей.'); break;
         case 'abort': openSetup(); break;
     }
 }
@@ -3526,9 +3526,558 @@ $('#copyCode').addEventListener('click', () => {
     lobbyStatus('Код скопирован: ' + t);
 });
 
+
+/* =====================================================================
+   ЯЗЫК: русский / английский. Игра пишет всё по-русски, а при выборе English
+   весь видимый текст переводится по словарю ниже (в тексте экрана, подсказках и окнах).
+   ===================================================================== */
+const EN = {
+    "Воскрешение": "Resurrection",
+    "Возвращает вашу фигуру из сброса на свободную клетку первой горизонтали (пешку на любую из первых четырёх).": "Returns your piece from the graveyard to a free square on your first rank (a pawn to any of the first four ranks).",
+    "Око за око": "Eye for an Eye",
+    "На ": "For ",
+    " хода фигура получает шипы: срубивший её погибает.": " turns a piece gets thorns: whoever captures it dies.",
+    "Спасение": "Rescue",
+    "Переносит вашу фигуру с вражеской половины на свободную клетку первой горизонтали (пешку на 2–4).": "Moves your piece from the enemy half to a free square on your first rank (a pawn to ranks 2–4).",
+    "Огненный шар": "Fireball",
+    "Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем клетка горит 3 хода: вставшие на неё и прошедшие сквозь фигуры сгорают (конь перепрыгивает). Уничтожает плитки.": "A mark within 6 squares of your king. It explodes at the start of your turn, then the square burns for 3 turns: pieces that stop on it or pass through it burn up (knights jump over). Destroys tiles.",
+    "Заморозка": "Freeze",
+    "Любая фигура (кроме короля) на ": "Any piece (except a king) for ",
+    " хода не ходит, её нельзя срубить, и магия на неё не действует. Исключение: огненный шар.": " turns cannot move or be captured, and magic does not affect it. Exception: Fireball.",
+    "Зеркало": "Mirror",
+    "Повторяет последнюю способность врага.": "Repeats the enemy's last ability.",
+    "Иллюзия": "Illusion",
+    "Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит и рассеивается, если ему или оригиналу что-то грозит.": "Creates a double of a piece. They move only together; the double captures nothing and fades if it or the original is threatened.",
+    "Гипноз": "Hypnosis",
+    "Вражеская фигура в радиусе 3×3 от вашей фигуры ходит за вас ": "An enemy piece within 3×3 of one of your pieces moves for you for ",
+    " ваших хода или пока не срубит фигуру. Короля нельзя.": " of your turns, or until it captures a piece. Kings are immune.",
+    "Замешательство": "Confusion",
+    "Вражеская фигура (не король) делает два хода подряд по вашему выбору, без рубки.": "An enemy piece (not a king) makes two moves in a row of your choice, without capturing.",
+    "Зомби": "Zombies",
+    "Поднимает фигуру из любого сброса зомби на свободную клетку первой горизонтали (пешку на любую из первых четырёх).": "Raises a piece from any graveyard as a zombie on a free square of your first rank (a pawn on any of the first four ranks).",
+    "Франкенштейн": "Frankenstein",
+    "Фигура рубит свою фигуру и получает её ходы.": "A piece captures its own piece and gains its moves.",
+    "Апокалипсис": "Apocalypse",
+    "Дополнительный ход любым зомби (даже вражеским: он рубит своих), без обязательной рубки. Потом обычный ход.": "An extra move with any zombie (even an enemy one: it captures its own side), with no forced capture. Then a normal move.",
+    "Прозрачность": "Transparency",
+    "Фигура становится прозрачной для ваших фигур: они проходят сквозь неё, но не встают.": "A piece becomes transparent to your pieces: they pass through it but cannot stop on it.",
+    "Соулмейты": "Soulmates",
+    "Связывает две фигуры: когда одна погибает, все связанные фигуры в радиусе 3×3 от неё гибнут тоже.": "Links two pieces: when one dies, all linked pieces within 3×3 of it die too.",
+    "Скример": "Screamer",
+    "Дальность хода вражеской фигуры (не короля) становится 1: ладья по прямым, слон по диагонали, ферзь в любую сторону, конь как слон. Пешка идёт только на 1 вперёд и не рубит. Страх спадает после хода, у пешки и через ": "An enemy piece's (not a king's) move range becomes 1: rook straight, bishop diagonally, queen any direction, knight like a bishop. A pawn moves only 1 forward and cannot capture. Fear ends after the piece moves; for a pawn also after ",
+    " хода.": " turns.",
+    "Сёмен-ути": "Shomen-uchi",
+    "Недоступен до первой смерти. Отмечает вертикаль: в начале вашего хода все фигуры на ней погибают.": "Unavailable until the first death. Marks a file: at the start of your turn all pieces on it die.",
+    "Фукаши": "Fukashi",
+    "Фигура невидима для врага, но блокирует ходы: пройти сквозь неё значит срубить её. Раскрывается, если срубила, дала шах или ей грозит пешка.": "A piece is invisible to the enemy but blocks moves: passing through it means capturing it. It is revealed if it captures, gives check, or is threatened by a pawn.",
+    "Фен-Янь": "Fen-Yan",
+    "Все клетки одного цвета острые на ваш ход и ход врага: вставшая на острую клетку фигура погибает.": "All squares of one colour become sharp for your turn and the enemy's turn: a piece that stops on a sharp square dies.",
+    "Конвейер": "Conveyor",
+    "Плитка толкает фигуру на себе (и колонну перед ней) на клетку вперёд в конце каждого хода.": "A tile that pushes the piece on it (and the column in front of it) one square forward at the end of every turn.",
+    "Порталы": "Portals",
+    "Две связанные плитки: ход через портал продолжается из второго, вставшая фигура переносится на второй. Одновременно две пары.": "Two linked tiles: a move through one portal continues from the other; a piece that stops on one is carried to the other. Two pairs at a time.",
+    "Перемещение": "Relocation",
+    "Переносит любую плитку или портал на свободную клетку.": "Moves any tile or portal to a free square.",
+    "Капкан": "Trap",
+    "Невидимый капкан: вставшая на него фигура (не король) пропускает следующий ход.": "An invisible trap: a piece (not a king) that steps on it skips its next turn.",
+    "Стрела": "Arrow",
+    "Метка в радиусе 6 от короля: в начале вашего хода стрела убивает фигуру на ней.": "A mark within 6 squares of your king: at the start of your turn the arrow kills the piece on it.",
+    "Ангел-хранитель": "Guardian Angel",
+    " хода союзная фигура самоотверженна: если рядом (3×3) рубят другую союзную фигуру, она меняется с ней местами и гибнет вместо неё.": " turns an allied piece is selfless: if another allied piece next to it (3×3) is captured, it swaps places with it and dies instead.",
+    "Очищение": "Purification",
+    "Снимает с любой фигуры все эффекты (баффы и дебаффы) и на ": "Removes all effects (buffs and debuffs) from any piece and for ",
+    " хода даёт защиту от магии.": " turns grants protection from magic.",
+    "Ход — это ложь": "The Move Is a Lie",
+    "Выберите клетку, куда встанет невидимая фигура, и клетку её иллюзии (оба хода обычные ходы фигуры). Невидимость и иллюзия раскрываются и рассеиваются по обычным правилам, ошибки игрока на его совести. После хода врага правда раскрывается.": "Choose the square for the invisible piece and the square for its illusion (both are normal moves of the piece). Invisibility and the illusion are revealed and fade by the usual rules; the player's mistakes are on them. After the enemy's move the truth is revealed.",
+    "Вирус": "Virus",
+    "Заражённая плитка: вставшая на неё фигура (не король) становится зомби.": "An infected tile: a piece (not a king) that steps on it becomes a zombie.",
+    "Лоза": "Vine",
+    "Лоза блокирует путь дальше себя. Исчезает, когда на неё встаёт фигура, или через ": "The vine blocks the path beyond it. It disappears when a piece steps on it, or after ",
+    " ваших хода.": " of your turns.",
+    "Ритуал": "Ritual",
+    "Призрачная плитка: стоящая на ней фигура прозрачна для ваших фигур.": "A ghostly tile: a piece standing on it is transparent to your pieces.",
+    "Бумпуку": "Bumpuku",
+    "Бомба на союзной фигуре (не короле) взрывается на вашем ": "A bomb on an allied piece (not a king) explodes on your ",
+    "-м ходе после применения и убивает всех в 3×3. Срубленная фигура не взрывается.": "th turn after use and kills everything in 3×3. A captured piece does not explode.",
+    "Генератор": "Generator",
+    "Плитки плюс и минус. Все плюсы связаны со всеми минусами: если фигуры стоят и на плюсе, и на минусе, их убивает разряд.": "Plus and minus tiles. Every plus is linked to every minus: if pieces stand on both a plus and a minus, a discharge kills them.",
+    "Ход сурка": "Groundhog Move",
+    "Ловушка (королю не страшна) стоит, пока не сработает один раз: фигура на ней возвращается туда, откуда пришла. На пустой клетке скрыта и ход не тратит, на фигуре видна, тратит ход и срабатывает на новую фигуру.": "A trap (kings are immune) stays until it triggers once: the piece on it goes back to where it came from. On an empty square it is hidden and costs no turn; on a piece it is visible, costs a turn, and triggers on a new piece.",
+    "Два хода подряд, но первым ходом шаховать нельзя.": "Two moves in a row, but the first move cannot give check.",
+    "Мисклик!": "Misclick!",
+    "Отменяет ход противника и ваш предыдущий ход.": "Cancels the opponent's move and your previous move.",
+    "Суперпозиция": "Superposition",
+    "Одноразово: фигура (не король) не мешает, если на её клетку встала или прошла сквозь неё другая фигура, и возвращается на клетку прошлого хода. Если вернуться нельзя, ничего не происходит. Если на клетку возврата встала ходившая фигура, её рубят.": "One-time: a piece (not a king) does not block when another piece stops on or passes through its square, and returns to the square of its last move. If it cannot return, nothing happens. If the moving piece lands on the return square, it is captured.",
+    "Приманка": "Lure",
+    "Приманка на вашей фигуре (видна всем): вражеская фигура (не король) обязана срубить её или встать на её клетку.": "A lure on your piece (visible to all): an enemy piece (not a king) must capture it or step on its square.",
+    "Братство": "Brotherhood",
+    "Две пешки рядом на одной горизонтали нельзя срубить. Три и более подряд: эффекта нет.": "Two pawns side by side on one rank cannot be captured. Three or more in a row: no effect.",
+    "Магический барьер": "Magic Barrier",
+    "Ваши фигуры в радиусе 3×3 от короля неуязвимы для магии, их можно только срубить.": "Your pieces within 3×3 of your king are immune to magic; they can only be captured.",
+    "Двоится в глазах": "Double Vision",
+    "Король, ушедший из-под шаха сам, оставляет иллюзию на другой клетке, куда мог уйти. Она появляется одновременно с ним и дальше ходит с королём как обычная.": "A king that escapes check by itself leaves an illusion on another square it could have gone to. It appears at the same time and then moves with the king like a normal illusion.",
+    "Жатва": "Harvest",
+    "Можно рубить свои пешки: это даёт дополнительный ход (при шахе доп. хода нет, зато перезарядка способностей −1).": "You may capture your own pawns: this gives an extra move (if it gives check there is no extra move, but all cooldowns are reduced by 1).",
+    "Паранормальщина": "Paranormal Activity",
+    "Король прозрачен для ваших фигур. Рядом с вашей фигурой он может «вселиться» в цепочку ваших фигур (каждая в 3×3 от предыдущей) и появиться на свободной клетке в 3×3 от любой из них.": "The king is transparent to your pieces. Next to one of your pieces it can “possess” a chain of your pieces (each within 3×3 of the previous) and appear on a free square within 3×3 of any of them.",
+    "Мастер на все руки": "Jack of All Trades",
+    "За ход можно применить несколько способностей, но после первой фигурой ходить нельзя. Потом «Завершить ход».": "You may use several abilities per turn, but after the first you cannot move a piece. Then press “End turn”.",
+    "Кагэватари": "Kagewatari",
+    "Король телепортируется на любое безопасное свободное поле, даже из-под шаха. Второй клик по королю или кнопка. Тратит ход, перезарядка ": "The king teleports to any safe free square, even out of check. Click the king a second time or use the button. Costs a turn, cooldown ",
+    "Замедление времени": "Time Slow",
+    "Второй клик по королю или кнопка, затем способность врага: её перезарядка +1 сейчас и +1 на всю партию, у остальных перезаряжающихся +1 сейчас. ": "Click the king a second time or use the button, then pick an enemy ability: its cooldown +1 now and +1 for the whole game; other recharging abilities +1 now. ",
+    "Тратит ход.": "Costs a turn.",
+    "Ход не тратится.": "Costs no turn.",
+    " Перезарядка ": " Cooldown ",
+    "Меткий глаз": "Sharp Eye",
+    "Второй клик по королю или кнопка: метка стрелы на 2 клетки вперёд и 1 в сторону. Ход не тратится, перезарядка ": "Click the king a second time or use the button: an arrow mark 2 squares forward and 1 to the side. Costs no turn, cooldown ",
+    "Паладин": "Paladin",
+    "Защита и святость": "Protection & Holiness",
+    "Маг": "Mage",
+    "Классика": "Classic",
+    "Экстрасенс": "Psychic",
+    "Обман и контроль": "Deception & Control",
+    "Некромант": "Necromancer",
+    "Смерть и сшивка": "Death & Stitching",
+    "Охотник": "Hunter",
+    "Ловушки и добыча": "Traps & Prey",
+    "Призрак": "Phantom",
+    "Проклятия и скорость": "Curses & Speed",
+    "Самурай": "Samurai",
+    "Всё ради победы": "All for Victory",
+    "Архитектор": "Architect",
+    "Перестройка по своим правилам": "Rebuilding by Own Rules",
+    "Повелитель времени": "Time Lord",
+    "Похититель темпа": "Tempo Thief",
+    "Белые": "White",
+    "Чёрные": "Black",
+    "ход": "turn",
+    "хода": "turns",
+    "ходов": "turns",
+    " Перезарядка: ": " Cooldown: ",
+    "⏳ Ход сурка: невидимая фигура вернулась назад": "⏳ Groundhog Move: an invisible piece went back",
+    "⏳ Ход сурка: ": "⏳ Groundhog Move: ",
+    " возвращается с ": " returns from ",
+    " на ": " on ",
+    "ей угрожает пешка": "a pawn threatens it",
+    "она встала перед вражеской пешкой": "it stands in front of an enemy pawn",
+    "шах": "check",
+    " стала видимой (": " became visible (",
+    "🎭 Иллюзия на ": "🎭 Illusion on ",
+    " рассеялась (": " faded (",
+    "оригинал исчез": "the original is gone",
+    "ей что-то угрожало": "something threatened it",
+    "Партия началась: Белые — ": "The game has started: White — ",
+    ", Чёрные — ": ", Black — ",
+    "🥷 Невидимая фигура сделала ход": "🥷 An invisible piece made a move",
+    "конвейер": "conveyor",
+    "плитку генератора": "generator tile",
+    "заражённую плитку": "infected tile",
+    "лозу": "vine",
+    "призрачную плитку": "ghost tile",
+    "🔥 Огонь уничтожает ": "🔥 Fire destroys the ",
+    "удар Сёмен-ути": "Shomen-uchi strike",
+    "⚔️ Сёмен-ути по вертикали ": "⚔️ Shomen-uchi on file ",
+    "взрыв": "explosion",
+    "💣 Бумпуку: взрыв на ": "💣 Bumpuku: explosion on ",
+    "🏹 Стрела": "🏹 Arrow",
+    "💥 Взрыв": "💥 Explosion",
+    ": там никого нет": ": nobody is there",
+    ": цель неуязвима для магии": ": the target is immune to magic",
+    "стрела": "arrow",
+    "огонь": "fire",
+    " уничтожает ": " destroys ",
+    "Мат!": "Checkmate!",
+    " побеждают.": " win.",
+    "Пат": "Stalemate",
+    "У игрока нет возможных действий. Ничья.": "The player has no possible actions. Draw.",
+    "Ничья": "Draw",
+    "На доске остались только короли.": "Only kings are left on the board.",
+    " сгорает на ": " burns on ",
+    "🪤 Невидимая фигура попадает в капкан": "🪤 An invisible piece falls into a trap",
+    " попадает в капкан на ": " falls into a trap on ",
+    "☣️ Невидимая фигура заражена и становится зомби": "☣️ An invisible piece is infected and becomes a zombie",
+    " заражена и становится зомби": " is infected and becomes a zombie",
+    "⚡ Генератор: ": "⚡ Generator: ",
+    " поражена разрядом": " was struck by the discharge",
+    "острая клетка": "sharp square",
+    " гибнет на острой клетке ": " dies on a sharp square ",
+    "🗡 Острые клетки исчезли": "🗡 The sharp squares are gone",
+    "😱 Пешка на ": "😱 The pawn on ",
+    " больше не боится": " is no longer afraid",
+    "🛡 Щит ": "🛡 Shield ",
+    " рассеялся": " faded",
+    " вырывается из-под гипноза": " breaks free of hypnosis",
+    " и ": " and ",
+    "👀 Двоится в глазах: король оставил свою иллюзию": "👀 Double Vision: the king left its illusion",
+    " рассеялась (своя фигура)": " faded (own piece)",
+    "оригинал изменился": "the original changed",
+    " (на проходе)": " (en passant)",
+    " 🌵 шипы уничтожили ": " 🌵 the thorns destroyed ",
+    " срублена вернувшейся фигурой": " was captured by the returning piece",
+    " погиб на острой клетке": " died on a sharp square",
+    " сгорел в огне": " burned in the fire",
+    " срубила фигуру и вырывается из-под гипноза": " captured a piece and breaks free of hypnosis",
+    "👼 Ангел-хранитель: ": "👼 Guardian Angel: ",
+    " с ": " from ",
+    " меняется местами с ": " swaps places with ",
+    " и гибнет вместо неё": " and dies in its place",
+    "⚛ Суперпозиция: ": "⚛ Superposition: ",
+    " возвращается на ": " returns to ",
+    "она срубила фигуру": "it captured a piece",
+    "☠️ Апокалипсис: обязательная рубка зомби отменена до конца хода": "☠️ Apocalypse: forced zombie captures are cancelled until the end of the turn",
+    "🕰️ ZA WARUDO: второй ход": "🕰️ ZA WARUDO: second move",
+    "🌾 Жатва с шахом: перезарядка способностей −1, доп. хода нет": "🌾 Harvest with check: cooldowns −1, no extra move",
+    "🌾 Жатва: дополнительный ход": "🌾 Harvest: extra move",
+    "🤥 Ход — это ложь: ": "🤥 The Move Is a Lie: ",
+    " на самом деле на ": " is really on ",
+    " (показывали ": " (shown on ",
+    " самоотверженна (": " is selfless (",
+    " очищена и защищена от магии (": " is purified and protected from magic (",
+    ": заражённая плитка на ": ": infected tile on ",
+    ": лоза на ": ": vine on ",
+    ": призрачная плитка на ": ": ghost tile on ",
+    ": бомба повешена на невидимую фигуру": ": a bomb was attached to an invisible piece",
+    ": бомба на ": ": bomb on ",
+    " (взрыв на ": " (explodes on your ",
+    "-м вашем ходу)": "th turn)",
+    " в суперпозиции": " is in superposition",
+    " нацелен на ": " aimed at ",
+    " (взрыв в начале вашего следующего хода)": " (explodes at the start of your next turn)",
+    " нацелена на ": " aimed at ",
+    " (прилетит в начале вашего следующего хода)": " (strikes at the start of your next turn)",
+    ": капкан установлен (место скрыто)": ": trap set (location hidden)",
+    " цепляется на ": " attaches to ",
+    " лежит на ": " lies on ",
+    " нацелен на вертикаль ": " aimed at file ",
+    " (удар в начале вашего следующего хода)": " (strikes at the start of your next turn)",
+    " стала прозрачной для своих": " became transparent to allies",
+    "это была иллюзия": "it was an illusion",
+    " по ": " at ",
+    ": цель оказалась иллюзией и рассеялась": ": the target was an illusion and faded",
+    " напугана (дальность хода 1": " is scared (move range 1",
+    ": одна из фигур скрылась из виду": ": one of the pieces vanished from sight",
+    " заморожен на ": " frozen for ",
+    " подчиняется на ": " is controlled for ",
+    "🎭 Иллюзия: ": "🎭 Illusion: ",
+    "🧪 Франкенштейн: ": "🧪 Frankenstein: ",
+    " поглощает ": " absorbs ",
+    " и становится ": " and becomes ",
+    "🪂 Спасение: ": "🪂 Rescue: ",
+    "💫 Замешательство: ": "💫 Confusion: ",
+    "вверх": "up",
+    "вниз": "down",
+    "влево": "left",
+    "вправо": "right",
+    ": толкает ": ": pushes ",
+    ": плитка ": ": tile ",
+    ": связь душ между ": ": soul link between ",
+    "🔗 Связь душ: ": "🔗 Soul link: ",
+    " гибнет вслед за ": " dies after ",
+    " клетки острые (ваш ход и ход врага). Теперь сделайте ход": " squares are sharp (your turn and the enemy's turn). Now make a move",
+    "🌀 Кагэватари: король ": "🌀 Kagewatari: king ",
+    "🎯 Меткий глаз: стрела нацелена на ": "🎯 Sharp Eye: arrow aimed at ",
+    " (ход не потрачен)": " (no turn spent)",
+    " ZA WARUDO! Время остановлено: два хода подряд, первым шаховать нельзя": " ZA WARUDO! Time is stopped: two moves in a row, the first cannot give check",
+    " Мисклик! Время отмотано: отменены ход противника и ваш предыдущий ход": " Misclick! Time is rewound: the opponent's move and your previous move are cancelled",
+    ": временная ловушка на ": ": groundhog trap on ",
+    ": временная ловушка установлена (место скрыто)": ": groundhog trap set (location hidden)",
+    " +1 (и +1 навсегда)": " +1 (and +1 permanently)",
+    " Замедление времени: перезарядка врага ": " Time Slow: enemy cooldown ",
+    ": плюс ": ": plus ",
+    ", минус ": ", minus ",
+    "Рокировка (ОК) или обычный ход короля без ладьи (Отмена)?": "Castle (OK) or a normal king move without the rook (Cancel)?",
+    "Сдача": "Resignation",
+    "Ничья по согласию.": "Draw by agreement.",
+    "</span> Пассивка: <b>": "</span> Passive: <b>",
+    "готово": "ready",
+    "перезарядка: ": "cooldown: ",
+    "доп. ход": "extra move",
+    "приманка": "lure",
+    "зомби рубит": "zombie must capture",
+    "до первой смерти": "until the first death",
+    "нет целей": "no targets",
+    "скрыто": "hidden",
+    "бесплатно": "free",
+    "Сброс:": "Graveyard:",
+    "пусто": "empty",
+    "Ход: ": "Turn: ",
+    " · ZA WARUDO, ход ": " · ZA WARUDO, move ",
+    " · доп. ход": " · extra move",
+    " · ШАХ!": " · CHECK!",
+    " · шах после взрыва!": " · check after the explosion!",
+    "Выберите фигуру или способность героя.": "Select a piece or a hero ability.",
+    "🎭 Оригинал и двойник ходят вместе: теперь сходите второй фигурой пары (кликните на неё).": "🎭 The original and the double move together: now move the second piece of the pair (click it).",
+    "Выберите свободную клетку на своей первой горизонтали (пешка: на любой из первых четырёх).": "Choose a free square on your first rank (pawn: any of the first four ranks).",
+    "Выберите фигуру в своём сбросе.": "Choose a piece in your graveyard.",
+    "Выберите клетку на своей первой горизонтали: там встанет зомби.": "Choose a square on your first rank: the zombie will stand there.",
+    "Выберите фигуру в любом сбросе: своём или чужом.": "Choose a piece in any graveyard: yours or the enemy's.",
+    "Выберите свою фигуру, на которую повесить щит.": "Choose your piece to put the shield on.",
+    "Выберите свою фигуру на вражеской половине.": "Choose your piece on the enemy half.",
+    "Выберите свободную клетку на своей первой горизонтали (пешка: на 2–4 горизонталь).": "Choose a free square on your first rank (pawn: ranks 2–4).",
+    "Выберите клетку. Она взорвётся в начале вашего следующего хода и останется гореть.": "Choose a square. It will explode at the start of your next turn and keep burning.",
+    "Выберите фигуру для заморозки (можно и свою, кроме короля).": "Choose a piece to freeze (your own too, except the king).",
+    "Выберите вражескую фигуру в радиусе 3×3 от любой вашей.": "Choose an enemy piece within 3×3 of any of yours.",
+    "Выберите фигуру, которая сходит и создаст двойника.": "Choose the piece that will move and create a double.",
+    "Куда пойдёт фигура?": "Where will the piece go?",
+    "На какую клетку встанет двойник?": "Which square will the double stand on?",
+    "Выберите вражескую фигуру (не короля).": "Choose an enemy piece (not the king).",
+    "Первый ход этой фигуры (без рубки).": "This piece's first move (no capture).",
+    "Второй ход этой фигуры (без рубки).": "This piece's second move (no capture).",
+    "Выберите свою фигуру, которая поглотит другую.": "Choose your piece that will absorb another.",
+    "Выберите свою фигуру, которую она поглотит.": "Choose your piece to be absorbed.",
+    "Выберите своего зомби для дополнительного хода.": "Choose your zombie for the extra move.",
+    "Куда пойдёт зомби? Рубить не обязательно.": "Where will the zombie go? Capturing is optional.",
+    "Выберите свободную клетку для конвейера.": "Choose a free square for the conveyor.",
+    "В какую сторону он толкает? Выберите соседнюю клетку в этом направлении.": "Which way does it push? Choose the adjacent square in that direction.",
+    "Выберите клетку первого портала.": "Choose the square of the first portal.",
+    "Выберите клетку второго портала.": "Choose the square of the second portal.",
+    "Выберите особую клетку (огонь, метка, конвейер, портал, приманка).": "Choose a special square (fire, mark, conveyor, portal, lure).",
+    "Куда перенести её? Нужна клетка без особых свойств.": "Where to move it? The square must have no special properties.",
+    "Выберите свободную клетку для невидимого капкана.": "Choose a free square for the invisible trap.",
+    "Выберите клетку в радиусе от короля. Стрела прилетит в начале вашего следующего хода.": "Choose a square within range of your king. The arrow strikes at the start of your next turn.",
+    "Выберите свободную клетку или свою фигуру для приманки.": "Choose a free square or your own piece for the lure.",
+    "Выберите клетку: ": "Choose a square: ",
+    " вперёд и ": " forward and ",
+    " в сторону от короля. Ход не тратится.": " sideways from the king. Costs no turn.",
+    "Выберите свободное безопасное поле для короля. Это тратит ход.": "Choose a free safe square for the king. This costs a turn.",
+    "Выберите любую клетку нужной вертикали. В начале вашего следующего хода все фигуры на ней погибнут (кроме королей).": "Choose any square on the file you want. At the start of your next turn all pieces on it die (except kings).",
+    "Выберите свою фигуру (не короля), сквозь которую смогут проходить ваши фигуры.": "Choose your piece (not the king) that your pieces will be able to pass through.",
+    "Выберите первую фигуру для связи душ.": "Choose the first piece for the soul link.",
+    "Выберите вторую фигуру.": "Choose the second piece.",
+    "Выберите вражескую фигуру, которую нужно напугать.": "Choose the enemy piece to scare.",
+    "Выберите союзную фигуру (не короля): она станет самоотверженной.": "Choose an allied piece (not the king): it will become selfless.",
+    "Выберите любую фигуру: с неё снимутся все эффекты, и она получит защиту от магии.": "Choose any piece: all effects are removed from it and it gains protection from magic.",
+    "Выберите свободную клетку для заражённой плитки.": "Choose a free square for the infected tile.",
+    "Выберите свободную клетку для лозы.": "Choose a free square for the vine.",
+    "Выберите свободную клетку для призрачной плитки.": "Choose a free square for the ghost tile.",
+    "Выберите союзную фигуру (не короля), на которую повесить бомбу.": "Choose an allied piece (not the king) to attach the bomb to.",
+    "Выберите свободную клетку для плитки ПЛЮС.": "Choose a free square for the PLUS tile.",
+    "Выберите свободную клетку для плитки МИНУС.": "Choose a free square for the MINUS tile.",
+    "Выберите клетку для временной ловушки. Пустая: скрыто и бесплатно. С фигурой: видно, тратит ход.": "Choose a square for the groundhog trap. Empty: hidden and free. With a piece: visible, costs a turn.",
+    "Выберите фигуру, которая сделает ложный ход.": "Choose the piece that will make the false move.",
+    "Выберите клетку НЕВИДИМОЙ фигуры (настоящий ход).": "Choose the square of the INVISIBLE piece (the real move).",
+    "Выберите клетку ИЛЛЮЗИИ (фейковый ход).": "Choose the square of the ILLUSION (the fake move).",
+    "Выберите любую фигуру (кроме короля): она получит суперпозицию.": "Choose any piece (except the king): it gains superposition.",
+    "Выберите способность врага в его панели: её перезарядка +3, у остальных (если они перезаряжаются) +1.": "Choose an enemy ability in its panel: its cooldown +3; the others (if recharging) +1.",
+    "Выберите свою фигуру, которая станет невидимой.": "Choose your piece that will become invisible.",
+    "Выберите любую клетку нужного цвета: все клетки этого цвета станут острыми. Потом сделайте ход.": "Choose any square of the colour you want: all squares of that colour become sharp. Then make a move.",
+    "Король ушёл из-под шаха: выберите клетку, где останется его иллюзия.": "The king escaped check: choose the square where its illusion will stay.",
+    "🪞 Зеркало: ": "🪞 Mirror: ",
+    "🧰 Ходить фигурой уже нельзя: можно применить ещё способность или нажать «Завершить ход».": "🧰 You can no longer move a piece: use another ability or press “End turn”.",
+    "🕰️ ZA WARUDO: первый ход, шаховать им нельзя.": "🕰️ ZA WARUDO: first move, it cannot give check.",
+    "🕰️ ZA WARUDO: второй ход, теперь можно шаховать.": "🕰️ ZA WARUDO: second move, check is allowed now.",
+    "🌾 Дополнительный ход: походите любой фигурой (способности недоступны, своих пешек рубить уже нельзя).": "🌾 Extra move: move any piece (abilities are unavailable, you can no longer capture your own pawns).",
+    "Приманка: вы обязаны срубить фигуру с приманкой или встать на клетку с приманкой (подсвеченной фигурой).": "Lure: you must capture the piece with the lure or step on the lure's square (with the highlighted piece).",
+    "Зомби обязан рубить: ходите подсвеченным зомби (цель на ваш выбор).": "A zombie must capture: move the highlighted zombie (target of your choice).",
+    "Королю угрожает опасность: нужно защититься.": "Your king is in danger: defend it.",
+    "Соединение потеряно.": "Connection lost.",
+    "⏳ Ход соперника...": "⏳ Opponent's turn...",
+    "Онлайн: вы играете ": "Online: you play ",
+    "Отменить готовность": "Cancel ready",
+    "Готов": "Ready",
+    "Начать партию": "Start game",
+    " Пассивка: ": " Passive: ",
+    "Розовая": "Pink",
+    "Зелёная": "Green",
+    "Голубая": "Light blue",
+    "Ночная": "Night",
+    "Фиолетовая": "Violet",
+    "Вы играете ": "You play ",
+    ". Выберите героя и нажмите «Готов»: партия начнётся, когда готовы оба. Героя соперника вы увидите только на старте.": ". Choose a hero and press “Ready”: the game starts when both are ready. You will see the opponent's hero only at the start.",
+    "Начать новую игру? Текущая партия будет потеряна.": "Start a new game? The current game will be lost.",
+    "Сдаться?": "Resign?",
+    " сдаются?": " resign?",
+    "Ничья предложена, ждём ответа соперника.": "Draw offered, waiting for the opponent's answer.",
+    "Оба игрока согласны на ничью?": "Do both players agree to a draw?",
+    "Вы": "You",
+    "Соперник": "Opponent",
+    "Сообщения соперника заглушены": "Opponent's messages are muted",
+    "Режим «через сервер» включён: создавайте комнату или входите по коду.": "Server mode is on: create a room or join by code.",
+    "Комната создана. Отправьте код другу и ждите, пока он зайдёт.": "Room created. Send the code to a friend and wait for them to join.",
+    "Не загрузилась библиотека PeerJS: проверьте интернет и обновите страницу.": "The PeerJS library failed to load: check your internet and reload the page.",
+    "Ошибка соединения: ": "Connection error: ",
+    "Введите код комнаты.": "Enter the room code.",
+    "Подключаемся...": "Connecting...",
+    "Не получилось подключиться. Проверьте код и попробуйте ещё раз.": "Could not connect. Check the code and try again.",
+    "Комнаты с таким кодом нет.": "There is no room with that code.",
+    "Соединение с соперником потеряно.": "The connection with the opponent was lost.",
+    "Соперник предлагает ничью. Согласны?": "The opponent offers a draw. Do you accept?",
+    "Соперник отказался от ничьей.": "The opponent declined the draw.",
+    "Быстрая игра работает только на сайте с сервером игры.": "Quick game works only on the site with the game server.",
+    "Сервер занят, попробуйте позже.": "The server is busy, try again later.",
+    "Ищем соперника... оставайтесь на этой странице.": "Looking for an opponent... stay on this page.",
+    "Соперник найден, подключаемся...": "Opponent found, connecting...",
+    "Не удалось связаться с сервером.": "Could not reach the server.",
+    "Код скопирован: ": "Code copied: ",
+    "Такой код уже занят, нажмите «Создать комнату» ещё раз.": "That code is already taken, press “Create room” again.",
+    "✅ Соперник готов": "✅ Opponent is ready",
+    "⏳ Соперник выбирает героя...": "⏳ Opponent is choosing a hero...",
+    "Подробнее ▾": "Details ▾",
+    "Скрыть ▴": "Hide ▴",
+    "Каждая сторона выбирает героя. В свой ход можно либо походить фигурой, либо применить способность героя. Все способности стартуют с перезарядкой 3.": "Each side picks a hero. On your turn you either move a piece or use a hero ability. All abilities start with a cooldown of 3.",
+    "Доска": "Board",
+    "☕ Поддержать проект": "☕ Support the project",
+    "Автор проекта: FrouzyG ·": "Project author: FrouzyG ·",
+    "Telegram-канал": "Telegram channel",
+    "Как будете играть?": "How do you want to play?",
+    "Вдвоём за одним экраном": "Two players on one screen",
+    "онлайн": "online",
+    "Быстрая игра: найти соперника": "Quick game: find an opponent",
+    "или с другом по коду": "or with a friend by code",
+    "Создать комнату": "Create room",
+    "Код комнаты:": "Room code:",
+    "Копировать": "Copy",
+    "Войти": "Join",
+    "Сдаться": "Resign",
+    "Новая игра": "New game",
+    "Завершить ход": "End turn",
+    "Чат": "Chat",
+    "Журнал": "Log",
+    "Особые правила": "Special rules",
+    "Короли навсегда неуязвимы для магии.": "Kings are permanently immune to magic.",
+    "Большинство способностей тратят ход. Те, что ход не тратят, отмечены зелёным кружком справа от названия.": "Most abilities cost a turn. Those that do not are marked with a green dot to the right of the name.",
+    "Все способности стартуют с перезарядкой 3.": "All abilities start with a cooldown of 3.",
+    "Описание способности и пассивки видно во всплывающей подсказке при наведении на кнопку.": "The description of an ability or passive is shown in a tooltip when you hover over the button.",
+    "Если визуально ход сделать невозможно, это не значит, что он невозможен на самом деле: невидимые фигуры, иллюзии, скрытые ловушки и фейки могут менять картину.": "If a move looks impossible, that does not mean it really is: invisible pieces, illusions, hidden traps and fakes can change the picture.",
+    "После мата можно нажать «Посмотреть доску» и рассмотреть финальную позицию.": "After checkmate you can press “View board” to study the final position.",
+    "Esc отменяет выбор.": "Esc cancels the selection.",
+    "Превращение пешки": "Pawn promotion",
+    "Посмотреть доску": "View board",
+    "Сыграть ещё": "Play again",
+    "КОД": "CODE",
+    "Звук": "Sound",
+    "Сменить доску": "Change board",
+    "Подсвечивать иллюзии Экстрасенса": "Highlight Psychic illusions",
+    "Показывать капканы Охотника": "Show Hunter traps",
+    "Показывать невидимые фигуры Самурая": "Show Samurai invisible pieces",
+    "Архитектор: закончить ход после способностей": "Architect: end the turn after abilities",
+    "Заглушить соперника": "Mute opponent",
+    "Сообщение...": "Message...",
+    "Выберите героя в левой колонке": "Choose a hero in the left column",
+    "Выберите героя в правой колонке": "Choose a hero in the right column",
+    "Классика ": "Classic ",
+    "Ожидание": "Waiting",
+    "белыми": "white",
+    "чёрными": "black",
+    "белые": "white",
+    "чёрные": "black",
+    "погибли ": "died: ",
+    "никого не задело": "nobody was hit",
+    "светлые": "light",
+    "тёмные": "dark",
+    " · соединение потеряно": " · connection lost",
+    "Не тратит ход": "Costs no turn",
+    "встаёт зомби": "rises as a zombie",
+    "возвращается": "returns"
+};
+
+let LANG = 'ru';
+try {
+    const saved = localStorage.getItem('spellschess-lang');
+    LANG = saved || (String(navigator.language || 'ru').toLowerCase().startsWith('ru') ? 'ru' : 'en');
+} catch (e) { /* язык по умолчанию */ }
+const CYR = /[А-Яа-яЁё]/;
+let EN_RULES = null;
+const escRe = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function tr(str) {
+    if (LANG !== 'en' || typeof str !== 'string' || !CYR.test(str)) return str;
+    if (EN[str] !== undefined) return EN[str];
+    if (!EN_RULES) {
+        EN_RULES = Object.keys(EN).sort((a, b) => b.length - a.length).map(k => {
+            const pre = CYR.test(k[0]) ? '(?<![А-Яа-яЁё])' : '';
+            const post = CYR.test(k[k.length - 1]) ? '(?![А-Яа-яЁё])' : '';
+            return [new RegExp(pre + escRe(k) + post, 'g'), EN[k]];
+        });
+    }
+    let out = str;
+    for (const [re, to] of EN_RULES) out = out.replace(re, () => to);
+    return out.replace(/(returns from [a-h][1-8]) on /g, '$1 to ');
+}
+const uiAlert = m => alert(tr(m));
+const uiConfirm = m => confirm(tr(m));
+
+// Перевод экрана: текстовые узлы и подсказки (title, placeholder); оригинал хранится, чтобы вернуть русский
+const TR_ATTRS = ['title', 'placeholder'];
+const noTr = n => { const el = n.nodeType === 1 ? n : n.parentElement; return !!(el && el.closest && el.closest('[data-notr]')); };
+
+function translateNode(n) {
+    if (LANG !== 'en' || !n) return;
+    if (n.nodeType === 3) {
+        if (CYR.test(n.nodeValue) && !noTr(n)) {
+            const t = tr(n.nodeValue);
+            if (t !== n.nodeValue) { n.__ru = n.nodeValue; n.nodeValue = t; }     // без лишних записей, иначе наблюдатель зациклится
+        }
+    } else if (n.nodeType === 1) {
+        if (n.tagName === 'SCRIPT' || n.tagName === 'STYLE') return;
+        TR_ATTRS.forEach(a => {
+            const v = n.getAttribute(a);
+            if (v && CYR.test(v) && !noTr(n)) {
+                const t = tr(v);
+                if (t !== v) { (n.__ruAttr = n.__ruAttr || {})[a] = v; n.setAttribute(a, t); }
+            }
+        });
+        n.childNodes.forEach(translateNode);
+    }
+}
+
+function restoreNode(n) {
+    if (!n) return;
+    if (n.nodeType === 3) { if (n.__ru !== undefined) { n.nodeValue = n.__ru; delete n.__ru; } }
+    else if (n.nodeType === 1) {
+        if (n.__ruAttr) { Object.keys(n.__ruAttr).forEach(a => n.setAttribute(a, n.__ruAttr[a])); delete n.__ruAttr; }
+        n.childNodes.forEach(restoreNode);
+    }
+}
+
+function setLang(l) {
+    restoreNode(document.body);
+    LANG = l;
+    try { localStorage.setItem('spellschess-lang', l); } catch (e) { /* без сохранения */ }
+    if (document.documentElement) document.documentElement.lang = l;
+    ['langLobby', 'langSetup', 'btnLang'].forEach(id => { $('#' + id).textContent = l === 'ru' ? '🌐 English' : '🌐 Русский'; });
+    buildSetup();
+    renderThemePicker();
+    renderChat();
+    if (G) render();
+    translateNode(document.body);
+}
+
+if (typeof MutationObserver !== 'undefined' && document.body) {
+    new MutationObserver(recs => {
+        if (LANG !== 'en') return;
+        recs.forEach(r => {
+            if (r.type === 'childList') r.addedNodes.forEach(translateNode);
+            else if (r.type === 'characterData') translateNode(r.target);
+            else if (r.type === 'attributes') translateNode(r.target);
+        });
+    }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: TR_ATTRS });
+}
+['langLobby', 'langSetup', 'btnLang'].forEach(id => $('#' + id).addEventListener('click', () => setLang(LANG === 'ru' ? 'en' : 'ru')));
+
+/* ---------- Свои модельки фигур: положите картинки в папку pieces (wK.png, bQ.png и т. д.) ---------- */
+(function detectPieceImages() {
+    if (typeof Image === 'undefined') return;
+    const names = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB', 'bN', 'bP'];
+    const exts = ['png', 'svg', 'webp'];
+    const tryExt = i => {
+        if (i >= exts.length) return;
+        const im = new Image();
+        im.onload = () => {
+            names.forEach(n => document.documentElement.style.setProperty('--img-' + n, `url("pieces/${n}.${exts[i]}")`));
+            if (document.body) document.body.classList.add('img-pieces');
+        };
+        im.onerror = () => tryExt(i + 1);
+        im.src = 'pieces/wK.' + exts[i];
+    };
+    tryExt(0);
+})();
+
 ['donateLobby', 'donateSetup', 'donateGame'].forEach(id => {
     const a = $('#' + id);
     if (DONATE_URL) { a.href = DONATE_URL; a.classList.remove('hidden'); }
 });
 applyTheme(themeId);
 buildSetup();
+setLang(LANG);

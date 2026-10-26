@@ -11,7 +11,8 @@
     <!-- Экран выбора героев -->
     <div id="setup" class="overlay">
         <div class="setup-card">
-            <h1>SpellsChess</h1>
+            <button id="langSetup" class="small-btn lang-top">🌐 English</button>
+            <h1 class="logo"><span class="logo-sp">Spells</span><span class="logo-ch">Chess</span></h1>
             <p id="setupNet" class="sub hidden"></p>
             <p class="sub">Каждая сторона выбирает героя. В свой ход можно либо походить фигурой, либо применить способность героя. Все способности стартуют с перезарядкой 3.</p>
             <div class="pick-row">
@@ -37,7 +38,8 @@
     <!-- Выбор режима: один экран или онлайн -->
     <div id="lobby" class="overlay">
         <div class="setup-card lobby-card">
-            <h1>SpellsChess</h1>
+            <button id="langLobby" class="small-btn lang-top">🌐 English</button>
+            <h1 class="logo"><span class="logo-sp">Spells</span><span class="logo-ch">Chess</span></h1>
             <p class="sub">Как будете играть?</p>
             <button id="lobbyLocal" class="big-btn">Вдвоём за одним экраном</button>
             <div class="lobby-sep">онлайн</div>
@@ -70,6 +72,7 @@
                 <button id="btnResign" class="small-btn">Сдаться</button>
                 <button id="btnNew" class="small-btn">Новая игра</button>
                 <button id="btnSound" class="small-btn" title="Звук">🔊</button>
+                <button id="btnLang" class="small-btn">🌐 English</button>
                 <button id="btnTheme" class="small-btn" title="Сменить доску">🎨</button>
                 <button id="btnGhost" class="small-btn" title="Подсвечивать иллюзии Экстрасенса">👁</button>
                 <button id="btnTraps" class="small-btn" title="Показывать капканы Охотника">🪤</button>
@@ -84,7 +87,7 @@
 
             <div id="chat" class="chat hidden">
                 <h3>Чат <button id="chatMute" class="small-btn" title="Заглушить соперника">🔔</button></h3>
-                <div id="chatLog"></div>
+                <div id="chatLog" data-notr></div>
                 <div class="chat-row"><input id="chatInput" maxlength="300" placeholder="Сообщение..."><button id="chatSend" class="small-btn">➤</button></div>
             </div>
 

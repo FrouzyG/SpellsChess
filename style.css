@@ -2258,3 +2258,84 @@ button {
     border: 2px dashed var(--line);
     border-radius: 12px;
 }
+
+
+/* ===== Логотип ===== */
+.logo {
+    letter-spacing: 1px;
+}
+
+.logo-sp {
+    color: #ff6ec7;
+}
+
+.logo-ch {
+    color: #ffffff;
+}
+
+.setup-card, .lobby-card {
+    position: relative;
+}
+
+.lang-top {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+
+/* ===== Свои модельки фигур (папка pieces) ===== */
+.img-pieces .piece {
+    font-size: 0;
+    text-shadow: none;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 92% 92%;
+}
+
+    .img-pieces .piece.w.t-k {
+        background-image: var(--img-wK);
+    }
+
+    .img-pieces .piece.w.t-q {
+        background-image: var(--img-wQ);
+    }
+
+    .img-pieces .piece.w.t-r {
+        background-image: var(--img-wR);
+    }
+
+    .img-pieces .piece.w.t-b {
+        background-image: var(--img-wB);
+    }
+
+    .img-pieces .piece.w.t-n {
+        background-image: var(--img-wN);
+    }
+
+    .img-pieces .piece.w.t-p {
+        background-image: var(--img-wP);
+    }
+
+    .img-pieces .piece.b.t-k {
+        background-image: var(--img-bK);
+    }
+
+    .img-pieces .piece.b.t-q {
+        background-image: var(--img-bQ);
+    }
+
+    .img-pieces .piece.b.t-r {
+        background-image: var(--img-bR);
+    }
+
+    .img-pieces .piece.b.t-b {
+        background-image: var(--img-bB);
+    }
+
+    .img-pieces .piece.b.t-n {
+        background-image: var(--img-bN);
+    }
+
+    .img-pieces .piece.b.t-p {
+        background-image: var(--img-bP);
+    }
