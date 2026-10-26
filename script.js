@@ -3170,6 +3170,11 @@ function renderLog() {
    ===================================================================== */
 const openHeroes = new Set();   // у каких героев раскрыто «Подробнее»
 
+// Зелёный кружок «не тратит ход» (то же правило, что и в панели героя во время партии)
+const FREE_DOT = '<i class="free-dot" title="Не тратит ход"></i>';
+const abFreeDot = k => (ABILITIES[k].free ? FREE_DOT : '');
+const psFreeDot = pk => ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? FREE_DOT : '');
+
 function buildSetup() {
     const sb = $('#startBtn');
     if (NET.on) sb.textContent = NET.ready ? 'Отменить готовность' : 'Готов';
@@ -3186,10 +3191,10 @@ function buildSetup() {
       <div class="hero-card ${selectedHeroes[side] === id ? 'chosen' : ''} ${open ? 'open' : ''}" data-hero="${id}">
         <div class="hc-head"><span class="hc-icon">${h.icon}</span>
           <div><div class="hc-name">${h.name}</div><div class="hc-tag">${h.tag}</div></div></div>
-        <div class="hc-abs"><span class="chip chip-ps">${ps.icon} ${ps.name}</span>${h.abilities.map(k => `<span class="chip">${ABILITIES[k].icon} ${ABILITIES[k].name}</span>`).join('')}</div>
+        <div class="hc-abs"><span class="chip chip-ps">${ps.icon} ${ps.name}${psFreeDot(h.passive)}</span>${h.abilities.map(k => `<span class="chip">${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</span>`).join('')}</div>
         <button class="hc-more" type="button">${open ? 'Скрыть ▴' : 'Подробнее ▾'}</button>
-        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}</b><br><span>${ps.desc}</span></div>
-        <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}</b><br><span>${abilityDesc(k)}</span></li>`).join('')}</ul></div>` : ''}
+        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span></div>
+        <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</b><br><span>${abilityDesc(k)}</span></li>`).join('')}</ul></div>` : ''}
       </div>`;
         }).join('');
     });
