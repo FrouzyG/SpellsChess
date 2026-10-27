@@ -4205,3 +4205,40 @@ if (typeof MutationObserver !== 'undefined' && document.body) {
 applyTheme(themeId);
 buildSetup();
 setLang(LANG);
+
+// ===== Мобильная версия: строка статуса, нижняя панель и выезжающее окно «меню / журнал / чат» =====
+(function () {
+    const g = id => document.getElementById(id);
+    const app = g('app'), st = g('status'), hi = g('hint'), ms = g('mStatus'), mh = g('mHint');
+    const end = g('btnEnd'), mEnd = g('mEnd'), chat = g('chat'), mChat = g('mChat');
+    if (!app || !ms || !mh || !mEnd || !mChat) return;
+
+    const sync = () => {
+        if (ms.textContent !== st.textContent) ms.textContent = st.textContent;
+        const cls = 'm-status ' + st.className.replace('status', '').trim();
+        if (ms.className !== cls) ms.className = cls;
+        if (mh.textContent !== hi.textContent) mh.textContent = hi.textContent;
+        mEnd.classList.toggle('hidden', end.classList.contains('hidden'));
+        mEnd.disabled = end.disabled;
+        mChat.classList.toggle('hidden', chat.classList.contains('hidden'));
+    };
+    const obs = new MutationObserver(sync);
+    [st, hi].forEach(n => obs.observe(n, { childList: true, characterData: true, subtree: true, attributes: true }));
+    obs.observe(end, { attributes: true });
+    obs.observe(chat, { attributes: true });
+    sync();
+
+    const openSheet = target => {
+        app.classList.add('sheet-open');
+        setTimeout(() => { if (target) target.scrollIntoView({ block: 'start' }); else g('mClose').scrollIntoView({ block: 'start' }); }, 30);
+    };
+    const closeSheet = () => app.classList.remove('sheet-open');
+
+    g('mMenu').addEventListener('click', () => openSheet(null));
+    g('mLog').addEventListener('click', () => openSheet(g('log').previousElementSibling));
+    g('mChat').addEventListener('click', () => openSheet(chat));
+    g('mClose').addEventListener('click', closeSheet);
+    mEnd.addEventListener('click', () => end.click());
+    app.addEventListener('click', e => { if (e.target === app) closeSheet(); });      // тап по затемнению закрывает окно
+    ['btnDraw', 'btnResign', 'btnNew'].forEach(id => g(id).addEventListener('click', closeSheet));
+})();

@@ -2584,3 +2584,373 @@ button {
     opacity: 0.5;
     filter: drop-shadow(0 0 5px #cfe3ff);
 }
+
+/* =====================================================================
+   МОБИЛЬНАЯ ВЕРСИЯ (телефон в вертикальном положении).
+   Всё внутри этого блока действует только на узких экранах, на компьютере ничего не меняется.
+   ===================================================================== */
+.m-strip, .m-bar, .m-close {
+    display: none;
+}
+
+.overlay {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 760px) {
+    /* ---------- Экраны выбора режима и героев ---------- */
+    .overlay {
+        padding: 8px;
+    }
+
+    .setup-card, .lobby-card {
+        padding: 16px 12px;
+        max-width: 100%;
+    }
+
+        .setup-card h1.logo, .lobby-card h1.logo {
+            margin: 26px 0 6px;
+            font-size: 34px;
+        }
+
+    .big-btn {
+        white-space: normal;
+        padding: 12px 12px;
+        font-size: 16px;
+    }
+
+    .lobby-card .big-btn {
+        margin: 5px 0;
+    }
+
+    .join-row .big-btn {
+        width: auto;
+        flex: none;
+        padding: 10px 16px;
+    }
+
+    .pick-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+    }
+
+    .hero-list {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .credit {
+        word-break: break-word;
+    }
+
+    .setup-card .sub {
+        font-size: 14px;
+    }
+
+    /* ---------- Партия: враг сверху, доска, наш герой снизу, всё на одном экране ---------- */
+    :root {
+        --cell: min((100vw - 28px) / 8, (100dvh - 340px) / 8);
+    }
+
+    body {
+        overflow: hidden;
+    }
+
+    .game {
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 4px;
+        height: 100dvh;
+        padding: 4px 6px;
+        overflow: hidden;
+    }
+
+    #panel-b {
+        order: 1;
+    }
+
+    .m-strip {
+        order: 2;
+    }
+
+    .board-col {
+        order: 3;
+    }
+
+    #panel-w {
+        order: 4;
+    }
+
+    .m-bar {
+        order: 5;
+    }
+
+    .flipped #panel-w {
+        order: 1;
+    }
+
+    .flipped #panel-b {
+        order: 4;
+    }
+
+    .board-col {
+        flex: none;
+        align-self: center;
+        width: calc(var(--cell) * 8 + 16px);
+        min-width: 0;
+        gap: 0;
+    }
+
+    /* строка статуса и подсказки над доской */
+    .m-strip {
+        display: block;
+        min-height: 40px;
+        padding: 2px 8px;
+        line-height: 1.2;
+    }
+
+    .m-status {
+        font-family: Georgia, serif;
+        font-size: 15px;
+        font-weight: 700;
+        border-left: 5px solid #fff;
+        padding-left: 8px;
+    }
+
+        .m-status.b {
+            border-left-color: #111;
+        }
+
+        .m-status.over {
+            border-left-color: var(--ember);
+        }
+
+    .m-hint {
+        margin-top: 2px;
+        font-size: 11.5px;
+        opacity: 0.85;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    /* компактные панели героев */
+    .panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: "head grave" "pas pas" "abs abs";
+        align-items: center;
+        gap: 2px 6px;
+        width: 100%;
+        max-width: none;
+        max-height: none;
+        overflow: visible;
+        position: static;
+        padding: 4px 6px;
+        border-radius: 8px;
+    }
+
+        .panel .panel-head {
+            grid-area: head;
+            min-width: 0;
+            gap: 6px;
+        }
+
+            .panel .panel-head > div {
+                display: flex;
+                align-items: baseline;
+                gap: 6px;
+                min-width: 0;
+            }
+
+        .panel .hero-icon {
+            font-size: 20px;
+        }
+
+        .panel .pname {
+            font-size: 13px;
+        }
+
+        .panel .hname {
+            font-size: 12px;
+        }
+
+        .panel .turn-dot {
+            font-size: 10px;
+            padding: 1px 6px;
+        }
+
+        .panel .passive {
+            grid-area: pas;
+            font-size: 11px;
+            opacity: 0.85;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .panel .abilities {
+            grid-area: abs;
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: minmax(0, 1fr);
+            gap: 4px;
+            width: 100%;
+        }
+
+        .panel .ab {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            position: relative;
+            width: 100%;
+            min-width: 0;
+            height: 46px;
+            padding: 3px 2px;
+            text-align: center;
+        }
+
+    .ab-icon {
+        font-size: 17px;
+        line-height: 1;
+    }
+
+    .ab-name {
+        max-width: 100%;
+        font-size: 9px;
+        line-height: 1.05;
+        text-align: center;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        word-break: break-word;
+    }
+
+    .panel .ab .ab-cd {
+        display: none;
+    }
+
+    .panel .ab.slowable .ab-cd {
+        display: block;
+        font-size: 9px;
+    }
+
+    .panel .ab .cd-badge {
+        top: auto;
+        bottom: 1px;
+        right: 1px;
+        padding: 0 4px;
+        font-size: 10px;
+        line-height: 14px;
+    }
+
+    .panel .ab .free-dot {
+        width: 6px;
+        height: 6px;
+        margin-left: 2px;
+    }
+
+    /* сброс: в строке с заголовком панели */
+    .panel .grave {
+        grid-area: grave;
+        flex-basis: auto;
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+        min-height: 0;
+        gap: 2px;
+        max-width: 55vw;
+        overflow-x: auto;
+    }
+
+        .panel .grave .glabel, .panel .grave .empty {
+            display: none;
+        }
+
+    .panel .gp {
+        flex: none;
+        width: 26px;
+        height: 26px;
+        font-size: 17px;
+    }
+
+    .img-pieces .gp > .pi {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* нижняя панель кнопок */
+    .m-bar {
+        display: flex;
+        gap: 6px;
+    }
+
+        .m-bar .small-btn {
+            flex: 1;
+            height: 36px;
+            padding: 0 6px;
+            font-size: 14px;
+        }
+
+    /* меню, журнал и чат: выезжающее окно снизу */
+    .game .side-col {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        z-index: 45;
+        width: 100%;
+        max-width: none;
+        max-height: 80dvh;
+        padding: 10px 14px 24px;
+        overflow-y: auto;
+        background: #3a1a31;
+        border-top: 1px solid var(--line);
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+        transform: translateY(110%);
+        transition: transform 0.25s ease;
+    }
+
+    .game.sheet-open .side-col {
+        transform: none;
+    }
+
+    .game.sheet-open::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 44;
+        background: rgba(0, 0, 0, 0.55);
+    }
+
+    .side-col .status, .side-col .hint {
+        display: none;
+    }
+
+    .m-close {
+        display: block;
+        position: sticky;
+        top: 0;
+        margin: 0 0 8px auto;
+        z-index: 2;
+    }
+
+    #log {
+        max-height: none;
+    }
+
+    #chatLog {
+        max-height: 200px;
+    }
+
+    .small-btn {
+        padding: 8px 12px;
+    }
+}

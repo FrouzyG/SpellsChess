@@ -62,7 +62,20 @@
         </div>
         <div id="panel-b" class="panel"></div>
 
+        <!-- Мобильная версия: строка статуса и нижняя панель (на компьютере скрыты) -->
+        <div id="mStrip" class="m-strip">
+            <div id="mStatus" class="m-status" data-notr></div>
+            <div id="mHint" class="m-hint" data-notr></div>
+        </div>
+        <div id="mBar" class="m-bar">
+            <button id="mLog" class="small-btn">📜 Журнал</button>
+            <button id="mChat" class="small-btn hidden">💬 Чат</button>
+            <button id="mMenu" class="small-btn">☰ Меню</button>
+            <button id="mEnd" class="small-btn hidden" disabled>Завершить ход</button>
+        </div>
+
         <aside class="side-col">
+            <button id="mClose" class="small-btn m-close">✕ Закрыть</button>
             <div id="netInfo" class="hint hidden"></div>
             <div id="status" class="status"></div>
             <div id="hint" class="hint"></div>
