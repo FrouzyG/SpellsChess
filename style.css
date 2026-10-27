@@ -2648,7 +2648,7 @@ button {
 
     /* ---------- Партия: враг сверху, доска, наш герой снизу, всё на одном экране ---------- */
     :root {
-        --cell: min((100vw - 28px) / 8, (100dvh - 340px) / 8);
+        --cell: min((100vw - 28px) / 8, (100dvh - 372px) / 8);
     }
 
     body {
@@ -2952,5 +2952,103 @@ button {
 
     .small-btn {
         padding: 8px 12px;
+    }
+}
+
+
+/* ===== Кнопки, зависящие от героев в партии ===== */
+.nohero {
+    display: none !important;
+}
+
+/* звук и смена доски всегда в конце списка кнопок */
+.btn-row #btnSound {
+    order: 98;
+}
+
+.btn-row #btnTheme {
+    order: 99;
+}
+
+/* ===== Перемотка ходов ===== */
+.rewind {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+    .rewind .small-btn {
+        min-width: 42px;
+        padding: 4px 10px;
+    }
+
+        .rewind .small-btn:disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+
+.rw-label {
+    min-width: 64px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+}
+
+.viewing #board {
+    outline: 3px dashed var(--gold);
+    outline-offset: 2px;
+}
+
+.viewing .rw-label {
+    color: var(--gold);
+    font-weight: 700;
+}
+
+/* ===== Подсказка по долгому нажатию (телефон) ===== */
+.ab-tip {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: 64px;
+    z-index: 70;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.35;
+    color: #fff;
+    background: #2a1223;
+    border: 1px solid var(--gold);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+    pointer-events: none;
+}
+
+@media (max-width: 760px) {
+    .rewind {
+        margin-top: 2px;
+        gap: 4px;
+    }
+
+        .rewind .small-btn {
+            min-width: 40px;
+            padding: 2px 8px;
+            height: 26px;
+            font-size: 13px;
+        }
+
+    .panel .ab {
+        -webkit-touch-callout: none;
+        user-select: none;
+        touch-action: manipulation;
+    }
+
+        .panel .ab:disabled {
+            pointer-events: none;
+        }
+
+    .panel .passive {
+        -webkit-touch-callout: none;
+        user-select: none;
     }
 }

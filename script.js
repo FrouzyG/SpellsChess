@@ -18,14 +18,14 @@ const CONFIG = {
         trap: 4, arrow: 3, lure: 7,                  // Охотник
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
         conveyor: 5, portals: 8, relocate: 2,        // Архитектор
-        shomen: 9, fukashi: 7, fenyan: 3,            // Самурай
+        shomen: 9, fukashi: 7, fenyan: 6,            // Самурай
         teleport: 10,                                // пассивка Самурая «Кагэватари»
         phase: 4, soulmates: 7, scream: 4,           // Призрак
         zawarudo: 10, misclick: 12, superposition: 6,  // Повелитель времени
         groundhog: 6,                                // Ход сурка
         timeslow: 4,                                 // пассивка Повелителя времени
         guardian: 5, purify: 10, lie: 10, virus: 3,  // новые способности
-        vine: 7, ritual: 5, bumpuku: 6, generator: 7
+        vine: 7, ritual: 5, bumpuku: 3, generator: 7
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
@@ -131,7 +131,7 @@ const ABILITIES = {
     fenyan: {
         free: true,
         icon: '🗡️', name: 'Фен-Янь',
-        desc: 'Все клетки одного цвета острые на ваш ход и ход врага: вставшая на острую клетку фигура погибает.'
+        desc: 'Все клетки одного цвета острые на ваш ход и ход врага: вставшая на острую клетку фигура погибает. Клетки, на которых в момент применения стоят фигуры, острыми не становятся.'
     },
     // --- Архитектор
     conveyor: {
@@ -599,10 +599,11 @@ function pseudoMoves(b, r, c) {
 
     if (p.t === 'p') {
         const d = p.c === 'w' ? -1 : 1, start = p.c === 'w' ? 6 : 1, last = p.c === 'w' ? 0 : 7;
-        if (inb(r + d, c) && passable(b[r + d][c]) && !(ghost && r + d === last)) {
-            add(r + d, c, { promo: r + d === last });
-            if (r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c)) add(r + 2 * d, c, { double: true });
-        }
+        const f1 = inb(r + d, c) ? b[r + d][c] : null;
+        const open1 = inb(r + d, c) && passable(f1);
+        if (open1 && !(ghost && r + d === last)) add(r + d, c, { promo: r + d === last });
+        // двойной ход: первая клетка свободна ИЛИ на ней прозрачная для нас фигура (призрачная, на Ритуале)
+        if ((open1 || (f1 && passThru(f1, p.c, r + d, c))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c)) add(r + 2 * d, c, { double: true });
         [-1, 1].forEach(dc => {
             const tr = r + d, tc = c + dc;
             if (!inb(tr, tc)) return;
@@ -784,7 +785,7 @@ function applyMove(board, mv, promo) {
     // Гибель на горящей или острой клетке: рядом самоотверженный ангел-хранитель меняется с ней местами и гибнет вместо неё
     const tileDeath = isSharp => {
         const gd = pickGuardian(board, mv.tr, mv.tc, p, p,
-            (ar, ac) => G.burn.some(x => x.r === ar && x.c === ac) || G.sharp.some(z => (ar + ac) % 2 === z.parity));
+            (ar, ac) => G.burn.some(x => x.r === ar && x.c === ac) || !!sharpAt(ar, ac));
         res.burned = true;
         if (isSharp) res.sharp = true;
         if (gd) {
@@ -811,7 +812,7 @@ function applyMove(board, mv, promo) {
         }
         // острая клетка Самурая: вставшая на неё фигура погибает (пройти сквозь можно)
         if (!res.burned && p.t !== 'k' && G.sharp.length) {
-            const z = G.sharp.find(zz => (mv.tr + mv.tc) % 2 === zz.parity);
+            const z = sharpAt(mv.tr, mv.tc);
             if (z && !magicProof(board, mv.tr, mv.tc)) tileDeath(true);
         }
         // Гипноз спадает, если загипнотизированная фигура срубила фигуру
@@ -984,7 +985,7 @@ function pawnFrontThreat(b, r, c, enemy) {
     if (p1 && p1.t === 'p' && p1.c === enemy && !p1.frozen && !p1.ghost) return true;
     if (inb(r - 2 * d, c)) {
         const p2 = b[r - 2 * d][c];
-        if (p2 && p2.t === 'p' && p2.c === enemy && !p2.frozen && !p2.ghost && r - 2 * d === start && !b[r - d][c]) return true;
+        if (p2 && p2.t === 'p' && p2.c === enemy && !p2.frozen && !p2.ghost && r - 2 * d === start && (!b[r - d][c] || passThru(b[r - d][c], enemy, r - d, c))) return true;
     }
     return false;
 }
@@ -1920,17 +1921,18 @@ function sweepLures() {
     });
 }
 
-// Острые клетки Самурая убивают фигуры, оказавшиеся на них (не стоявшие там на момент применения), потом исчезают
+// Острая клетка (или null): клетки, на которых при применении стояли фигуры, острыми не становятся
+const sharpAt = (r, c) => G.sharp.find(z => (r + c) % 2 === z.parity && !z.skip.includes(r + ',' + c)) || null;
+
+// Острые клетки Самурая убивают фигуры, оказавшиеся на них, потом исчезают
 function sweepSharp() {
     G.sharp.forEach(z => {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-            if ((r + c) % 2 !== z.parity) continue;
+            if ((r + c) % 2 !== z.parity || z.skip.includes(r + ',' + c)) continue;
             const p = G.board[r][c];
             if (!p || p.t === 'k' || magicProof(G.board, r, c)) continue;
-            const home = z.exempt.get(p);
-            if (home && home[0] === r && home[1] === c) continue;
             if (p.ghost) { vanishGhost(r, c, 'острая клетка'); continue; }
-            const dp = guardSwap(r, c, (ar, ac) => (ar + ac) % 2 === z.parity) || p;
+            const dp = guardSwap(r, c, (ar, ac) => (ar + ac) % 2 === z.parity && !z.skip.includes(ar + ',' + ac)) || p;
             G.board[r][c] = null;
             toGrave(dp);
             G.fx.push({ r, c, type: 'boom' });
@@ -2540,10 +2542,10 @@ function soulSync() {
 
 // Фен-Янь: клетки цвета parity (0 светлые, 1 тёмные) становятся острыми
 function doFenyan(parity) {
-    const A = ABILITIES.fenyan, exempt = new Map();
-    G.board.forEach((row, r) => row.forEach((p, c) => { if (p) exempt.set(p, [r, c]); }));
-    G.sharp.push({ parity, owner: G.turn, left: 2, exempt });
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === parity) G.fx.push({ r, c, type: 'cast' });
+    const A = ABILITIES.fenyan, skip = [];
+    G.board.forEach((row, r) => row.forEach((p, c) => { if (p) skip.push(r + ',' + c); }));      // клетки с фигурами острыми не становятся
+    G.sharp.push({ parity, owner: G.turn, left: 2, skip });
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === parity && !skip.includes(r + ',' + c)) G.fx.push({ r, c, type: 'cast' });
     sfx('cast');
     G.last = null;
     finishAbility('fenyan', `${A.icon} ${A.name}: ${parity === 0 ? 'светлые' : 'тёмные'} клетки острые (ваш ход и ход врага). Теперь сделайте ход`);
@@ -2644,6 +2646,7 @@ function doTimeSlow(k) {
 function canPassive(col, k) {
     if (G.cd[col][k] > 0 || G.bonus || G.pairStep || G.archUsed) return false;
     if (k === 'teleport' && blockedByForce(col, k)) return false;
+    if (k === 'teleport' && !G.board.some(row => row.some(p => p && p.c === col && p.t !== 'k' && !p.ghost))) return false;      // у самурая нет других фигур
     return abilityCells(k, col).length > 0;
 }
 
@@ -3047,7 +3050,7 @@ function renderBoard() {
             if (ci === 0) html += `<span class="coord rank">${8 - r}</span>`;
             if (ri === 7) html += `<span class="coord file">${'abcdefgh'[c]}</span>`;
 
-            if (G.sharp.some(z => (r + c) % 2 === z.parity)) html += '<div class="sharp-mark"></div>';
+            if (sharpAt(r, c)) html += '<div class="sharp-mark"></div>';
             const bt = burnAt(r, c);
             if (bt) html += `<div class="burn-mark"><span>🔥</span><i>${bt.life}</i></div>`;
             G.fire.filter(x => x.kind === 'shomen' && x.c === c).forEach(f => { html += `<div class="shomen-mark ${f.owner}"></div>`; });
@@ -3689,7 +3692,7 @@ const EN = {
     "Фукаши": "Fukashi",
     "Фигура невидима для врага, но блокирует ходы: пройти сквозь неё значит срубить её. Раскрывается, если срубила, дала шах или ей грозит пешка (по диагонали). Если пешка идёт прямо на неё или фигура, которую она связывает, пытается сойти с линии, невидимка раскрывается, а ход не тратится.": "A piece is invisible to the enemy but blocks moves: passing through it means capturing it. It is revealed if it captures, gives check, or is threatened by a pawn (diagonally). If a pawn moves straight into it, or a piece it pins tries to leave the line, it is revealed and the turn is not spent.",
     "Фен-Янь": "Fen-Yan",
-    "Все клетки одного цвета острые на ваш ход и ход врага: вставшая на острую клетку фигура погибает.": "All squares of one colour become sharp for your turn and the enemy's turn: a piece that stops on a sharp square dies.",
+    "Все клетки одного цвета острые на ваш ход и ход врага: вставшая на острую клетку фигура погибает. Клетки, на которых в момент применения стоят фигуры, острыми не становятся.": "All squares of one colour become sharp for your turn and the enemy's turn: a piece that stops on a sharp square dies. Squares occupied by pieces when it is cast do not become sharp.",
     "Конвейер": "Conveyor",
     "Плитка толкает фигуру на себе (и колонну перед ней) на клетку вперёд в конце каждого хода.": "A tile that pushes the piece on it (and the column in front of it) one square forward at the end of every turn.",
     "Порталы": "Portals",
@@ -4056,6 +4059,14 @@ const EN = {
     "Сдаться": "Resign",
     "Новая игра": "New game",
     "Завершить ход": "End turn",
+    "📜 Журнал": "📜 Log",
+    "💬 Чат": "💬 Chat",
+    "☰ Меню": "☰ Menu",
+    "✕ Закрыть": "✕ Close",
+    "В начало партии": "To the start",
+    "Ход назад": "Step back",
+    "Ход вперёд": "Step forward",
+    "К текущей позиции": "To the current position",
     "Чат": "Chat",
     "Журнал": "Log",
     "Особые правила": "Special rules",
@@ -4241,4 +4252,142 @@ setLang(LANG);
     mEnd.addEventListener('click', () => end.click());
     app.addEventListener('click', e => { if (e.target === app) closeSheet(); });      // тап по затемнению закрывает окно
     ['btnDraw', 'btnResign', 'btnNew'].forEach(id => g(id).addEventListener('click', closeSheet));
+})();
+
+
+// ===== Кнопки только для тех героев, что есть в партии =====
+function syncHeroButtons() {
+    if (!G) return;
+    const has = h => G.hero.w === h || G.hero.b === h;
+    const set = (id, on) => { const b = document.getElementById(id); if (b) b.classList.toggle('nohero', !on); };
+    set('btnGhost', has('hypnotist'));                      // иллюзии Экстрасенса
+    set('btnTraps', has('hunter'));                         // капканы Охотника
+    set('btnInvis', has('samurai') || has('hypnotist'));    // невидимки Самурая и Экстрасенса («Ход — это ложь»)
+    // «Завершить ход» (Архитектор) скрывает updateEndBtn()
+}
+
+// ===== Перемотка ходов: только просмотр, партию не меняет =====
+const REW = { snaps: [], idx: -1, g: null, lastLen: -1, broken: false };   // idx -1: показываем текущую позицию
+
+function takeSnap() {
+    if (!G || REW.broken || !G.log) return;
+    if (REW.g !== G || G.log.length < REW.lastLen) { REW.snaps = []; REW.idx = -1; REW.g = G; REW.lastLen = -1; }   // новая партия
+    if (G.log.length === REW.lastLen) return;
+    try {
+        const { log, ...rest } = G;
+        const snap = structuredClone(rest);
+        snap.log = log.slice();
+        snap.sel = null; snap.moves = []; snap.mode = null; snap.fx = [];
+        REW.snaps.push(snap);
+        REW.lastLen = G.log.length;
+    } catch (e) { REW.broken = true; }
+}
+
+const viewWrap = fn => function (...a) {
+    const snap = REW.idx >= 0 ? REW.snaps[REW.idx] : null;
+    if (snap && G !== snap) {
+        const real = G;
+        G = snap;
+        try { return fn.apply(this, a); } finally { G = real; }
+    }
+    return fn.apply(this, a);
+};
+const _render = render;
+render = function () {
+    if (G && REW.idx < 0) takeSnap();
+    viewWrap(_render).call(this);
+    syncHeroButtons();
+    updateRewindUI();
+};
+renderPanels = viewWrap(renderPanels);
+renderBoard = viewWrap(renderBoard);
+renderStatus = viewWrap(renderStatus);
+renderLog = viewWrap(renderLog);
+updateEndBtn = viewWrap(updateEndBtn);
+
+function rewindTo(i) {
+    const last = REW.snaps.length - 1;
+    if (last < 0) return;
+    i = Math.max(0, Math.min(last, i));
+    REW.idx = i === last ? -1 : i;
+    render();
+}
+function rewindStep(d) {
+    const last = REW.snaps.length - 1;
+    const cur = REW.idx < 0 ? last : REW.idx;
+    rewindTo(cur + d);
+}
+
+function updateRewindUI() {
+    const box = document.getElementById('rewind');
+    if (!box) return;
+    const n = REW.snaps.length, last = n - 1;
+    const cur = REW.idx < 0 ? last : REW.idx;
+    box.classList.toggle('hidden', REW.broken || n < 2);
+    document.getElementById('app').classList.toggle('viewing', REW.idx >= 0);
+    document.getElementById('rwLabel').textContent = Math.max(cur, 0) + ' / ' + Math.max(last, 0);
+    document.getElementById('rwStart').disabled = cur <= 0;
+    document.getElementById('rwPrev').disabled = cur <= 0;
+    document.getElementById('rwNext').disabled = cur >= last;
+    document.getElementById('rwEnd').disabled = cur >= last;
+}
+
+document.getElementById('rwStart').addEventListener('click', () => rewindTo(0));
+document.getElementById('rwPrev').addEventListener('click', () => rewindStep(-1));
+document.getElementById('rwNext').addEventListener('click', () => rewindStep(1));
+document.getElementById('rwEnd').addEventListener('click', () => rewindTo(REW.snaps.length - 1));
+
+// Пока смотрим прошлое, доска и панели героев не реагируют на нажатия
+document.addEventListener('click', e => {
+    if (REW.idx >= 0 && e.target.closest && e.target.closest('#board, .panel, #btnEnd, #mEnd')) { e.stopPropagation(); e.preventDefault(); }
+}, true);
+document.addEventListener('keydown', e => {
+    if (!G || document.getElementById('app').classList.contains('hidden')) return;
+    const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+    if (typing) return;
+    if (e.key === 'ArrowLeft') { rewindStep(-1); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { rewindStep(1); e.preventDefault(); }
+    else if (e.key === 'Escape' && REW.idx >= 0) { e.stopImmediatePropagation(); rewindTo(REW.snaps.length - 1); }
+}, true);
+
+
+// ===== Телефон: описание способности по долгому нажатию =====
+(function () {
+    let timer = null, tip = null, suppress = false, hideT = null;
+    const hideTip = () => { if (tip) { tip.remove(); tip = null; } clearTimeout(hideT); };
+    const showTip = btn => {
+        hideTip();
+        const nameEl = btn.querySelector('.ab-name');
+        const title = btn.getAttribute('title') || '';
+        const head = nameEl ? nameEl.textContent.trim() : '';
+        tip = document.createElement('div');
+        tip.className = 'ab-tip';
+        tip.setAttribute('data-notr', '');
+        tip.innerHTML = (head ? '<b></b><br>' : '') + '<span></span>';
+        if (head) tip.querySelector('b').textContent = head;
+        tip.querySelector('span').textContent = title;
+        document.body.appendChild(tip);
+        hideT = setTimeout(hideTip, 6000);
+    };
+    const buttonAt = (panel, x, y) => Array.from(panel.querySelectorAll('.ab, .passive')).find(b => {
+        const r = b.getBoundingClientRect();
+        return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    });
+    document.addEventListener('pointerdown', e => {
+        if (e.pointerType !== 'touch') return;
+        const panel = e.target.closest && e.target.closest('.panel');
+        if (!tip || !(e.target.closest && e.target.closest('.ab-tip'))) hideTip();
+        if (!panel) return;
+        const btn = buttonAt(panel, e.clientX, e.clientY);
+        if (!btn) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => { suppress = true; showTip(btn); if (navigator.vibrate) navigator.vibrate(15); }, 450);
+    });
+    const cancel = () => clearTimeout(timer);
+    document.addEventListener('pointerup', () => { cancel(); if (suppress) setTimeout(() => { suppress = false; }, 400); });
+    document.addEventListener('pointercancel', cancel);
+    document.addEventListener('pointermove', e => { if (e.pointerType === 'touch' && Math.abs(e.movementX) + Math.abs(e.movementY) > 6) cancel(); });
+    // после долгого нажатия отпускание не должно срабатывать как обычный клик
+    document.addEventListener('click', e => { if (suppress) { e.stopPropagation(); e.preventDefault(); suppress = false; } }, true);
+    document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.panel')) e.preventDefault(); });
 })();
