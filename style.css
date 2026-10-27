@@ -3052,3 +3052,36 @@ button {
         user-select: none;
     }
 }
+
+/* ===== Телефон: правки по скриншотам ===== */
+@media (max-width: 760px) {
+    /* выбор героев: колонки не шире экрана */
+    .pick-row {
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+    }
+
+    .side-pick {
+        flex: none;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .hero-card {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .hc-abs, .hc-details {
+        min-width: 0;
+    }
+
+    /* плашка перезарядки на кнопках способностей: в верхнем правом углу */
+    .panel .ab .cd-badge {
+        top: 2px;
+        bottom: auto;
+        right: 2px;
+    }
+}
