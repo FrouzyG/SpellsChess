@@ -87,8 +87,26 @@ const server = http.createServer((req, res) => {
     let file = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
     file = path.normalize(path.join(ROOT, file));
     if (!file.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
+    // На Linux-хостингах (Render и т. п.) регистр в именах файлов важен, а на Windows нет: ищем файл без учёта регистра
+    const findCI = full => {
+        if (fs.existsSync(full)) return full;
+        let cur = ROOT;
+        for (const part of path.relative(ROOT, full).split(path.sep)) {
+            let next = path.join(cur, part);
+            if (!fs.existsSync(next)) {
+                let list = [];
+                try { list = fs.readdirSync(cur); } catch (e) { return null; }
+                const hit = list.find(n => n.toLowerCase() === part.toLowerCase());
+                if (!hit) return null;
+                next = path.join(cur, hit);
+            }
+            cur = next;
+        }
+        return cur;
+    };
+    file = findCI(file) || file;
     fs.readFile(file, (err, data) => {
-        if (err) { res.writeHead(404); res.end('Не найдено'); return; }
+        if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Не найдено: ' + url.pathname); return; }
         res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
         res.end(data);
     });

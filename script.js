@@ -21,10 +21,10 @@ const CONFIG = {
         shomen: 9, fukashi: 7, fenyan: 3,            // Самурай
         teleport: 10,                                // пассивка Самурая «Кагэватари»
         phase: 4, soulmates: 7, scream: 4,           // Призрак
-        zawarudo: 10, misclick: 15, superposition: 6,  // Повелитель времени
+        zawarudo: 10, misclick: 12, superposition: 6,  // Повелитель времени
         groundhog: 6,                                // Ход сурка
         timeslow: 4,                                 // пассивка Повелителя времени
-        guardian: 5, purify: 10, lie: 14, virus: 3,  // новые способности
+        guardian: 5, purify: 10, lie: 10, virus: 3,  // новые способности
         vine: 7, ritual: 5, bumpuku: 6, generator: 7
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
@@ -712,6 +712,31 @@ function pathCells(mv) {
 const moveCells = mv => (mv.path ? [...mv.path, [mv.tr, mv.tc]] : pathCells(mv));
 
 // Применяет ход к доске (меняет её). Возвращает список погибших фигур.
+// Ценность фигур для выбора ангела-хранителя (у Франкенштейна считается исходная фигура, пришитые ходы не в счёт)
+const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+
+// Ангел-хранитель: из самоотверженных фигур в 3×3 от жертвы выбирается САМАЯ ЦЕННАЯ.
+// Если равны слон и конь, жертвует собой слон; иначе при равенстве выбор «случайный» (одинаковый у обоих игроков онлайн).
+function pickGuardian(board, vr, vc, victim, exclude, unsafe) {
+    let cands = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const ar = vr + dr, ac = vc + dc;
+        if (!inb(ar, ac)) continue;
+        const a = board[ar][ac];
+        if (!a || a === exclude || a === victim || !(a.altruist > 0) || a.c !== victim.c || a.t === 'k' || a.ghost || a.frozen > 0) continue;
+        if (unsafe && unsafe(ar, ac)) continue;
+        cands.push({ a, v: victim, from: [ar, ac], to: [vr, vc] });
+    }
+    if (!cands.length) return null;
+    const top = Math.max(...cands.map(x => PIECE_VAL[x.a.t] || 0));
+    cands = cands.filter(x => (PIECE_VAL[x.a.t] || 0) === top);
+    if (cands.some(x => x.a.t === 'b')) cands = cands.filter(x => x.a.t === 'b');
+    if (cands.length === 1) return cands[0];
+    const h = ((G && G.log ? G.log.length : 0) * 31 + ((G && G.deaths) || 0) * 17 + vr * 8 + vc) >>> 0;
+    return cands[h % cands.length];
+}
+
 function applyMove(board, mv, promo) {
     const p = board[mv.fr][mv.fc];
     const res = { dead: [], thorn: false, burned: false, vanished: [], supBack: [] };
@@ -732,14 +757,7 @@ function applyMove(board, mv, promo) {
     // Ангел-хранитель: самоотверженная фигура рядом меняется с жертвой местами и гибнет вместо неё
     if (victim && victim.t !== 'k' && !victim.ghost) {
         const vr = mv.ep ? mv.pr : mv.tr, vc = mv.ep ? mv.pc : mv.tc;
-        let guard = null;
-        for (let dr = -1; dr <= 1 && !guard; dr++) for (let dc = -1; dc <= 1 && !guard; dc++) {
-            if (!dr && !dc) continue;
-            const ar = vr + dr, ac = vc + dc;
-            if (!inb(ar, ac)) continue;
-            const a = board[ar][ac];
-            if (a && a !== p && a.altruist > 0 && a.c === victim.c && a.t !== 'k' && !a.ghost && !(a.frozen > 0)) guard = { a, v: victim, from: [ar, ac], to: [vr, vc] };
-        }
+        const guard = pickGuardian(board, vr, vc, victim, p);
         if (guard) {
             board[guard.from[0]][guard.from[1]] = victim;
             victim = guard.a;
@@ -760,6 +778,23 @@ function applyMove(board, mv, promo) {
         rk.moved = true;
         rk.prev = [mv.fr, mv.rc];
     }
+    // Гибель на горящей или острой клетке: рядом самоотверженный ангел-хранитель меняется с ней местами и гибнет вместо неё
+    const tileDeath = isSharp => {
+        const gd = pickGuardian(board, mv.tr, mv.tc, p, p,
+            (ar, ac) => G.burn.some(x => x.r === ar && x.c === ac) || G.sharp.some(z => (ar + ac) % 2 === z.parity));
+        res.burned = true;
+        if (isSharp) res.sharp = true;
+        if (gd) {
+            board[gd.from[0]][gd.from[1]] = p;
+            board[mv.tr][mv.tc] = null;
+            res.dead.push(gd.a);
+            res.guard = gd;
+            res.saved = true;
+        } else {
+            board[mv.tr][mv.tc] = null;
+            res.dead.push(p);
+        }
+    };
     if (victim && victim.shield && !auraProtected(board, mv.tr, mv.tc)) {   // шипы убивают того, кто срубил (кроме фигур под барьером Мага)
         board[mv.tr][mv.tc] = null;
         res.dead.push(p);
@@ -769,21 +804,12 @@ function applyMove(board, mv, promo) {
         // горящая клетка на пути или в конце хода: фигура сгорает (король неуязвим, конь перепрыгивает)
         if (p.t !== 'k' && G.burn.length) {
             const hit = moveCells(mv).map(([r, c]) => burnAt(r, c)).find(Boolean);
-            if (hit && !magicProof(board, mv.tr, mv.tc, hit.owner, true)) {
-                board[mv.tr][mv.tc] = null;
-                res.dead.push(p);
-                res.burned = true;
-            }
+            if (hit && !magicProof(board, mv.tr, mv.tc, hit.owner, true)) tileDeath(false);
         }
         // острая клетка Самурая: вставшая на неё фигура погибает (пройти сквозь можно)
         if (!res.burned && p.t !== 'k' && G.sharp.length) {
             const z = G.sharp.find(zz => (mv.tr + mv.tc) % 2 === zz.parity);
-            if (z && !magicProof(board, mv.tr, mv.tc)) {
-                board[mv.tr][mv.tc] = null;
-                res.dead.push(p);
-                res.burned = true;
-                res.sharp = true;
-            }
+            if (z && !magicProof(board, mv.tr, mv.tc)) tileDeath(true);
         }
         // Гипноз спадает, если загипнотизированная фигура срубила фигуру
         if (p.hypno && victim && board[mv.tr][mv.tc] === p) {
@@ -1275,7 +1301,7 @@ function arrowCells(col, range, ignoreFrozen) {
 }
 
 /* ---------- Архитектор: вспомогательные функции ---------- */
-const isFreeCell = (r, c) => !G.board[r][c] && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
+const isFreeCell = (r, c) => !G.board[r][c] && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
     !G.gens.some(x => x.r === r && x.c === c) && !G.virus.some(x => x.r === r && x.c === c) && !G.vines.some(x => x.r === r && x.c === c) &&
     !G.rituals.some(x => x.r === r && x.c === c);
 
@@ -1314,7 +1340,7 @@ function portalPartners(a, col, first) {
 }
 
 // Перемещать можно только плитки и порталы (ловушки, огонь и метки не двигаются). Новые плитки добавлять сюда
-const TILE_KEYS = ['conv', 'gens', 'virus', 'vines', 'rituals', 'portals'];
+const TILE_KEYS = ['conv', 'gens', 'virus', 'vines', 'rituals', 'portals', 'burn'];
 function cellProps(r, c) {
     return { tiles: TILE_KEYS.flatMap(k => G[k].filter(x => x.r === r && x.c === c)) };
 }
@@ -1615,20 +1641,14 @@ let selectedHeroes = { w: 'paladin', b: 'mage' };
 function guardSwap(r, c, unsafe) {
     const v = G.board[r][c];
     if (!v || v.t === 'k' || v.ghost) return null;
-    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-        if (!dr && !dc) continue;
-        const ar = r + dr, ac = c + dc;
-        if (!inb(ar, ac)) continue;
-        const a = G.board[ar][ac];
-        if (!a || !(a.altruist > 0) || a.c !== v.c || a.t === 'k' || a.ghost || a.frozen > 0) continue;
-        if (unsafe && unsafe(ar, ac)) continue;
-        G.board[ar][ac] = v;
-        G.board[r][c] = a;
-        G.fx.push({ r: ar, c: ac, type: 'revive' });
-        addLog('n', `👼 Ангел-хранитель: ${pieceSym(a)} с ${sqName(ar, ac)} меняется местами с ${pieceSym(v)} и гибнет вместо неё`);
-        return a;
-    }
-    return null;
+    const gd = pickGuardian(G.board, r, c, v, null, unsafe);
+    if (!gd) return null;
+    const [ar, ac] = gd.from, a = gd.a;
+    G.board[ar][ac] = v;
+    G.board[r][c] = a;
+    G.fx.push({ r: ar, c: ac, type: 'revive' });
+    addLog('n', `👼 Ангел-хранитель: ${pieceSym(a)} с ${sqName(ar, ac)} меняется местами с ${pieceSym(v)} и гибнет вместо неё`);
+    return a;
 }
 
 function toGrave(p) {
@@ -2070,7 +2090,7 @@ function executeMove(mv, promo, ctx) {
         G.fx.push({ r: mv.tr, c: mv.tc, type: 'thorn' });
         sfx('thorn');
     } else if (res.burned) {
-        text += res.supKill ? ` ⚛ ${sym} срублена вернувшейся фигурой` : res.sharp ? ` 🗡 ${sym} погиб на острой клетке` : ` 🔥 ${sym} сгорел в огне`;
+        text += res.supKill ? ` ⚛ ${sym} срублена вернувшейся фигурой` : res.saved ? (res.sharp ? ' 🗡 острая клетка' : ' 🔥 горящая клетка') : res.sharp ? ` 🗡 ${sym} погиб на острой клетке` : ` 🔥 ${sym} сгорел в огне`;
         G.fx.push({ r: mv.tr, c: mv.tc, type: 'boom' });
         sfx('boom');
     } else {
@@ -2193,7 +2213,8 @@ function doLie(from, R, F) {
     p.invis = true; p.lie = true; p.lieFake = [F.tr, F.tc];
     b[F.tr][F.tc] = ghost;                          // фейк: обычная иллюзия со всеми условиями рассеивания
     G.ep = null;
-    G.cd[col].lie = cdOf(col, G.mode && G.mode.via ? G.mode.via : 'lie');
+    const lieKey = G.mode && G.mode.via ? G.mode.via : 'lie';      // через зеркало перезарядка уходит на кнопку зеркала
+    G.cd[col][lieKey] = cdOf(col, lieKey);
     G.fx.push({ r: F.tr, c: F.tc, type: 'land' });
     sfx('move');
     G.last = { fr: from[0], fc: from[1], tr: F.tr, tc: F.tc };
@@ -2213,6 +2234,7 @@ function revealLie(r, c) {
     const p = G.board[r][c], fk = p.lieFake || [r, c];
     removeDecoys(p);
     delete p.invis; delete p.lie; delete p.lieFake; delete p.pair;
+    G.lastAb[p.c] = 'lie';      // правда раскрыта: теперь это заклинание видно, и зеркало Мага может его повторить
     G.fx.push({ r, c, type: 'ghost' });
     sfx('poof');
     addLog('n', `🤥 Ход — это ложь: ${pieceSym(p)} на самом деле на ${sqName(r, c)} (показывали ${sqName(fk[0], fk[1])})`);
@@ -2357,7 +2379,8 @@ function useAbility(key, r, c, ref) {
         }
     } else if (key === 'fukashi') {
         target.invis = true;
-        text = `${A.icon} ${A.name}: одна из фигур скрылась из виду`;
+        text = `${A.icon} ${A.name}: ${pieceSym(target)} на ${sqName(r, c)} стала невидимой`;
+        G.fx.push({ r, c, type: 'ghost' });
         sfx('illusion');
     } else if (key === 'freeze' || key === 'hypnosis') {
         if (target.ghost) {
@@ -3957,6 +3980,9 @@ const EN = {
     "🧰 Ходить фигурой уже нельзя: можно применить ещё способность или нажать «Завершить ход».": "🧰 You can no longer move a piece: use another ability or press “End turn”.",
     "🕰️ ZA WARUDO: первый ход, им нельзя ни шаховать, ни рубить.": "🕰️ ZA WARUDO: first move, it can neither give check nor capture.",
     " (иллюзия сразу рассеялась: ": " (the illusion faded at once: ",
+    " стала невидимой": " became invisible",
+    " острая клетка": " sharp tile",
+    " горящая клетка": " burning tile",
     "🕰️ ZA WARUDO: второй ход, теперь можно шаховать и рубить.": "🕰️ ZA WARUDO: second move, check and captures are allowed now.",
     "🌾 Дополнительный ход: походите любой фигурой (способности недоступны, своих пешек рубить уже нельзя).": "🌾 Extra move: move any piece (abilities are unavailable, you can no longer capture your own pawns).",
     "Приманка: вы обязаны срубить фигуру с приманкой или встать на клетку с приманкой (подсвеченной фигурой).": "Lure: you must capture the piece with the lure or step on the lure's square (with the highlighted piece).",
