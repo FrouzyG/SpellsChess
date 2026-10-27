@@ -12,7 +12,7 @@ const CONFIG = {
     // Перезарядка способностей (в ходах владельца)
     cooldown: {
         resurrect: 11, shield: 5, rescue: 9,         // Паладин
-        fireball: 6, freeze: 5, copy: 15,            // Маг
+        fireball: 7, freeze: 5, copy: 15,            // Маг
         illusion: 3, hypnosis: 8, confusion: 7,      // Экстрасенс
         raise: 8, frankenstein: 3, apocalypse: 8,    // Некромант
         trap: 4, arrow: 3, lure: 7,                  // Охотник
@@ -21,7 +21,7 @@ const CONFIG = {
         shomen: 9, fukashi: 7, fenyan: 3,            // Самурай
         teleport: 10,                                // пассивка Самурая «Кагэватари»
         phase: 4, soulmates: 7, scream: 4,           // Призрак
-        zawarudo: 12, misclick: 15, superposition: 6,  // Повелитель времени
+        zawarudo: 10, misclick: 15, superposition: 6,  // Повелитель времени
         groundhog: 6,                                // Ход сурка
         timeslow: 4,                                 // пассивка Повелителя времени
         guardian: 5, purify: 10, lie: 14, virus: 3,  // новые способности
@@ -41,7 +41,7 @@ const CONFIG = {
     shieldTurns: 3,   // сколько ходов Паладина (считаются только его ходы) держится щит
     arrowRange: 6,    // стрела: насколько далеко от короля можно целиться (6 = не дальше противоположного края)
     fireRange: 6,     // огненный шар Мага: то же ограничение дальности от короля
-    aim: { forward: 2, back: 0, side: 1 },   // пассивка Охотника: на сколько клеток от короля вперёд, назад и вбок
+    // пассивка Охотника «Меткий глаз»: квадрат 3×3 вокруг короля + 4 клетки на расстоянии 2 по горизонтали и вертикали (крест)
     sound: true
 };
 
@@ -49,6 +49,7 @@ const CONFIG = {
    ДАННЫЕ
    ===================================================================== */
 const GLYPH = { k: '♚\uFE0E', q: '♛\uFE0E', r: '♜\uFE0E', b: '♝\uFE0E', n: '♞\uFE0E', p: '♟\uFE0E' };
+const pImg = (c, t) => `<i class="pi ${c} t-${t}">${GLYPH[t]}</i>`;   // мини-фигура (картинка, а без папки pieces обычный символ)
 const SYM = { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' };
 
 const ABILITIES = {
@@ -197,7 +198,7 @@ const ABILITIES = {
     zawarudo: {
         free: true,
         icon: '🕰️', name: 'ZA WARUDO',
-        desc: 'Два хода подряд, но первым ходом шаховать нельзя.'
+        desc: 'Два хода подряд, но первым ходом нельзя ни шаховать, ни рубить.'
     },
     misclick: {
         free: true,
@@ -241,17 +242,17 @@ const PASSIVES = {
     },
     teleport: {
         icon: '🌀', name: 'Кагэватари',
-        desc: 'Король телепортируется на любое безопасное свободное поле, даже из-под шаха. Второй клик по королю или кнопка. Тратит ход, перезарядка ' + CONFIG.cooldown.teleport + '.'
+        desc: 'Король телепортируется на любое безопасное свободное поле, даже из-под шаха. Второй клик по королю или кнопка. Тратит ход.'
     },
     timeslow: {
         free: true,
         icon: '⌛', name: 'Замедление времени',
-        desc: 'Второй клик по королю или кнопка, затем способность врага: её перезарядка +1 сейчас и +1 на всю партию, у остальных перезаряжающихся +1 сейчас. ' + (CONFIG.timePassiveCostsTurn ? 'Тратит ход.' : 'Ход не тратится.') + ' Перезарядка ' + CONFIG.cooldown.timeslow + '.'
+        desc: 'Второй клик по королю или кнопка, затем способность врага: её перезарядка +1 сейчас и +1 на всю партию, у остальных перезаряжающихся +1 сейчас. ' + (CONFIG.timePassiveCostsTurn ? 'Тратит ход.' : 'Ход не тратится.') + ''
     },
     aim: {
         free: true,
         icon: '🎯', name: 'Меткий глаз',
-        desc: 'Второй клик по королю или кнопка: метка стрелы на 2 клетки вперёд и 1 в сторону. Ход не тратится, перезарядка ' + CONFIG.cooldown.aim + '.'
+        desc: 'Второй клик по королю или кнопка: метка стрелы в квадрате 3×3 вокруг короля и ещё на 2 клетки по горизонтали и вертикали. Ход не тратится.'
     }
 };
 
@@ -311,7 +312,8 @@ function plural(n) {
     if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return 'хода';
     return 'ходов';
 }
-const abilityDesc = k => `${ABILITIES[k].desc} Перезарядка: ${CONFIG.cooldown[k]} ${plural(CONFIG.cooldown[k])}.`;
+const abilityDesc = k => ABILITIES[k].desc;
+const cdBadgeHTML = n => (n > 0 ? `<span class="cd-badge">⏳${n}</span>` : '');
 
 /* =====================================================================
    ЗВУК (простые тона, без файлов)
@@ -1130,6 +1132,13 @@ function illusionOptions(r, c, first) {
     return res;
 }
 
+// ZA WARUDO: это рубка? (невидимую фигуру и свою иллюзию не считаем, чтобы не выдавать их)
+function zwCapture(b, m) {
+    if (m.ep) return true;
+    const t = b[m.tr][m.tc], p = b[m.fr][m.fc];
+    return !!(t && !t.invis && !(t.ghost && p && t.c === p.c));
+}
+
 // Даёт ли ход шах (в том числе вскрытый) вражескому королю
 function givesCheck(b, mv) {
     const p = b[mv.fr][mv.fc], nb = cloneBoard(b);
@@ -1153,8 +1162,8 @@ function selectableMoves(r, c) {
         });
     }
     if (G.forced.length) mv = mv.filter(m => G.forced.some(f => sameMove(f, m)));
-    // ZA WARUDO: первым ходом шаховать нельзя
-    if (G.bonus && G.bonus.kind === 'zw' && G.bonus.step === 1) mv = mv.filter(m => !givesCheck(G.board, m));
+    // ZA WARUDO: первым ходом нельзя ни шаховать, ни рубить
+    if (G.bonus && G.bonus.kind === 'zw' && G.bonus.step === 1) mv = mv.filter(m => !givesCheck(G.board, m) && !zwCapture(G.board, m));
     // доп. ход от Жатвы: цепочки из жатвы нет
     if (G.bonus) mv = mv.filter(m => { const t = G.board[m.tr][m.tc]; return !(t && t.c === G.turn); });
     // ходы сквозь свою иллюзию доступны, но не подсвечиваются (чтобы иллюзию нельзя было вычислить по подсказкам)
@@ -1332,14 +1341,14 @@ function relocateDests(r, c, col, first) {
     return out;
 }
 
-// Пассивка Охотника: две клетки вперёд и одна вбок от короля
+// Пассивка Охотника: квадрат 3×3 вокруг короля и ещё 4 клетки на расстоянии 2 по горизонтали и вертикали
 function aimCells(col) {
     const b = G.board, k = findKing(b, col), cells = [];
     if (!k) return cells;
-    const fwd = col === 'w' ? -1 : 1, A = CONFIG.aim;
     for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-        const f = (r - k[0]) * fwd, side = Math.abs(c - k[1]);
-        if (f < -A.back || f > A.forward || side > A.side) continue;
+        const dr = Math.abs(r - k[0]), dc = Math.abs(c - k[1]);
+        const near = Math.max(dr, dc) <= 1, cross = (dr === 2 && dc === 0) || (dr === 0 && dc === 2);
+        if (!near && !cross) continue;
         if (magicProof(b, r, c)) continue;
         cells.push([r, c]);
     }
@@ -1528,7 +1537,7 @@ function abilityCells(key, col, t, first) {
     } else if (key === 'zawarudo') {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             const p = b[r][c];
-            if (p && p.c === col && !p.ghost && legalMovesAt(b, r, c).some(m => !givesCheck(b, m))) return [[r, c]];
+            if (p && p.c === col && !p.ghost && legalMovesAt(b, r, c).some(m => !givesCheck(b, m) && !zwCapture(b, m))) return [[r, c]];
         }
     } else if (key === 'misclick') {
         const n = HIST.length;
@@ -2388,7 +2397,15 @@ function doIllusion(from, A, B) {
     G.fx.push({ r: A.tr, c: A.tc, type: 'ghost' }, { r: B.tr, c: B.tc, type: 'ghost' });
     sfx('illusion');
     G.last = null;
-    finishAbility('illusion', `🎭 Иллюзия: ${dest[0]} и ${dest[1]}`);
+    // Оригинал срубил фигуру или дал шах прямо при создании: иллюзия тут же рассеивается
+    let fade = '';
+    if (!res.thorn && !res.burned && b[A.tr][A.tc] === p) {
+        const capNow = res.dead.some(d => d !== p && d.c !== p.c);
+        if (capNow) fade = 'оригинал срубил фигуру';
+        else if (kingAttacked(b, other(p.c))) fade = 'оригинал дал шах';
+    }
+    if (fade) vanishGhost(B.tr, B.tc, fade, true);
+    finishAbility('illusion', `🎭 Иллюзия: ${dest[0]} и ${dest[1]}` + (fade ? ` (иллюзия сразу рассеялась: ${fade})` : ''));
 }
 
 function doFrank(from, to) {
@@ -2545,7 +2562,7 @@ function instantAbility(k, via) {
         G.lastAb[col] = k;
         G.bonus = { kind: 'zw', step: 1 };
         sfx('rewind');
-        addLog(col, `${ABILITIES.zawarudo.icon} ZA WARUDO! Время остановлено: два хода подряд, первым шаховать нельзя`);
+        addLog(col, `${ABILITIES.zawarudo.icon} ZA WARUDO! Время остановлено: два хода подряд, первым нельзя ни шаховать, ни рубить`);
         continueTurn();
     } else if (k === 'misclick') {
         const n = HIST.length, snap = HIST[n - 3];
@@ -2936,7 +2953,7 @@ function cancelAll() {
 function showPromo(mv, ctx) {
     G.pendingPromo = { mv, ctx: ctx || {} };
     $('#promoBtns').innerHTML = ['q', 'r', 'b', 'n']
-        .map(t => `<button class="promo-btn ${G.turn}" data-promo="${t}">${GLYPH[t]}</button>`).join('');
+        .map(t => `<button class="promo-btn ${G.turn}" data-promo="${t}">${pImg(G.turn, t)}</button>`).join('');
     if (isActor()) $('#promo').classList.remove('hidden');
 }
 
@@ -3019,7 +3036,7 @@ function renderBoard() {
             if (ptm) html += `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me))) html += '<div class="trap-mark">🪤</div>';
-            if (G.vines.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark vine-mark">🌿</div>';
+            if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${vn.left}</i></div>`; }
             if (G.virus.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark virus-mark">☣️</div>';
             if (G.rituals.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark ritual-mark">🕯️</div>';
             const gm = G.gens.find(x => x.r === r && x.c === c);
@@ -3027,7 +3044,7 @@ function renderBoard() {
             const hg = G.hogs.find(x => x.r === r && x.c === c);
             if (hg && (hg.visible || (showTraps && (NET.on ? hg.owner === NET.me : hg.owner === G.turn)))) html += `<div class="tile-mark hog-mark ${hg.visible ? '' : 'hidden-hog'}">⏳</div>`;
 
-            if (dc) html += `<div class="piece ${dc.col} t-${dc.t}${showGhosts ? ' ghost' : ''}">${GLYPH[dc.t]}${dc.x && dc.x.length ? `<span class="xs">${dc.x.map(t => GLYPH[t]).join('')}</span>` : ''}</div>`;
+            if (dc) html += `<div class="piece ${dc.col} t-${dc.t}${showGhosts ? ' ghost' : ''}">${GLYPH[dc.t]}${dc.x && dc.x.length ? `<span class="xs">${dc.x.map(t => pImg(dc.col, t)).join('')}</span>` : ''}</div>`;
             if (p && !(p.invis && !(showInvis && (!NET.on || p.c === NET.me)))) {
                 let pc = 'piece ' + p.c + ' t-' + p.t;
                 if (p.shield) pc += ' shielded';
@@ -3044,7 +3061,7 @@ function renderBoard() {
                 if (must.has(r + ',' + c)) pc += ' must';
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'land')) pc += ' pop';
                 html += `<div class="${pc}">${GLYPH[p.t]}`;
-                if (p.x && p.x.length) html += `<span class="xs">${p.x.map(t => GLYPH[t]).join('')}</span>`;
+                if (p.x && p.x.length) html += `<span class="xs">${p.x.map(t => pImg(p.c, t)).join('')}</span>`;
                 if (p.shield) html += THORNS + `<span class="shn">${p.shield}</span>`;
                 if (p.zombie) html += '<span class="zb">☠</span>';
                 if (p.hypno) html += `<span class="hy">👁${p.hypno}</span>`;
@@ -3092,13 +3109,13 @@ function panelHTML(col) {
         const a = ABILITIES[k], cd = G.cd[col][k];
         if (slowMode) {
             h += `<button class="ab slowable" data-slow="${k}" title="${abilityDesc(k)}">
-      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${(k === 'lie') ? '?' : (cd > 0 ? 'перезарядка: ' + cd : 'готово')} → +1</span>${(k !== 'lie' && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${(k === 'lie') ? '?' : ''} → +1</span>${(k !== 'lie' && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
             return;
         }
         const on = active && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
         const can = active && !lock && abilityAvailable(col, k);
         let sub = 'готово';
-        if (cd > 0) sub = `перезарядка: ${cd}`;
+        if (cd > 0) sub = '';
         else if (active && G.bonus) sub = 'доп. ход';
         else if (active && G.forced.length && k !== 'apocalypse') sub = G.forcedKind === 'lure' ? 'приманка' : 'зомби рубит';
         else if (active && k === 'shomen' && !G.deaths) sub = 'до первой смерти';
@@ -3114,7 +3131,7 @@ function panelHTML(col) {
         const pk = hero.passive, cd = G.cd[col][pk];
         const on = active && G.mode && G.mode.type === pk;
         const can = active && !lock && canPassive(col, pk);
-        const sub = cd > 0 ? `перезарядка: ${cd}` : (active && !can ? 'нет целей' : ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? 'бесплатно' : 'готово'));
+        const sub = cd > 0 ? '' : (active && !can ? 'нет целей' : ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? 'бесплатно' : 'готово'));
         h += `<button class="ab passive-btn ${on ? 'on' : ''}" data-ab="${pk}" ${can || on ? '' : 'disabled'} title="${ps.desc}">
       <span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}${(pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${cd > 0 ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
     }
@@ -3134,8 +3151,8 @@ function panelHTML(col) {
             dis = !ok[key];
         }
         const sel = clickable && m.piece && m.piece.col === col && m.piece.idx === i;
-        const extra = d.x && d.x.length ? `<span class="gxs">${d.x.map(t => GLYPH[t]).join('')}</span>` : '';
-        h += `<button class="gp ${col} ${sel ? 'sel' : ''}" data-gi="${i}" data-col="${col}" title="${pieceSym(d)}" ${dis ? 'disabled' : ''}>${GLYPH[d.t]}${extra}</button>`;
+        const extra = d.x && d.x.length ? `<span class="gxs">${d.x.map(t => pImg(col, t)).join('')}</span>` : '';
+        h += `<button class="gp ${col} ${sel ? 'sel' : ''}" data-gi="${i}" data-col="${col}" title="${pieceSym(d)}" ${dis ? 'disabled' : ''}>${pImg(col, d.t)}${extra}</button>`;
     });
     h += '</div>';
     return h;
@@ -3184,7 +3201,7 @@ function renderStatus() {
         else if (t === 'trap') h = 'Выберите свободную клетку для невидимого капкана.';
         else if (t === 'arrow') h = 'Выберите клетку в радиусе от короля. Стрела прилетит в начале вашего следующего хода.';
         else if (t === 'lure') h = 'Выберите свободную клетку или свою фигуру для приманки.';
-        else if (t === 'aim') h = `Выберите клетку: ${CONFIG.aim.forward} вперёд и ${CONFIG.aim.side} в сторону от короля. Ход не тратится.`;
+        else if (t === 'aim') h = 'Выберите клетку: вокруг короля 3×3 или на 2 клетки по горизонтали и вертикали. Ход не тратится.';
         else if (t === 'teleport') h = 'Выберите свободное безопасное поле для короля. Это тратит ход.';
         else if (t === 'shomen') h = 'Выберите любую клетку нужной вертикали. В начале вашего следующего хода все фигуры на ней погибнут (кроме королей).';
         else if (t === 'phase') h = 'Выберите свою фигуру (не короля), сквозь которую смогут проходить ваши фигуры.';
@@ -3209,7 +3226,7 @@ function renderStatus() {
         h = '🧰 Ходить фигурой уже нельзя: можно применить ещё способность или нажать «Завершить ход».';
     } else if (G.bonus) {
         h = G.bonus.kind === 'zw'
-            ? (G.bonus.step === 1 ? '🕰️ ZA WARUDO: первый ход, шаховать им нельзя.' : '🕰️ ZA WARUDO: второй ход, теперь можно шаховать.')
+            ? (G.bonus.step === 1 ? '🕰️ ZA WARUDO: первый ход, им нельзя ни шаховать, ни рубить.' : '🕰️ ZA WARUDO: второй ход, теперь можно шаховать и рубить.')
             : '🌾 Дополнительный ход: походите любой фигурой (способности недоступны, своих пешек рубить уже нельзя).';
     } else if (G.forced.length) {
         h = G.forcedKind === 'lure'
@@ -3260,8 +3277,8 @@ function buildSetup() {
           <div><div class="hc-name">${h.name}</div><div class="hc-tag">${h.tag}</div></div></div>
         <div class="hc-abs"><span class="chip chip-ps">${ps.icon} ${ps.name}${psFreeDot(h.passive)}</span>${h.abilities.map(k => `<span class="chip">${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</span>`).join('')}</div>
         <button class="hc-more" type="button">${open ? 'Скрыть ▴' : 'Подробнее ▾'}</button>
-        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span></div>
-        <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</b><br><span>${abilityDesc(k)}</span></li>`).join('')}</ul></div>` : ''}
+        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span>${cdBadgeHTML(CONFIG.cooldown[h.passive])}</div>
+        <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</b><br><span>${abilityDesc(k)}</span>${cdBadgeHTML(CONFIG.cooldown[k])}</li>`).join('')}</ul></div>` : ''}
       </div>`;
         }).join('');
     });
@@ -3675,7 +3692,7 @@ const EN = {
     "Плитки плюс и минус. Все плюсы связаны со всеми минусами: если фигуры стоят и на плюсе, и на минусе, их убивает разряд.": "Plus and minus tiles. Every plus is linked to every minus: if pieces stand on both a plus and a minus, a discharge kills them.",
     "Ход сурка": "Groundhog Move",
     "Ловушка (королю не страшна) стоит, пока не сработает один раз: фигура на ней возвращается туда, откуда пришла. На пустой клетке скрыта и ход не тратит, на фигуре видна, тратит ход и срабатывает на новую фигуру.": "A trap (kings are immune) stays until it triggers once: the piece on it goes back to where it came from. On an empty square it is hidden and costs no turn; on a piece it is visible, costs a turn, and triggers on a new piece.",
-    "Два хода подряд, но первым ходом шаховать нельзя.": "Two moves in a row, but the first move cannot give check.",
+    "Два хода подряд, но первым ходом нельзя ни шаховать, ни рубить.": "Two moves in a row, but the first move can neither give check nor capture.",
     "Мисклик!": "Misclick!",
     "Отменяет ход противника и ваш предыдущий ход.": "Cancels the opponent's move and your previous move.",
     "Суперпозиция": "Superposition",
@@ -3695,14 +3712,15 @@ const EN = {
     "Мастер на все руки": "Jack of All Trades",
     "За ход можно применить несколько способностей, но после первой фигурой ходить нельзя. Потом «Завершить ход».": "You may use several abilities per turn, but after the first you cannot move a piece. Then press “End turn”.",
     "Кагэватари": "Kagewatari",
-    "Король телепортируется на любое безопасное свободное поле, даже из-под шаха. Второй клик по королю или кнопка. Тратит ход, перезарядка ": "The king teleports to any safe free square, even out of check. Click the king a second time or use the button. Costs a turn, cooldown ",
+    "Король телепортируется на любое безопасное свободное поле, даже из-под шаха. Второй клик по королю или кнопка. Тратит ход.": "The king teleports to any safe free square, even out of check. Click the king a second time or use the button. Costs a turn.",
     "Замедление времени": "Time Slow",
     "Второй клик по королю или кнопка, затем способность врага: её перезарядка +1 сейчас и +1 на всю партию, у остальных перезаряжающихся +1 сейчас. ": "Click the king a second time or use the button, then pick an enemy ability: its cooldown +1 now and +1 for the whole game; other recharging abilities +1 now. ",
     "Тратит ход.": "Costs a turn.",
     "Ход не тратится.": "Costs no turn.",
     " Перезарядка ": " Cooldown ",
     "Меткий глаз": "Sharp Eye",
-    "Второй клик по королю или кнопка: метка стрелы на 2 клетки вперёд и 1 в сторону. Ход не тратится, перезарядка ": "Click the king a second time or use the button: an arrow mark 2 squares forward and 1 to the side. Costs no turn, cooldown ",
+    "Второй клик по королю или кнопка: метка стрелы в квадрате 3×3 вокруг короля и ещё на 2 клетки по горизонтали и вертикали. Ход не тратится.": "Click the king a second time or use the button: an arrow mark in the 3×3 square around the king plus 2 squares horizontally and vertically. Costs no turn.",
+    "Выберите клетку: вокруг короля 3×3 или на 2 клетки по горизонтали и вертикали. Ход не тратится.": "Choose a square: the 3×3 around your king or 2 squares away horizontally or vertically. Costs no turn.",
     "Паладин": "Paladin",
     "Защита и святость": "Protection & Holiness",
     "Маг": "Mage",
@@ -3850,7 +3868,7 @@ const EN = {
     "🌀 Кагэватари: король ": "🌀 Kagewatari: king ",
     "🎯 Меткий глаз: стрела нацелена на ": "🎯 Sharp Eye: arrow aimed at ",
     " (ход не потрачен)": " (no turn spent)",
-    " ZA WARUDO! Время остановлено: два хода подряд, первым шаховать нельзя": " ZA WARUDO! Time is stopped: two moves in a row, the first cannot give check",
+    " ZA WARUDO! Время остановлено: два хода подряд, первым нельзя ни шаховать, ни рубить": " ZA WARUDO! Time is stopped: two moves in a row, the first can neither give check nor capture",
     " Мисклик! Время отмотано: отменены ход противника и ваш предыдущий ход": " Misclick! Time is rewound: the opponent's move and your previous move are cancelled",
     ": временная ловушка на ": ": groundhog trap on ",
     ": временная ловушка установлена (место скрыто)": ": groundhog trap set (location hidden)",
@@ -3937,8 +3955,9 @@ const EN = {
     "Король ушёл из-под шаха: выберите клетку, где останется его иллюзия.": "The king escaped check: choose the square where its illusion will stay.",
     "🪞 Зеркало: ": "🪞 Mirror: ",
     "🧰 Ходить фигурой уже нельзя: можно применить ещё способность или нажать «Завершить ход».": "🧰 You can no longer move a piece: use another ability or press “End turn”.",
-    "🕰️ ZA WARUDO: первый ход, шаховать им нельзя.": "🕰️ ZA WARUDO: first move, it cannot give check.",
-    "🕰️ ZA WARUDO: второй ход, теперь можно шаховать.": "🕰️ ZA WARUDO: second move, check is allowed now.",
+    "🕰️ ZA WARUDO: первый ход, им нельзя ни шаховать, ни рубить.": "🕰️ ZA WARUDO: first move, it can neither give check nor capture.",
+    " (иллюзия сразу рассеялась: ": " (the illusion faded at once: ",
+    "🕰️ ZA WARUDO: второй ход, теперь можно шаховать и рубить.": "🕰️ ZA WARUDO: second move, check and captures are allowed now.",
     "🌾 Дополнительный ход: походите любой фигурой (способности недоступны, своих пешек рубить уже нельзя).": "🌾 Extra move: move any piece (abilities are unavailable, you can no longer capture your own pawns).",
     "Приманка: вы обязаны срубить фигуру с приманкой или встать на клетку с приманкой (подсвеченной фигурой).": "Lure: you must capture the piece with the lure or step on the lure's square (with the highlighted piece).",
     "Зомби обязан рубить: ходите подсвеченным зомби (цель на ваш выбор).": "A zombie must capture: move the highlighted zombie (target of your choice).",

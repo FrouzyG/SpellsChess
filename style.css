@@ -2377,3 +2377,210 @@ button {
     opacity: 0.75;
     letter-spacing: 0;
 }
+
+/* ===== Плашка перезарядки: внутри кнопки, снизу справа ===== */
+.cd-badge {
+    top: auto;
+    right: 8px;
+    bottom: 6px;
+}
+
+.ab-cd:empty::before {
+    content: "\00a0";
+}
+
+.ab-cd {
+    padding-right: 44px;
+}
+
+/* плашка в описаниях на экране выбора героя */
+.hc-details li, .hc-details .hc-passive {
+    position: relative;
+    padding-right: 52px;
+    min-height: 28px;
+}
+
+    .hc-details li .cd-badge, .hc-details .hc-passive .cd-badge {
+        right: 0;
+        bottom: 2px;
+    }
+
+/* ===== Мини-фигуры (сброс, превращение пешки, значки Франкенштейна) ===== */
+.pi {
+    font-style: normal;
+}
+
+.img-pieces .pi {
+    display: block;
+    font-size: 0;
+    text-shadow: none;
+    background-repeat: no-repeat;
+    background-position: center bottom;
+    background-size: contain;
+}
+
+    .img-pieces .pi.w.t-k {
+        background-image: var(--img-wK);
+    }
+
+    .img-pieces .pi.w.t-q {
+        background-image: var(--img-wQ);
+    }
+
+    .img-pieces .pi.w.t-r {
+        background-image: var(--img-wR);
+    }
+
+    .img-pieces .pi.w.t-b {
+        background-image: var(--img-wB);
+    }
+
+    .img-pieces .pi.w.t-n {
+        background-image: var(--img-wN);
+    }
+
+    .img-pieces .pi.w.t-p {
+        background-image: var(--img-wP);
+    }
+
+    .img-pieces .pi.b.t-k {
+        background-image: var(--img-bK);
+    }
+
+    .img-pieces .pi.b.t-q {
+        background-image: var(--img-bQ);
+    }
+
+    .img-pieces .pi.b.t-r {
+        background-image: var(--img-bR);
+    }
+
+    .img-pieces .pi.b.t-b {
+        background-image: var(--img-bB);
+    }
+
+    .img-pieces .pi.b.t-n {
+        background-image: var(--img-bN);
+    }
+
+    .img-pieces .pi.b.t-p {
+        background-image: var(--img-bP);
+    }
+
+/* значки пришитых фигур на доске */
+.img-pieces .piece .xs {
+    gap: 0;
+    letter-spacing: 0;
+    bottom: 3%;
+}
+
+    .img-pieces .piece .xs .pi {
+        width: calc(var(--cell) * 0.26);
+        height: calc(var(--cell) * 0.26);
+    }
+
+/* сброс */
+.img-pieces .gp {
+    display: inline-grid;
+    place-items: center;
+    font-size: 0;
+}
+
+    .img-pieces .gp > .pi {
+        width: 26px;
+        height: 26px;
+    }
+
+.img-pieces .gxs {
+    display: flex;
+    right: 0;
+    bottom: 0;
+    font-size: 0;
+}
+
+    .img-pieces .gxs .pi {
+        width: 13px;
+        height: 13px;
+    }
+
+/* превращение пешки */
+.img-pieces .promo-btn {
+    display: inline-grid;
+    place-items: center;
+    font-size: 0;
+}
+
+    .img-pieces .promo-btn > .pi {
+        width: 52px;
+        height: 52px;
+    }
+
+/* ===== Увеличенные круги выбора и щита (под крупные фигуры; в пределах своей клетки, соседние не пересекаются) ===== */
+.cell.t-resurrect::after, .cell.t-shield::after, .cell.t-fireball::after, .cell.t-freeze::after,
+.cell.t-illusion::after, .cell.t-hypnosis::after, .cell.t-raise::after, .cell.t-frankenstein::after,
+.cell.t-rescue::after, .cell.t-confusion::after, .cell.t-apocalypse::after, .cell.t-trap::after,
+.cell.t-arrow::after, .cell.t-aim::after, .cell.t-lure::after, .cell.t-kghost::after,
+.cell.t-conveyor::after, .cell.t-relocate::after, .cell.t-portals::after, .cell.t-fukashi::after,
+.cell.t-teleport::after, .cell.t-phase::after, .cell.t-soulmates::after, .cell.t-scream::after,
+.cell.t-vine::after, .cell.t-virus::after, .cell.t-ritual::after, .cell.t-groundhog::after,
+.cell.t-guardian::after, .cell.t-purify::after, .cell.t-lie::after, .cell.t-generator::after,
+.cell.t-bumpuku::after, .cell.t-superposition::after {
+    inset: 3%;
+}
+
+/* Суперпозиция: такой же кружок при выборе фигуры */
+.cell.t-superposition::after {
+    border: 3px solid #7ee8ff;
+    border-radius: 50%;
+    background: rgba(126, 232, 255, 0.25);
+}
+
+/* Шипастый щит побольше */
+.thorns::before {
+    inset: 3%;
+}
+
+.thorns i {
+    transform: translate(-50%, -50%) rotate(var(--a)) translateY(calc(var(--cell) * -0.37));
+}
+
+/* ===== Лоза: сколько ходов осталось ===== */
+.vine-mark {
+    position: absolute;
+}
+
+    .vine-mark .vine-t {
+        position: absolute;
+        right: 4px;
+        bottom: 2px;
+        font-style: normal;
+        font-weight: 700;
+        font-size: calc(var(--cell) * 0.22);
+        line-height: 1;
+        color: #fff;
+        text-shadow: 0 0 3px #000, 0 0 3px #000;
+    }
+
+/* ===== Шипастый щит: мелкие шипы бегут по самой окружности ===== */
+.thorns::before {
+    inset: 6%;
+}
+
+.thorns i {
+    border-left: calc(var(--cell) * 0.04) solid transparent;
+    border-right: calc(var(--cell) * 0.04) solid transparent;
+    border-bottom: calc(var(--cell) * 0.1) solid #ffd75e;
+    transform: translate(-50%, -50%) rotate(var(--a)) translateY(calc(var(--cell) * -0.44));
+}
+
+/* ===== Заморозка: лёд чуть больше, чтобы не торчали края крупных фигур ===== */
+.piece.frozen::after {
+    inset: 0;
+    border-radius: 16%;
+}
+
+/* ===== Прозрачность Призрака: заметнее ===== */
+.piece.phase {
+    opacity: 0.5;
+    filter: drop-shadow(0 0 5px #cfe3ff);
+}
