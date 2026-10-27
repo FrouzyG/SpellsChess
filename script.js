@@ -3402,7 +3402,14 @@ $('#startBtn').addEventListener('click', () => {
 $('#board').addEventListener('click', e => {
     const cell = e.target.closest('.cell');
     if (!cell || !G || G.over || G.pendingPromo) return;
-    netDo({ t: 'cell', r: +cell.dataset.r, c: +cell.dataset.c });
+    const r = +cell.dataset.r, c = +cell.dataset.c;
+    if (CONFIRM.on && !(NET.on && (NET.lost || !isActor())) && needsConfirm(r, c)) {      // режим «подтверждать ход кнопкой»
+        CONFIRM.pend = { r, c };
+        render();
+        return;
+    }
+    CONFIRM.pend = null;
+    netDo({ t: 'cell', r, c });
 });
 
 $('#app').addEventListener('click', e => {
@@ -4059,6 +4066,10 @@ const EN = {
     "Сдаться": "Resign",
     "Новая игра": "New game",
     "Завершить ход": "End turn",
+    "✔ Подтвердить": "✔ Confirm",
+    "✖ Отмена": "✖ Cancel",
+    "Подтверждение хода кнопкой: включено": "Move confirmation button: on",
+    "Подтверждение хода кнопкой: выключено": "Move confirmation button: off",
     "📜 Журнал": "📜 Log",
     "💬 Чат": "💬 Chat",
     "☰ Меню": "☰ Menu",
@@ -4391,3 +4402,53 @@ document.addEventListener('keydown', e => {
     document.addEventListener('click', e => { if (suppress) { e.stopPropagation(); e.preventDefault(); suppress = false; } }, true);
     document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.panel')) e.preventDefault(); });
 })();
+
+
+// ===== Подтверждение хода кнопкой (включается кнопкой ✅, по умолчанию выключено) =====
+const CONFIRM = { on: false, pend: null };
+try { CONFIRM.on = localStorage.getItem('sc_confirm') === '1'; } catch (e) { }
+
+// Клик по клетке «завершает» действие: ход фигуры или выбор цели способности (выбор своей фигуры для способности не в счёт)
+function needsConfirm(r, c) {
+    if (!G || G.over) return false;
+    if (G.pairStep) return !!(G.sel && G.moves.some(m => m.tr === r && m.tc === c));
+    if (G.mode) {
+        const m = G.mode;
+        if (STAGED.includes(m.type) && m.stage === 'piece') return false;
+        return !!(m.cells && m.cells.some(x => x[0] === r && x[1] === c));
+    }
+    return !!(G.sel && G.moves.some(m => m.tr === r && m.tc === c));
+}
+
+function updateConfirmUI() {
+    if (CONFIRM.pend && (!G || G.over || REW.idx >= 0 || !needsConfirm(CONFIRM.pend.r, CONFIRM.pend.c))) CONFIRM.pend = null;
+    const btn = document.getElementById('btnConfirm');
+    if (btn) { btn.classList.toggle('off', !CONFIRM.on); btn.title = CONFIRM.on ? 'Подтверждение хода кнопкой: включено' : 'Подтверждение хода кнопкой: выключено'; }
+    const app = document.getElementById('app');
+    app.classList.toggle('confirm-pending', !!CONFIRM.pend);
+    document.querySelectorAll('#board .cell.pending').forEach(el => el.classList.remove('pending'));
+    if (CONFIRM.pend) {
+        const el = document.querySelector(`#board .cell[data-r="${CONFIRM.pend.r}"][data-c="${CONFIRM.pend.c}"]`);
+        if (el) el.classList.add('pending');
+    }
+}
+const _renderConfirm = render;
+render = function () { _renderConfirm.call(this); updateConfirmUI(); };
+
+document.getElementById('btnConfirm').addEventListener('click', () => {
+    CONFIRM.on = !CONFIRM.on;
+    try { localStorage.setItem('sc_confirm', CONFIRM.on ? '1' : '0'); } catch (e) { }
+    CONFIRM.pend = null;
+    if (G) render(); else updateConfirmUI();
+});
+document.getElementById('cfOk').addEventListener('click', () => {
+    const p = CONFIRM.pend;
+    CONFIRM.pend = null;
+    if (!p || !G || G.over) { if (G) render(); return; }
+    netDo({ t: 'cell', r: p.r, c: p.c });
+});
+document.getElementById('cfNo').addEventListener('click', () => { CONFIRM.pend = null; render(); });
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && CONFIRM.pend) { e.stopImmediatePropagation(); CONFIRM.pend = null; render(); }
+}, true);
+updateConfirmUI();

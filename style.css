@@ -3085,3 +3085,61 @@ button {
         right: 2px;
     }
 }
+
+
+/* ===== Подтверждение хода кнопкой ===== */
+#btnConfirm.off {
+    opacity: 0.45;
+}
+
+.confirm-bar {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.confirm-pending .confirm-bar {
+    display: flex;
+}
+
+.confirm-pending .rewind {
+    display: none;
+}
+
+.confirm-bar .small-btn {
+    flex: 1;
+    max-width: 200px;
+    height: 34px;
+    font-weight: 600;
+}
+
+.cf-ok {
+    color: #08210f;
+    background: #3ddc84;
+    border-color: #3ddc84;
+}
+
+    .cf-ok:hover {
+        background: #5be89b;
+    }
+
+#board .cell.pending {
+    outline: 4px solid #3ddc84;
+    outline-offset: -4px;
+    z-index: 3;
+}
+
+@media (max-width: 760px) {
+    .confirm-bar {
+        margin-top: 2px;
+        gap: 6px;
+    }
+
+        .confirm-bar .small-btn {
+            height: 26px;
+            font-size: 13px;
+            padding: 2px 8px;
+        }
+}
