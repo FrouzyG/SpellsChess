@@ -3130,9 +3130,12 @@ function panelHTML(col) {
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
     hero.abilities.forEach(k => {
         const a = ABILITIES[k], cd = G.cd[col][k];
+        // «Ход — это ложь» и зеркало, пока в нём лежит эта способность: перезарядка скрыта от соперника, чтобы не выдавать применение
+        const secret = k === 'lie' || (k === 'copy' && G.lastAb[other(col)] === 'lie');
+        const hideCd = secret && (NET.on ? col !== NET.me : !active);
         if (slowMode) {
             h += `<button class="ab slowable" data-slow="${k}" title="${abilityDesc(k)}">
-      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${(k === 'lie') ? '?' : ''} → +1</span>${(k !== 'lie' && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${secret ? '?' : ''} → +1</span>${(!secret && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
             return;
         }
         const on = active && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
@@ -3144,9 +3147,9 @@ function panelHTML(col) {
         else if (active && k === 'shomen' && !G.deaths) sub = 'до первой смерти';
         else if (active && !can) sub = 'нет целей';
         else if (k === 'copy' && can) sub = '→ ' + ABILITIES[G.lastAb[other(col)]].name;
-        if ((NET.on ? col !== NET.me : !active) && k === 'lie') sub = 'скрыто';      // применение не должно быть видно по перезарядке
+        if (hideCd) sub = 'скрыто';      // применение не должно быть видно по перезарядке
         h += `<button class="ab ${on ? 'on' : ''}" data-ab="${k}" ${can || on ? '' : 'disabled'} title="${abilityDesc(k)}">
-      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !(k === 'lie' && (NET.on ? col !== NET.me : !active))) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
     });
 
     // Кнопка пассивки (Меткий глаз / Кагэватари): то же, что второй клик по королю
