@@ -179,7 +179,7 @@ const ABILITIES = {
     ritual: {
         free: true,
         icon: '🕯️', name: 'Ритуал',
-        desc: 'Призрачная плитка: стоящая на ней ваша фигура прозрачна для ваших фигур. Вражескую фигуру на ней рубить можно.'
+        desc: 'Призрачная плитка: стоящая на ней фигура (своя или вражеская) прозрачна для ваших фигур. Сквозь вражескую фигуру на ней можно пройти и можно её срубить.'
     },
     bumpuku: {
         icon: '💣', name: 'Бумпуку',
@@ -382,7 +382,7 @@ const isPhase = t => !!t && !t.ghost && (t.phase || (t.t === 'k' && G.hero[t.c] 
 const vineAt = (r, c) => G.vines.some(v => v.r === r && v.c === c);
 const ritualAt = (r, c) => G.rituals.find(x => x.r === r && x.c === c);
 // Можно ли пройти сквозь фигуру t на клетке (r, c) фигурой цвета col: прозрачность или призрачная плитка Ритуала
-const passThru = (t, col, r, c) => !!t && !t.ghost && ((t.c === col && isPhase(t)) || (t.c === col && !!ritualAt(r, c) && ritualAt(r, c).owner === col));   // на Ритуале прозрачна только своя фигура: вражескую там рубить можно
+const passThru = (t, col, r, c) => !!t && !t.ghost && ((t.c === col && isPhase(t)) || (!!ritualAt(r, c) && ritualAt(r, c).owner === col));
 const supOpen = (b, t) => !!t && !!t.sup && !t.ghost && !!t.prev && !b[t.prev[0]][t.prev[1]];
 const scaredDirs = tp => (tp === 'r' ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
 
@@ -660,7 +660,10 @@ function pseudoMoves(b, r, c) {
                     if (t.c === p.c) add(tr, tc, { path: path.slice() });   // своя иллюзия: можно встать, она рассеется
                     return false;                                            // чужая иллюзия прозрачна
                 }
-                if (passThru(t, p.c, tr, tc)) return false;               // сквозь прозрачную фигуру можно пройти
+                if (passThru(t, p.c, tr, tc)) {                           // сквозь прозрачную фигуру можно пройти
+                    if (t.c !== p.c && canTake(t, tr, tc)) add(tr, tc, { path: path.slice() });   // вражескую фигуру на своём Ритуале можно ещё и срубить
+                    return false;
+                }
                 if (!ghost && supOpen(b, t)) { add(tr, tc, { path: path.slice() }); return false; }   // суперпозиция: не мешает, можно встать
                 if (canTake(t, tr, tc)) add(tr, tc, { path: path.slice() });
                 return true;
@@ -3710,7 +3713,7 @@ const EN = {
     "Лоза блокирует путь дальше себя. Исчезает, когда на неё встаёт фигура, или через ": "The vine blocks the path beyond it. It disappears when a piece steps on it, or after ",
     " ваших хода.": " of your turns.",
     "Ритуал": "Ritual",
-    "Призрачная плитка: стоящая на ней ваша фигура прозрачна для ваших фигур. Вражескую фигуру на ней рубить можно.": "A ghostly tile: your piece standing on it is transparent to your pieces. An enemy piece on it can be captured.",
+    "Призрачная плитка: стоящая на ней фигура (своя или вражеская) прозрачна для ваших фигур. Сквозь вражескую фигуру на ней можно пройти и можно её срубить.": "A ghostly tile: a piece standing on it (yours or an enemy's) is transparent to your pieces. You can pass through an enemy piece on it, and also capture it.",
     "Бумпуку": "Bumpuku",
     "Бомба на союзной фигуре (не короле) взрывается на вашем ": "A bomb on an allied piece (not a king) explodes on your ",
     "-м ходе после применения и убивает всех в 3×3. Срубленная фигура не взрывается.": "th turn after use and kills everything in 3×3. A captured piece does not explode.",
