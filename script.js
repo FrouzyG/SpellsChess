@@ -4602,3 +4602,19 @@ setInterval(() => {
 }, 200);
 const _renderClock = render;
 render = function () { _renderClock.call(this); paintClocks(); };
+
+
+// ===== Чат: на компьютере под правой рамкой героя, на телефоне внутри выезжающего меню =====
+(function () {
+    const g = id => document.getElementById(id);
+    const chat = g('chat'), app = g('app'), log = g('log');
+    if (!chat || !app || !log) return;
+    const side = app.querySelector('.side-col'), logTitle = log.previousElementSibling;
+    const mq = window.matchMedia('(max-width: 760px)');
+    const place = () => {
+        if (mq.matches) { if (chat.parentElement !== side) side.insertBefore(chat, logTitle); }
+        else if (chat.parentElement !== app) app.insertBefore(chat, side);
+    };
+    if (mq.addEventListener) mq.addEventListener('change', place); else mq.addListener(place);
+    place();
+})();

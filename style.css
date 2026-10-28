@@ -3282,3 +3282,36 @@ button {
         min-width: 70px;
     }
 }
+
+/* ===== Чат под правой рамкой героя (компьютер) ===== */
+.game {
+    grid-template-areas: "pw board pb side" ". board chat side";
+    grid-template-rows: auto 1fr;
+}
+
+#app > #chat {
+    grid-area: chat;
+    margin-top: 0;
+    padding: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+    #app > #chat #chatLog {
+        max-height: 240px;
+    }
+
+@media (max-width: 1100px) {
+    .game {
+        grid-template-areas: "pw board pb" ". board chat" "side side side";
+        grid-template-rows: auto 1fr auto;
+    }
+}
+
+@media (max-width: 900px) {
+    .game {
+        grid-template-areas: "board" "pw" "pb" "chat" "side";
+        grid-template-rows: none;
+    }
+}
