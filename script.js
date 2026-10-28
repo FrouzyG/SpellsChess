@@ -3130,7 +3130,7 @@ function panelHTML(col) {
     const lock = !!(G.bonus || G.pairStep || (G.mode && G.mode.locked) || G.pendingPromo);
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
     <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div></div>
-    ${isTurn ? '<span class="turn-dot">ход</span>' : ''}</div>`;
+    ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}</div>`;
     h += `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b></div><div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
@@ -3387,7 +3387,7 @@ function maybeStart() {
     if (!(NET.on && NET.host && NET.ready && NET.oppReady && NET.oppHero)) return;
     _seed = (Math.random() * 2147483647) | 0;
     const heroes = { w: selectedHeroes.w, b: NET.oppHero };
-    netSend({ t: 'start', seed: _seed, heroes });
+    netSend({ t: 'start', seed: _seed, heroes, tc: NET.tc || 0 });
     selectedHeroes = heroes;
     NET.ready = false; NET.oppReady = false;
     startGame();
@@ -3589,6 +3589,7 @@ function attachConn(c) {
         NET.me = NET.host ? 'w' : 'b';
         $('#lobby').classList.add('hidden');
         openSetup();
+        tcOnOpen();
     });
     c.on('data', netRecv);
     c.on('close', () => {
@@ -3608,7 +3609,7 @@ function netRecv(m) {
             maybeStart();
             break;
         case 'start':
-            if (!NET.host) { selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
+            if (!NET.host) { if (m.tc !== undefined) NET.tc = m.tc; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
             break;
         case 'chat':
             if (!NET.muted && typeof m.text === 'string') { chatMsgs.push({ me: false, text: m.text.slice(0, 300) }); renderChat(); }
@@ -3641,7 +3642,8 @@ $('#lobbyJoin').addEventListener('click', joinRoom);
 $('#lobbyQuick').addEventListener('click', async () => {
     if (!RELAY) { lobbyStatus('Быстрая игра работает только на сайте с сервером игры.'); return; }
     try {
-        const j = await (await fetch('/quick')).json();
+        NET.pref = quickPref();
+        const j = await (await fetch('/quick?tc=' + encodeURIComponent(NET.pref))).json();
         if (!j.room) { lobbyStatus('Сервер занят, попробуйте позже.'); return; }
         NET.host = j.role === 'host';
         lobbyStatus(NET.host ? 'Ищем соперника... оставайтесь на этой странице.' : 'Соперник найден, подключаемся...');
@@ -4066,6 +4068,20 @@ const EN = {
     "Сдаться": "Resign",
     "Новая игра": "New game",
     "Завершить ход": "End turn",
+    "Время партии": "Game time",
+    "Время партии: определится, когда подключится соперник.": "Game time: will be set when your opponent connects.",
+    "Время партии: ": "Game time: ",
+    " мин": " min",
+    " на игрока": " per player",
+    "без лимита": "no limit",
+    "без ограничения времени": "no time limit",
+    "Без лимита времени": "No time limit",
+    "Любая": "Any",
+    "По времени": "By time",
+    "Без лимита": "No limit",
+    "Искать партию:": "Find a game:",
+    "Время вышло": "Time is up",
+    " побеждают по времени.": " win on time.",
     "✔ Подтвердить": "✔ Confirm",
     "✖ Отмена": "✖ Cancel",
     "Подтверждение хода кнопкой: включено": "Move confirmation button: on",
@@ -4452,3 +4468,137 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && CONFIRM.pend) { e.stopImmediatePropagation(); CONFIRM.pend = null; render(); }
 }, true);
 updateConfirmUI();
+
+
+// =====================================================================
+//  ВРЕМЯ ПАРТИИ: выбор в лобби, шахматные часы, подбор соперника по времени
+// =====================================================================
+const TCSEL = { mins: 30, inf: false, quick: 'any' };     // mins — всего минут на партию (каждому поровну); quick: any | time | inf
+try { Object.assign(TCSEL, JSON.parse(localStorage.getItem('sc_tc') || '{}')); } catch (e) { }
+TCSEL.mins = Math.max(1, Math.min(180, +TCSEL.mins || 30));
+
+const prefToTc = p => (p === 'inf' ? 0 : (+p || 30));                       // 0 = без лимита
+const roomPref = () => (TCSEL.inf ? 'inf' : String(TCSEL.mins));
+function quickPref() {
+    if (TCSEL.quick === 'inf') return 'inf';
+    if (TCSEL.quick === 'time') return roomPref();
+    return 'any';
+}
+const fmtNum = n => String(n).replace('.', ',');
+const fmtTc = tc => (tc > 0 ? `${fmtNum(tc)} мин (${fmtNum(tc / 2)} мин на игрока)` : 'без лимита');
+
+function saveTc() { try { localStorage.setItem('sc_tc', JSON.stringify(TCSEL)); } catch (e) { } }
+function renderTcBox() {
+    const g = id => document.getElementById(id);
+    g('tcVal').textContent = TCSEL.inf ? '∞' : `${TCSEL.mins} мин`;
+    g('tcSub').textContent = TCSEL.inf ? 'без ограничения времени' : `${fmtNum(TCSEL.mins / 2)} мин на игрока`;
+    g('tcInf').checked = TCSEL.inf;
+    ['tcM5', 'tcM1', 'tcP1', 'tcP5'].forEach(id => { g(id).disabled = TCSEL.inf; });
+    g('tcBox').classList.toggle('inf', TCSEL.inf);
+    document.querySelectorAll('#quickPick button').forEach(b => b.classList.toggle('on', b.dataset.q === TCSEL.quick));
+    g('qTime').textContent = TCSEL.inf ? '∞' : `${TCSEL.mins} мин`;
+}
+function tcStep(d) {
+    TCSEL.mins = Math.max(1, Math.min(180, TCSEL.mins + d));
+    saveTc(); renderTcBox();
+}
+[['tcM5', -5], ['tcM1', -1], ['tcP1', 1], ['tcP5', 5]].forEach(([id, d]) => document.getElementById(id).addEventListener('click', () => tcStep(d)));
+document.getElementById('tcInf').addEventListener('change', e => { TCSEL.inf = e.target.checked; saveTc(); renderTcBox(); });
+document.getElementById('quickPick').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    TCSEL.quick = b.dataset.q;
+    saveTc(); renderTcBox();
+});
+// выбор времени запоминаем до того, как сработают обработчики создания комнаты и входа
+document.getElementById('lobbyHost').addEventListener('click', () => { NET.pref = roomPref(); }, true);
+document.getElementById('lobbyJoin').addEventListener('click', () => { NET.pref = 'any'; }, true);
+renderTcBox();
+
+// После соединения хозяин сообщает итоговое время. Если он искал «любое», берётся время гостя (оба «любое»: 30 минут)
+function tcOnOpen() {
+    const pref = NET.pref || 'any';
+    if (NET.host) {
+        if (pref !== 'any') { NET.tc = prefToTc(pref); netSend({ t: 'tc', tc: NET.tc }); }
+        else NET.tc = undefined;
+    } else netSend({ t: 'tcpref', pref });
+    updateSetupTc();
+}
+const _netRecvTc = netRecv;
+netRecv = function (m) {
+    if (m && m.t === 'tcpref') {
+        if (NET.host && (NET.pref || 'any') === 'any') { NET.tc = m.pref === 'any' ? 30 : prefToTc(m.pref); netSend({ t: 'tc', tc: NET.tc }); updateSetupTc(); }
+        return;
+    }
+    if (m && m.t === 'tc') { if (!NET.host && typeof m.tc === 'number') { NET.tc = m.tc; updateSetupTc(); } return; }
+    if (m && m.t === 'flag') { if (m.side === other(NET.me)) flagSide(m.side); return; }
+    _netRecvTc(m);
+};
+function curTc() {
+    if (NET.on) return typeof NET.tc === 'number' ? NET.tc : null;     // null: ещё не определено
+    return TCSEL.inf ? 0 : TCSEL.mins;
+}
+function updateSetupTc() {
+    const el = document.getElementById('setupTc');
+    if (!el) return;
+    const tc = curTc();
+    el.classList.remove('hidden');
+    el.textContent = tc === null ? 'Время партии: определится, когда подключится соперник.' : `Время партии: ${fmtTc(tc)}.`;
+}
+const _openSetupTc = openSetup;
+openSetup = function () { _openSetupTc.apply(this, arguments); updateSetupTc(); };
+
+// ---------- часы ----------
+let CLOCK = { on: false, left: { w: 0, b: 0 }, last: 0, grace: 0 };
+function fmtClock(sec) {
+    sec = Math.max(0, Math.ceil(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = sec % 60;
+    const p = n => String(n).padStart(2, '0');
+    return h ? `${h}:${p(m)}:${p(x)}` : `${p(m)}:${p(x)}`;
+}
+function clockHTML(col) {
+    if (!CLOCK.on) return '';
+    return `<span class="clock" data-clock="${col}" data-notr>${fmtClock(CLOCK.left[col])}</span>`;
+}
+function initClock() {
+    const tc = curTc() || 0;
+    CLOCK = { on: tc > 0, left: { w: tc * 30, b: tc * 30 }, last: performance.now(), grace: 0 };
+    if (G) render();
+}
+const _startGameTc = startGame;
+startGame = function () { _startGameTc.apply(this, arguments); initClock(); };
+
+function flagSide(side) {
+    if (!G || G.over) return;
+    CLOCK.left[side] = 0;
+    G.over = { winner: other(side), title: 'Время вышло', text: `${colorName(other(side))} побеждают по времени.` };
+    render(); showGameOver();
+}
+function paintClocks() {
+    document.querySelectorAll('.clock[data-clock]').forEach(el => {
+        const side = el.dataset.clock, t = CLOCK.left[side];
+        const txt = fmtClock(t);
+        if (el.textContent !== txt) el.textContent = txt;
+        el.classList.toggle('running', !!G && !G.over && G.turn === side);
+        el.classList.toggle('low', t < 30);
+    });
+}
+setInterval(() => {
+    const now = performance.now();
+    const dt = (now - CLOCK.last) / 1000;
+    CLOCK.last = now;
+    if (!CLOCK.on || !G || G.over || document.getElementById('app').classList.contains('hidden')) return;
+    const side = G.turn;
+    CLOCK.left[side] = Math.max(0, CLOCK.left[side] - dt);
+    paintClocks();
+    if (CLOCK.left[side] > 0) { CLOCK.grace = 0; return; }
+    if (!NET.on || side === NET.me) {                     // своё время вышло: сообщаем сопернику
+        if (NET.on) netSend({ t: 'flag', side });
+        flagSide(side);
+    } else {                                              // время соперника: ждём его сообщения, иначе засчитываем сами
+        if (!CLOCK.grace) CLOCK.grace = now + 5000;
+        else if (now > CLOCK.grace) flagSide(side);
+    }
+}, 200);
+const _renderClock = render;
+render = function () { _renderClock.call(this); paintClocks(); };

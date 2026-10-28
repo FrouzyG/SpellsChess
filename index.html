@@ -14,6 +14,7 @@
             <button id="langSetup" class="small-btn lang-top">🌐 English</button>
             <h1 class="logo"><span class="logo-sp">Spells</span><span class="logo-ch">Chess</span></h1>
             <p id="setupNet" class="sub hidden"></p>
+            <p id="setupTc" class="sub hidden"></p>
             <p class="sub">Каждая сторона выбирает героя. В свой ход можно либо походить фигурой, либо применить способность героя. Все способности стартуют с перезарядкой 3.</p>
             <div class="pick-row">
                 <section class="side-pick" data-side="w">
@@ -41,9 +42,27 @@
             <button id="langLobby" class="small-btn lang-top">🌐 English</button>
             <h1 class="logo"><span class="logo-sp">Spells</span><span class="logo-ch">Chess</span></h1>
             <p class="sub">Как будете играть?</p>
+            <div id="tcBox" class="tc-box">
+                <div class="tc-title">Время партии</div>
+                <div class="tc-row">
+                    <button id="tcM5" class="small-btn">−5</button>
+                    <button id="tcM1" class="small-btn">−1</button>
+                    <b id="tcVal" data-notr>30 мин</b>
+                    <button id="tcP1" class="small-btn">+1</button>
+                    <button id="tcP5" class="small-btn">+5</button>
+                </div>
+                <div id="tcSub" class="tc-sub" data-notr>15 мин на игрока</div>
+                <label class="tc-inf"><input type="checkbox" id="tcInf"> Без лимита времени</label>
+            </div>
             <button id="lobbyLocal" class="big-btn">Вдвоём за одним экраном</button>
             <div class="lobby-sep">онлайн</div>
             <button id="lobbyQuick" class="big-btn">Быстрая игра: найти соперника</button>
+            <div class="quick-line">Искать партию:</div>
+            <div id="quickPick" class="seg">
+                <button data-q="any">Любая</button>
+                <button data-q="time">По времени: <span id="qTime" data-notr>30 мин</span></button>
+                <button data-q="inf">Без лимита</button>
+            </div>
             <div class="lobby-sep">или с другом по коду</div>
             <button id="lobbyHost" class="big-btn">Создать комнату</button>
             <div id="hostBox" class="hidden">Код комнаты: <b id="roomCode"></b> <button id="copyCode" class="small-btn">Копировать</button><div class="host-note">Вам, как хозяину комнаты, вводить код не нужно: просто отправьте его другу.</div></div>

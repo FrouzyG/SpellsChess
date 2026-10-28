@@ -9,7 +9,8 @@ const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon' };
 const rooms = {};   // код -> { host: res, guest: res }
-let waiting = null; // код комнаты, где кто-то ждёт соперника («Быстрая игра»)
+let waitList = [];  // комнаты, где кто-то ждёт соперника в «Быстрой игре»: { code, tc } (tc: 'any', 'inf' или число минут)
+const unwait = code => { waitList = waitList.filter(w => w.code !== code); };
 
 const other = role => (role === 'host' ? 'guest' : 'host');
 const push = (res, obj) => { if (res) res.write('data: ' + JSON.stringify(obj) + '\n\n'); };
@@ -26,20 +27,22 @@ const server = http.createServer((req, res) => {
     // «Быстрая игра»: первый ждёт, второй автоматически подключается к нему
     if (url.pathname === '/quick') {
         res.setHeader('Content-Type', 'application/json');
-        const w = waiting && rooms[waiting];
-        if (w && !w.guest) {
-            const code = waiting;
-            waiting = null;
+        const tc = (url.searchParams.get('tc') || 'any').slice(0, 6);
+        // ищем ожидающего, чьё время подходит: одинаковое, либо кто-то из двоих согласен на любое
+        const idx = waitList.findIndex(w => rooms[w.code] && !rooms[w.code].guest && (w.tc === tc || w.tc === 'any' || tc === 'any'));
+        if (idx >= 0) {
+            const code = waitList[idx].code;
+            waitList.splice(idx, 1);
             res.end(JSON.stringify({ room: code, role: 'guest' }));
             return;
         }
         if (Object.keys(rooms).length > 500) { res.statusCode = 503; res.end('{}'); return; }
         const code = makeCode();
         rooms[code] = { host: null, guest: null };
-        waiting = code;
+        waitList.push({ code, tc });
         setTimeout(() => {                       // если создатель так и не подключился
             const r = rooms[code];
-            if (r && !r.host) { delete rooms[code]; if (waiting === code) waiting = null; }
+            if (r && !r.host) { delete rooms[code]; unwait(code); }
         }, 60000);
         res.end(JSON.stringify({ room: code, role: 'host' }));
         return;
@@ -67,7 +70,7 @@ const server = http.createServer((req, res) => {
             if (!cur || cur[role] !== res) return;
             cur[role] = null;
             push(cur[other(role)], { t: '__close' });
-            if (role === 'host' || (!cur.host && !cur.guest)) { delete rooms[room]; if (waiting === room) waiting = null; }
+            if (role === 'host' || (!cur.host && !cur.guest)) { delete rooms[room]; unwait(room); }
         });
         return;
     }

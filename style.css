@@ -3143,3 +3143,142 @@ button {
             padding: 2px 8px;
         }
 }
+
+
+/* ===== Время партии: выбор в лобби и часы ===== */
+.tc-box {
+    margin: 10px 0 14px;
+    padding: 10px 12px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+.tc-title {
+    margin-bottom: 6px;
+    font-family: Georgia, serif;
+    font-size: 15px;
+    opacity: 0.9;
+}
+
+.tc-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+    .tc-row .small-btn {
+        min-width: 42px;
+        padding: 6px 8px;
+    }
+
+        .tc-row .small-btn:disabled {
+            opacity: 0.35;
+        }
+
+    .tc-row b {
+        min-width: 86px;
+        font-size: 22px;
+        color: var(--gold);
+    }
+
+.tc-sub {
+    margin-top: 2px;
+    font-size: 13px;
+    opacity: 0.75;
+}
+
+.tc-inf {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.tc-box.inf .tc-row b {
+    font-size: 26px;
+}
+
+.quick-line {
+    margin: 2px 0 4px;
+    font-size: 13px;
+    opacity: 0.75;
+    text-align: center;
+}
+
+.seg {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+    .seg button {
+        flex: 1;
+        padding: 8px 6px;
+        font: inherit;
+        font-size: 13px;
+        color: inherit;
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+    }
+
+        .seg button.on {
+            color: #2a1a00;
+            font-weight: 700;
+            background: var(--gold);
+            border-color: var(--gold);
+        }
+
+.clock {
+    margin-left: auto;
+    padding: 1px 8px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 17px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 8px;
+    opacity: 0.8;
+}
+
+    .clock.running {
+        opacity: 1;
+        color: #fff;
+        background: rgba(61, 220, 132, 0.28);
+        box-shadow: 0 0 0 1px #3ddc84 inset;
+    }
+
+    .clock.low {
+        color: #ffb3b3;
+    }
+
+        .clock.low.running {
+            color: #fff;
+            background: rgba(255, 70, 70, 0.55);
+            box-shadow: 0 0 0 1px #ff5a5a inset;
+            animation: clockPulse 1s infinite;
+        }
+
+@keyframes clockPulse {
+    50% {
+        opacity: 0.65;
+    }
+}
+
+@media (max-width: 760px) {
+    .panel .clock {
+        font-size: 14px;
+        padding: 0 6px;
+        margin-left: 4px;
+    }
+
+    .tc-row b {
+        min-width: 70px;
+    }
+}
