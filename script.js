@@ -1044,7 +1044,7 @@ function bumpInvis(mv) {
     if (!G.sel) return;
     const sr = G.sel.r, sc = G.sel.c, p = G.board[sr][sc];
     let tgt = null, why = '';
-    if (mv.pin) { tgt = mv.pin; why = 'фигура, которую она связывала, попыталась сойти'; }
+    if (mv.pin) { tgt = mv.pin; why = p && p.t === 'k' ? 'король попытался встать под её удар' : 'фигура, которую она связывала, попыталась сойти'; }
     else if (mv.blk && p && p.t === 'p') { tgt = mv.blk; why = 'в неё упёрлась пешка'; }
     if (!tgt) return;
     const q = G.board[tgt[0]][tgt[1]];
@@ -1067,7 +1067,7 @@ function applyInvisView(p, r, c, mv) {
         if (real) { shown.add(real); return; }
         const blk = moveCells(d).find(([rr, cc]) => { const q = G.board[rr][cc]; return q && q.invis && q !== p; });
         if (!blk) {
-            const pin = p.t !== 'k' ? pinnerOf(p, d) : null;      // фигуру связывает невидимка
+            const pin = pinnerOf(p, d);      // фигуру связывает невидимка, а королю она грозит клетке (король её не «видит» и пытается туда встать)
             if (pin) out.push({ ...d, decoy: true, redirect: null, pin });
             return;
         }
@@ -1134,6 +1134,20 @@ function vanishGhost(r, c, reason, silent) {
 
 // Любая угроза двойнику или оригиналу (или потеря оригинала) — двойник исчезает
 function checkIllusions() {
+    // две иллюзии разных цветов: если одна угрожает другой, рассеиваются обе
+    const gs = [];
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const g = G.board[r][c];
+        if (g && g.ghost && !g.fake) gs.push({ r, c, g });
+    }
+    const clash = new Set();
+    gs.forEach(a => {
+        const hit = attackSquares(G.board, a.r, a.c);
+        gs.forEach(b2 => {
+            if (b2.g.c !== a.g.c && hit.some(([x, y]) => x === b2.r && y === b2.c)) { clash.add(a.r + ',' + a.c); clash.add(b2.r + ',' + b2.c); }
+        });
+    });
+    clash.forEach(k => { const [r, c] = k.split(',').map(Number); vanishGhost(r, c, 'две иллюзии столкнулись'); });
     for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
         const g = G.board[r][c];
         if (!g || !g.ghost || g.fake) continue;
@@ -1267,7 +1281,7 @@ function rescueDests(r, c) {
     const b = G.board, p = b[r][c], col = p.c, out = [], home = col === 'w' ? 7 : 0;
     (p.t === 'p' ? ownHalf(col).filter(x => x !== home) : [home]).forEach(rr => {
         for (let cc = 0; cc < 8; cc++) {
-            if (b[rr][cc]) continue;
+            if (b[rr][cc] && !hiddenFor(b[rr][cc], col)) continue;
             if (p.t !== 'k' && burnAt(rr, cc)) continue;
             const nb = cloneBoard(b);
             nb[rr][cc] = nb[r][c];
@@ -1305,7 +1319,9 @@ function arrowCells(col, range, ignoreFrozen) {
 }
 
 /* ---------- Архитектор: вспомогательные функции ---------- */
-const isFreeCell = (r, c) => !G.board[r][c] && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
+// VIEWER: чьими глазами смотрим (внутри abilityCells и onModeCell). Вражеская невидимка для него выглядит как свободная клетка
+let VIEWER = null;
+const isFreeCell = (r, c) => (!G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
     !G.gens.some(x => x.r === r && x.c === c) && !G.virus.some(x => x.r === r && x.c === c) && !G.vines.some(x => x.r === r && x.c === c) &&
     !G.rituals.some(x => x.r === r && x.c === c);
 
@@ -1385,6 +1401,44 @@ function aimCells(col) {
     return cells;
 }
 
+// ===== Невидимые фигуры и способности-размещения =====
+// Невидимая вражеская фигура для игрока col выглядит как пустая клетка, но мешает: попытка поставить туда фигуру её раскрывает (ход не тратится)
+const hiddenFor = (p, col) => !!p && !!p.invis && p.c !== col && !p.ghost;
+
+// Доска глазами игрока col: вражеские невидимки исчезли, вражеские иллюзии выглядят настоящими угрозами
+function visionBoard(nb, col) {
+    const vb = cloneBoard(nb);
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const p = vb[r][c];
+        if (!p || p.c === col) continue;
+        if (p.invis) vb[r][c] = null;
+        else if (p.ghost) vb[r][c] = { ...p, ghost: false };
+    }
+    return vb;
+}
+// real: безопасно на самом деле. vis: безопасно на вид (игрок видит только видимое и принимает иллюзии за настоящие фигуры)
+const placeVerdict = (nb, col) => ({ real: safeAfter(cloneBoard(nb), col), vis: safeAfter(visionBoard(nb, col), col) });
+
+// Вызывается перед способностью, которая ставит фигуру на (r,c). build(nb) выполняет постановку на копии доски.
+// Невидимка раскрывается, если на её клетку пытаются поставить фигуру. Угроза от невидимки раскрывает её только когда ставят КОРОЛЯ (isKing, Кагэватари).
+// true — действие перехвачено, ход не тратится
+function guardPlacement(col, r, c, build, isKing) {
+    const b = G.board, occ = b[r][c];
+    if (hiddenFor(occ, col)) { revealPiece(r, c, 'на её клетку попытались встать'); return true; }
+    const nb = cloneBoard(b);
+    build(nb);
+    if (safeAfter(cloneBoard(nb), col)) return false;
+    if (!isKing) return true;          // у обычных фигур угроза ничего не раскрывает
+    const k = findKing(nb, col);
+    if (k) for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+        const q = nb[i][j];
+        if (!hiddenFor(q, col) || q.frozen > 0 || q.snared > 0) continue;
+        if (attackSquares(nb, i, j).some(([x, y]) => x === k[0] && y === k[1])) revealPiece(i, j, 'ей встали под угрозу');
+    }
+    return true;          // небезопасное действие не выполняем в любом случае
+}
+function cancelAbilityMode() { G.mode = null; G.sel = null; G.moves = []; render(); }
+
 // t — запись из сброса {t, x} для воскрешения и зомби; first — достаточно найти одну цель
 function abilityCells(key, col, t, first) {
     const b = G.board, cells = [];
@@ -1394,7 +1448,7 @@ function abilityCells(key, col, t, first) {
     if (key === 'resurrect' || key === 'raise') {
         (t.t === 'p' ? ownHalf(col) : [col === 'w' ? 7 : 0]).forEach(r => {   // первая горизонталь (пешка: любая из первых четырёх)
             for (let c = 0; c < 8; c++) {
-                if (b[r][c]) continue;
+                if (b[r][c] && !hiddenFor(b[r][c], col)) continue;
                 const nb = cloneBoard(b);
                 nb[r][c] = { ...mk(t.t, col), x: [...(t.x || [])], moved: true, zombie: key === 'raise' };
                 if (safeAfter(nb, col)) cells.push([r, c]);
@@ -1509,13 +1563,16 @@ function abilityCells(key, col, t, first) {
     } else if (key === 'teleport') {
         const k = findKing(b, col);
         if (!k) return [];
+        const show = [];
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-            if (b[r][c]) continue;
+            if (b[r][c] && !hiddenFor(b[r][c], col)) continue;
             const nb = cloneBoard(b);
             nb[r][c] = nb[k[0]][k[1]];
             nb[k[0]][k[1]] = null;
-            if (safeAfter(nb, col)) cells.push([r, c]);
+            const v = placeVerdict(nb, col);
+            if (v.vis || v.real) { cells.push([r, c]); if (v.vis) show.push([r, c]); }
         }
+        cells.show = show;
     } else if (key === 'conveyor') {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             if (isFreeCell(r, c) && conveyorDirs(r, c, col).length) cells.push([r, c]);
@@ -1555,7 +1612,7 @@ function abilityCells(key, col, t, first) {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             if (G.hogs.some(h => h.r === r && h.c === c)) continue;
             const p = b[r][c];
-            if (!p) cells.push([r, c]);                         // пустая клетка: скрыто и бесплатно
+            if (!p || hiddenFor(p, col)) cells.push([r, c]);    // пустая клетка (или невидимка врага): скрыто и бесплатно
             else if (safeNow && !p.ghost) cells.push([r, c]);   // на фигуру: видно и тратит ход
         }
     } else if (key === 'superposition') {
@@ -1577,13 +1634,13 @@ function abilityCells(key, col, t, first) {
     } else if (key === 'trap') {
         if (!safeNow) return [];
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-            if (!b[r][c] && !G.traps.some(x => x.r === r && x.c === c)) cells.push([r, c]);
+            if ((!b[r][c] || hiddenFor(b[r][c], col)) && !G.traps.some(x => x.r === r && x.c === c)) cells.push([r, c]);
         }
     } else if (key === 'lure') {
         if (!safeNow) return [];
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             const p = b[r][c];
-            if (p) { if (p.c === col && !p.ghost && p.t !== 'k' && !p.lure) cells.push([r, c]); }
+            if (p && !hiddenFor(p, col)) { if (p.c === col && !p.ghost && p.t !== 'k' && !p.lure) cells.push([r, c]); }
             else if (!G.lureCells.some(x => x.r === r && x.c === c)) cells.push([r, c]);
         }
     }
@@ -2594,6 +2651,7 @@ function instantAbility(k, via) {
         continueTurn();
     } else if (k === 'misclick') {
         const n = HIST.length, snap = HIST[n - 3];
+        REW.undo = true;      // для перемотки: убрать только два отменённых хода
         G = structuredClone(snap.state);
         HIST = HIST.slice(0, n - 2);
         G.cd[col].misclick = cdOf(col, 'misclick');
@@ -2610,6 +2668,7 @@ function instantAbility(k, via) {
 function doGroundhog(r, c) {
     const col = G.turn, via = G.mode && G.mode.via, cdKey = via || 'groundhog';
     const target = G.board[r][c];
+    if (hiddenFor(target, col)) revealPiece(r, c, 'на неё применили Ход сурка');      // это уже «фигура под ловушкой»: ход тратится
     G.hogs.push({ r, c, owner: col, exempt: target ? uidOf(target) : null, visible: !!target });
     if (target) {
         G.fx.push({ r, c, type: 'cast' });
@@ -2662,9 +2721,22 @@ function startMode(k, via) {
     else G.mode = { ...base, cells: abilityCells(k, G.turn) };
 }
 
+// Способности, зависящие от свободной клетки: попытка применить их на клетку с невидимой вражеской фигурой раскрывает её, ход не тратится
+const FREE_CELL_KEYS = ['ritual', 'vine', 'virus', 'trap', 'lure', 'generator', 'conveyor', 'portals', 'relocate'];
+
 function onModeCell(r, c) {
     const m = G.mode, t = m.type;
-    if (t === 'resurrect' || t === 'raise') { useAbility(t, r, c, m.piece); return; }
+    if (FREE_CELL_KEYS.includes(t) && hiddenFor(G.board[r][c], G.turn)) {
+        revealPiece(r, c, 'на её клетку попытались поставить плитку или ловушку');
+        cancelAbilityMode();
+        return;
+    }
+    if (t === 'resurrect' || t === 'raise') {
+        const d = G.grave[m.piece.col][m.piece.idx], me = G.turn;
+        if (guardPlacement(me, r, c, nb => { nb[r][c] = { ...mk(d.t, me), x: [...(d.x || [])], moved: true, zombie: t === 'raise' }; })) { cancelAbilityMode(); return; }
+        useAbility(t, r, c, m.piece);
+        return;
+    }
 
     if (t === 'illusion') {
         if (m.stage === 'piece') {
@@ -2707,6 +2779,8 @@ function onModeCell(r, c) {
             G.sel = { r, c };
             render();
         } else {
+            const me = G.turn, f = m.from;
+            if (guardPlacement(me, r, c, nb => { nb[r][c] = nb[f[0]][f[1]]; nb[f[0]][f[1]] = null; })) { cancelAbilityMode(); return; }
             doRescue(m.from, [r, c]);
         }
         return;
@@ -2855,7 +2929,12 @@ function onModeCell(r, c) {
     }
 
     if (t === 'aim') { placeAim(r, c); return; }
-    if (t === 'teleport') { doTeleport(r, c); return; }
+    if (t === 'teleport') {
+        const me = G.turn, k = findKing(G.board, me);
+        if (guardPlacement(me, r, c, nb => { nb[r][c] = nb[k[0]][k[1]]; nb[k[0]][k[1]] = null; }, true)) { cancelAbilityMode(); return; }
+        doTeleport(r, c);
+        return;
+    }
     if (t === 'fenyan') { doFenyan((r + c) % 2); return; }
 
     useAbility(t, r, c);
@@ -3027,7 +3106,7 @@ function renderBoard() {
     const flip = NET.on && NET.me === 'b';         // чёрные видят доску со своей стороны
     $('#app').classList.toggle('flipped', flip);
     if (G.sel && actor) G.moves.filter(m => !m.hidden).forEach(m => targets.set(m.tr + ',' + m.tc, ((G.board[m.tr][m.tc] && !G.board[m.tr][m.tc].invis && !supOpen(G.board, G.board[m.tr][m.tc])) || m.ep) ? 't-cap' : 't-move'));
-    if (G.mode && G.mode.cells && actor) G.mode.cells.forEach(([r, c]) => targets.set(r + ',' + c, 't-' + G.mode.type));
+    if (G.mode && G.mode.cells && actor) (G.mode.cells.show || G.mode.cells).forEach(([r, c]) => targets.set(r + ',' + c, 't-' + G.mode.type));      // show: клетки, которые подсвечиваем (остальные нажимаются, но выглядят опасными)
     const kingPos = G.check ? findKing(G.board, G.turn) : null;
     const must = new Set(G.over || G.mode || !actor ? [] : G.forced.map(m => m.fr + ',' + m.fc));
 
@@ -3067,7 +3146,14 @@ function renderBoard() {
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me))) html += '<div class="trap-mark">🪤</div>';
             if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${vn.left}</i></div>`; }
             if (G.virus.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark virus-mark">☣️</div>';
-            if (G.rituals.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark ritual-mark">🕯️</div>';
+            {
+                const rt = G.rituals.find(x => x.r === r && x.c === c);
+                if (rt) {
+                    // онлайн: чужие плитки красные. За одним экраном обычный цвет у того, кто поставил ритуал первым
+                    const mine = NET.on ? rt.owner === NET.me : rt.owner === G.rituals[0].owner;
+                    html += `<div class="tile-mark ritual-mark${mine ? '' : ' enemy'}">🕯️</div>`;
+                }
+            }
             const gm = G.gens.find(x => x.r === r && x.c === c);
             if (gm) html += `<div class="tile-mark gen-mark ${gm.sign === '+' ? 'plus' : 'minus'} ${G.hero[gm.owner] === 'architect' ? '' : 'alt'}">${gm.sign === '+' ? '＋' : '－'}</div>`;
             const hg = G.hogs.find(x => x.r === r && x.c === c);
@@ -3301,7 +3387,7 @@ function buildSetup() {
                 `<div class="opp-wait">${NET.oppReady ? '✅ Соперник готов' : '⏳ Соперник выбирает героя...'}</div>`;
             return;
         }
-        $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML = Object.entries(HEROES).map(([id, h]) => {
+        $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML = '<button class="rand-hero" type="button">🎲 Случайный герой</button>' + Object.entries(HEROES).map(([id, h]) => {
             const ps = PASSIVES[h.passive], open = openHeroes.has(id);
             return `
       <div class="hero-card ${selectedHeroes[side] === id ? 'chosen' : ''} ${open ? 'open' : ''}" data-hero="${id}">
@@ -3366,6 +3452,16 @@ $('#setup').addEventListener('click', e => {
         const id = more.closest('.hero-card').dataset.hero;
         if (openHeroes.has(id)) openHeroes.delete(id); else openHeroes.add(id);
         buildSetup();
+        return;
+    }
+    const rb = e.target.closest('.rand-hero');
+    if (rb) {
+        const sd = rb.closest('.side-pick').dataset.side;
+        if (NET.on && (sd !== NET.me || NET.ready)) return;
+        const ids = Object.keys(HEROES);
+        selectedHeroes[sd] = ids[Math.floor(Math.random() * ids.length)];
+        buildSetup();
+        setTimeout(() => { const ch = document.querySelector(`.side-pick[data-side="${sd}"] .hero-card.chosen`); if (ch) ch.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 50);
         return;
     }
     const card = e.target.closest('.hero-card');
@@ -4068,6 +4164,13 @@ const EN = {
     "Сдаться": "Resign",
     "Новая игра": "New game",
     "Завершить ход": "End turn",
+    "на её клетку попытались поставить плитку или ловушку": "someone tried to place a tile or trap on its square",
+    "на неё применили Ход сурка": "Groundhog Move was used on it",
+    "🎲 Случайный герой": "🎲 Random hero",
+    " (две иллюзии столкнулись": " (two illusions collided",
+    "две иллюзии столкнулись": "two illusions collided",
+    "на её клетку попытались встать": "someone tried to stand on its square",
+    "ей встали под угрозу": "someone stepped under its threat",
     "Время партии": "Game time",
     "Время партии: определится, когда подключится соперник.": "Game time: will be set when your opponent connects.",
     "Время партии: ": "Game time: ",
@@ -4273,7 +4376,7 @@ setLang(LANG);
     const closeSheet = () => app.classList.remove('sheet-open');
 
     g('mMenu').addEventListener('click', () => openSheet(null));
-    g('mLog').addEventListener('click', () => openSheet(g('log').previousElementSibling));
+    g('mLog').addEventListener('click', () => { openSheet(g('log').previousElementSibling); setTimeout(() => { const l = g('log'); l.scrollTop = l.scrollHeight; }, 80); });
     g('mChat').addEventListener('click', () => openSheet(chat));
     g('mClose').addEventListener('click', closeSheet);
     mEnd.addEventListener('click', () => end.click());
@@ -4294,11 +4397,20 @@ function syncHeroButtons() {
 }
 
 // ===== Перемотка ходов: только просмотр, партию не меняет =====
-const REW = { snaps: [], idx: -1, g: null, lastLen: -1, broken: false };   // idx -1: показываем текущую позицию
+const REW = { snaps: [], idx: -1, g: null, lastLen: -1, broken: false, fresh: false, undo: false };   // idx -1: показываем текущую позицию
 
 function takeSnap() {
     if (!G || REW.broken || !G.log) return;
-    if (REW.g !== G || G.log.length < REW.lastLen) { REW.snaps = []; REW.idx = -1; REW.g = G; REW.lastLen = -1; }   // новая партия
+    if (REW.g !== G || G.log.length < REW.lastLen) {
+        let keep = -1;
+        if (REW.undo && REW.snaps.length) {            // Мисклик: оставляем всё до отменённых ходов
+            const want = G.log.length - 1;             // длина журнала до записи про мисклик
+            for (let i = REW.snaps.length - 1; i >= 0; i--) if (REW.snaps[i].log.length === want) { keep = i; break; }
+        }
+        if (keep >= 0) { REW.snaps.length = keep + 1; REW.lastLen = REW.snaps[keep].log.length; REW.idx = Math.min(REW.idx, keep); REW.g = G; }
+        else { REW.snaps = []; REW.idx = -1; REW.g = G; REW.lastLen = -1; REW.fresh = false; }   // новая партия
+        REW.undo = false;
+    }
     if (G.log.length === REW.lastLen) return;
     try {
         const { log, ...rest } = G;
@@ -4307,6 +4419,7 @@ function takeSnap() {
         snap.sel = null; snap.moves = []; snap.mode = null; snap.fx = [];
         REW.snaps.push(snap);
         REW.lastLen = G.log.length;
+        if (REW.idx >= 0) REW.fresh = true;      // пока смотрели прошлое, в партии появился новый ход
     } catch (e) { REW.broken = true; }
 }
 
@@ -4321,7 +4434,7 @@ const viewWrap = fn => function (...a) {
 };
 const _render = render;
 render = function () {
-    if (G && REW.idx < 0) takeSnap();
+    if (G) takeSnap();      // снимки делаем всегда, в том числе пока смотрим прошлое
     viewWrap(_render).call(this);
     syncHeroButtons();
     updateRewindUI();
@@ -4337,6 +4450,7 @@ function rewindTo(i) {
     if (last < 0) return;
     i = Math.max(0, Math.min(last, i));
     REW.idx = i === last ? -1 : i;
+    if (REW.idx < 0) REW.fresh = false;
     render();
 }
 function rewindStep(d) {
@@ -4357,6 +4471,7 @@ function updateRewindUI() {
     document.getElementById('rwPrev').disabled = cur <= 0;
     document.getElementById('rwNext').disabled = cur >= last;
     document.getElementById('rwEnd').disabled = cur >= last;
+    document.getElementById('rwEnd').classList.toggle('glow', REW.fresh && REW.idx >= 0);      // подсветка кнопки «к текущей позиции»
 }
 
 document.getElementById('rwStart').addEventListener('click', () => rewindTo(0));
@@ -4618,3 +4733,18 @@ render = function () { _renderClock.call(this); paintClocks(); };
     if (mq.addEventListener) mq.addEventListener('change', place); else mq.addListener(place);
     place();
 })();
+
+
+// Внутри подбора целей и выбора клетки вражеская невидимка выглядит как свободная клетка
+const _abilityCellsV = abilityCells;
+abilityCells = function (key, col) {
+    const prev = VIEWER;
+    VIEWER = col;
+    try { return _abilityCellsV.apply(this, arguments); } finally { VIEWER = prev; }
+};
+const _onModeCellV = onModeCell;
+onModeCell = function () {
+    const prev = VIEWER;
+    VIEWER = G.turn;
+    try { return _onModeCellV.apply(this, arguments); } finally { VIEWER = prev; }
+};
