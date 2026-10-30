@@ -15,7 +15,7 @@ const CONFIG = {
         fireball: 7, freeze: 5, copy: 15,            // Маг
         illusion: 3, hypnosis: 8, confusion: 7,      // Экстрасенс
         raise: 8, frankenstein: 3, apocalypse: 8,    // Некромант
-        trap: 4, arrow: 3, lure: 7,                  // Охотник
+        trap: 4, arrow: 4, lure: 7,                  // Охотник
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
         conveyor: 5, portals: 8, relocate: 2,        // Архитектор
         shomen: 9, fukashi: 7, fenyan: 6,            // Самурай
@@ -25,13 +25,18 @@ const CONFIG = {
         groundhog: 6,                                // Ход сурка
         timeslow: 4,                                 // пассивка Повелителя времени
         guardian: 5, purify: 10, lie: 10, virus: 3,  // новые способности
-        vine: 7, ritual: 5, bumpuku: 3, generator: 7
+        vine: 7, ritual: 5, bumpuku: 3, generator: 7,
+        blunder: 7, banana: 7, jaws: 8, tomato: 4        // Шут
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
     timePassiveCostsTurn: false,   // true: пассивка Повелителя времени тратит ход
     guardianTurns: 5,        // Ангел-хранитель: сколько ходов держится самоотверженность
     wardTurns: 3,            // Очищение: сколько ходов держится защита от магии
+    capTurns: 3,             // Шут: сколько ходов ВРАГА держится шутовской колпак
+    jawsTurns: 3,            // Шут: сколько своих ходов живут заводные челюсти
+    tomatoTurns: 5,          // Шут: сколько ходов ВРАГА способность остаётся отключённой
+    betrayAfter: 10,         // Шут: после какого по счёту хода ВРАГА можно ходить предательской фигурой
     bumpukuTurns: 2,         // Бумпуку: на каком своём ходу взрывается бомба
     hogOnce: true,           // Ход сурка: true — ловушка стоит вечно, но срабатывает один раз и исчезает; false — срабатывает на каждую новую фигуру
     vineTurns: 5,            // Лоза: сколько ходов владельца она стоит
@@ -51,6 +56,7 @@ const CONFIG = {
 const GLYPH = { k: '♚\uFE0E', q: '♛\uFE0E', r: '♜\uFE0E', b: '♝\uFE0E', n: '♞\uFE0E', p: '♟\uFE0E' };
 const pImg = (c, t) => `<i class="pi ${c} t-${t}">${GLYPH[t]}</i>`;   // мини-фигура (картинка, а без папки pieces обычный символ)
 const SYM = { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' };
+GLYPH.j = '🦷'; SYM.j = '🦷';      // заводные челюсти Шута
 
 const ABILITIES = {
     // --- Паладин
@@ -215,6 +221,28 @@ const ABILITIES = {
     }
 };
 
+// ---- Шут ----
+Object.assign(ABILITIES, {
+    blunder: {
+        icon: '🤡', name: 'Бриллиантовый зевок',
+        desc: 'Шутовской колпак на вашу фигуру (враг не видит, на какую): ' + CONFIG.capTurns + ' хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает.'
+    },
+    banana: {
+        free: true,
+        icon: '🍌', name: 'Банановая кожура',
+        desc: 'Невидимая для врага кожура на свободной клетке с направлением (вверх, вниз, влево, вправо): вставшая на неё фигура (не король) поскальзывается и съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.'
+    },
+    jaws: {
+        icon: '🦷', name: 'Заводные челюсти',
+        desc: 'Фигура на вашей половине доски: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт ' + CONFIG.jawsTurns + ' ваших хода. Её можно срубить.'
+    },
+    tomato: {
+        free: true,
+        icon: '🍅', name: 'Красная обструкция',
+        desc: 'Помидор в одну из способностей врага: она отключается на ' + CONFIG.tomatoTurns + ' ходов врага (перезарядка идёт как обычно). Нельзя бросить в уже отключённую способность. Ход не тратится.'
+    }
+});
+
 const PASSIVES = {
     brotherhood: {
         icon: '🤝', name: 'Братство',
@@ -247,13 +275,18 @@ const PASSIVES = {
     timeslow: {
         free: true,
         icon: '⌛', name: 'Замедление времени',
-        desc: 'Второй клик по королю или кнопка, затем способность врага: её перезарядка +1 сейчас и +1 на всю партию, у остальных перезаряжающихся +1 сейчас. ' + (CONFIG.timePassiveCostsTurn ? 'Тратит ход.' : 'Ход не тратится.') + ''
+        desc: 'Второй клик по королю или кнопка, затем способность врага: её перезарядка +2 сейчас и +1 на всю партию, у остальных перезаряжающихся +1 сейчас. ' + (CONFIG.timePassiveCostsTurn ? 'Тратит ход.' : 'Ход не тратится.') + ''
     },
     aim: {
         free: true,
         icon: '🎯', name: 'Меткий глаз',
-        desc: 'Второй клик по королю или кнопка: метка стрелы в квадрате 3×3 вокруг короля и ещё на 2 клетки по горизонтали и вертикали. Ход не тратится.'
+        desc: 'Второй клик по королю или кнопка: метка стрелы в радиусе 3 шагов вокруг короля (шаг: на клетку вверх, вниз или вбок). Ход не тратится.'
     }
+};
+
+PASSIVES.pretense = {
+    icon: '🃏', name: 'Притворство',
+    desc: 'В начале партии тайно выберите вражеского слона или коня: Предательство. Враг ходит ею как обычно. После ' + CONFIG.betrayAfter + '-го хода врага вы можете сделать ею ход как своей фигурой: она навсегда сменит цвет и будет подчиняться только вам.'
 };
 
 const HEROES = {
@@ -268,10 +301,12 @@ const HEROES = {
     timelord: { icon: '⏳', name: 'Повелитель времени', tag: 'Похититель темпа', passive: 'timeslow', abilities: ['zawarudo', 'misclick', 'superposition', 'groundhog'] }
 };
 
+HEROES.jester = { icon: '🤡', name: 'Шут', tag: 'Трюки и подлянки', passive: 'pretense', abilities: ['blunder', 'banana', 'jaws', 'tomato'] };
+
 // Способности, у которых выбор идёт в два шага: сначала фигура, потом клетка
 const ACTIVE_PASSIVES = ['aim', 'teleport', 'timeslow'];
 const NO_TARGET = ['zawarudo', 'misclick'];   // способности без выбора цели: срабатывают сразу по кнопке   // пассивки, у которых есть кнопка и перезарядка
-const STAGED = ['lie', 'generator', 'illusion', 'frankenstein', 'rescue', 'confusion', 'apocalypse', 'conveyor', 'portals', 'relocate', 'soulmates'];
+const STAGED = ['lie', 'generator', 'illusion', 'frankenstein', 'rescue', 'confusion', 'apocalypse', 'conveyor', 'portals', 'relocate', 'soulmates', 'banana'];
 
 const other = c => (c === 'w' ? 'b' : 'w');
 const inb = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
@@ -384,7 +419,7 @@ const ritualAt = (r, c) => G.rituals.find(x => x.r === r && x.c === c);
 // Можно ли пройти сквозь фигуру t на клетке (r, c) фигурой цвета col: прозрачность или призрачная плитка Ритуала
 const passThru = (t, col, r, c) => !!t && !t.ghost && ((t.c === col && isPhase(t)) || (!!ritualAt(r, c) && ritualAt(r, c).owner === col));
 const supOpen = (b, t) => !!t && !!t.sup && !t.ghost && !!t.prev && !b[t.prev[0]][t.prev[1]];
-const scaredDirs = tp => (tp === 'r' ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
+const scaredDirs = tp => ((tp === 'r' || tp === 'j') ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
 
 // Выход из портала: если на клетке портал, возвращает клетку его пары
 function portalExit(r, c) {
@@ -449,6 +484,8 @@ function attackSquares(b, r, c) {
             [-1, 1].forEach(dc => { if (inb(r + d, c + dc)) out.push([r + d, c + dc]); });
         } else if (tp === 'k') {
             KG.forEach(([dr, dc]) => { if (inb(r + dr, c + dc)) out.push([r + dr, c + dc]); });
+        } else if (tp === 'j') {
+            ORTH.forEach(([dr, dc]) => { if (inb(r + dr, c + dc)) out.push([r + dr, c + dc]); });
         } else {
             out.push(...lineSquares(b, r, c, tp));
         }
@@ -461,7 +498,7 @@ function isAttacked(b, r, c, by, noKing) {
     for (let i = 0; i < 8; i++) {
         for (let j = 0; j < 8; j++) {
             const p = b[i][j];
-            if (!p || p.c !== by || p.frozen > 0 || p.snared > 0 || p.ghost || (noKing && p.t === 'k')) continue;
+            if (!p || p.c !== by || p.frozen > 0 || p.snared > 0 || p.ghost || p.cap > 0 || (noKing && p.t === 'k')) continue;      // фигура в шутовском колпаке шахов не создаёт
             if (attackSquares(b, i, j).some(([x, y]) => x === r && y === c)) return true;
         }
     }
@@ -628,6 +665,13 @@ function pseudoMoves(b, r, c) {
                 const t = b[tr][tc];
                 if (passable(t) || canTake(t, tr, tc)) add(tr, tc);
             });
+        } else if (tp === 'j') {                       // заводные челюсти: на 1 клетку по вертикали и горизонтали, ходят и рубят
+            ORTH.forEach(([dr, dc]) => {
+                const tr = r + dr, tc = c + dc;
+                if (!inb(tr, tc)) return;
+                const t = b[tr][tc];
+                if (passable(t) || canTake(t, tr, tc)) add(tr, tc);
+            });
         } else if (tp === 'k') {
             KG.forEach(([dr, dc]) => {
                 const tr = r + dr, tc = c + dc;
@@ -717,10 +761,10 @@ const moveCells = mv => (mv.path ? [...mv.path, [mv.tr, mv.tc]] : pathCells(mv))
 
 // Применяет ход к доске (меняет её). Возвращает список погибших фигур.
 // Ценность фигур для выбора ангела-хранителя (у Франкенштейна считается исходная фигура, пришитые ходы не в счёт)
-const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, j: 1 };
 
-// Ангел-хранитель: из самоотверженных фигур в 3×3 от жертвы выбирается САМАЯ ЦЕННАЯ.
-// Если равны слон и конь, жертвует собой слон; иначе при равенстве выбор «случайный» (одинаковый у обоих игроков онлайн).
+// Ангел-хранитель: если рядом с жертвой несколько ангелов, собой жертвует наименее ценный (при равенстве «случайный», одинаковый у обоих игроков онлайн).
+// Какую из погибающих фигур спасать, решает orderVictims: самую ценную (при равенстве слон раньше коня).
 function pickGuardian(board, vr, vc, victim, exclude, unsafe) {
     let cands = [];
     for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
@@ -733,9 +777,8 @@ function pickGuardian(board, vr, vc, victim, exclude, unsafe) {
         cands.push({ a, v: victim, from: [ar, ac], to: [vr, vc] });
     }
     if (!cands.length) return null;
-    const top = Math.max(...cands.map(x => PIECE_VAL[x.a.t] || 0));
-    cands = cands.filter(x => (PIECE_VAL[x.a.t] || 0) === top);
-    if (cands.some(x => x.a.t === 'b')) cands = cands.filter(x => x.a.t === 'b');
+    const low = Math.min(...cands.map(x => PIECE_VAL[x.a.t] || 0));
+    cands = cands.filter(x => (PIECE_VAL[x.a.t] || 0) === low);
     if (cands.length === 1) return cands[0];
     const h = ((G && G.log ? G.log.length : 0) * 31 + ((G && G.deaths) || 0) * 17 + vr * 8 + vc) >>> 0;
     return cands[h % cands.length];
@@ -758,6 +801,17 @@ function applyMove(board, mv, promo) {
     let victim = null;
     if (mv.ep) { victim = board[mv.pr][mv.pc]; board[mv.pr][mv.pc] = null; }
     else if (board[mv.tr][mv.tc] && !supHits.some(h => h.r === mv.tr && h.c === mv.tc)) victim = board[mv.tr][mv.tc];
+    // Колпак Шута: срубивший носителя колпака погибает вместо него (король неуязвим для магии), колпак слетает.
+    // Если из-за гибели срубившего его собственному королю откроется шах, он остаётся жив, колпак всё равно слетает, ход потрачен
+    if (victim && victim.cap > 0 && victim.c !== p.c && p.t !== 'k' && !p.ghost && !victim.ghost) {
+        if (mv.ep) board[mv.pr][mv.pc] = victim;
+        delete victim.cap; delete victim.capBy;
+        res.capBack = victim;
+        board[mv.fr][mv.fc] = null;
+        if (kingAttacked(board, p.c)) { board[mv.fr][mv.fc] = p; res.capSaved = true; }
+        else res.dead.push(p);
+        return res;
+    }
     // Ангел-хранитель: самоотверженная фигура рядом меняется с жертвой местами и гибнет вместо неё
     if (victim && victim.t !== 'k' && !victim.ghost) {
         const vr = mv.ep ? mv.pr : mv.tr, vc = mv.ep ? mv.pc : mv.tc;
@@ -910,7 +964,7 @@ const legalMovesAt = (b, r, c) => pseudoMoves(b, r, c).filter(m => isLegalMove(b
 function anyLegalMove(b, col) {
     for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
         const p = b[r][c];
-        if (p && p.c === col && !p.ghost && legalMovesAt(b, r, c).length) return true;
+        if (p && (p.c === col || (p.betray === col && betrayReady(col))) && !p.ghost && asJester(p, col, () => legalMovesAt(b, r, c)).length) return true;
     }
     return false;
 }
@@ -1387,14 +1441,13 @@ function relocateDests(r, c, col, first) {
     return out;
 }
 
-// Пассивка Охотника: квадрат 3×3 вокруг короля и ещё 4 клетки на расстоянии 2 по горизонтали и вертикали
+// Пассивка Охотника: цель в пределах 3 шагов от короля (шаг = на клетку по вертикали или горизонтали)
 function aimCells(col) {
     const b = G.board, k = findKing(b, col), cells = [];
     if (!k) return cells;
     for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
         const dr = Math.abs(r - k[0]), dc = Math.abs(c - k[1]);
-        const near = Math.max(dr, dc) <= 1, cross = (dr === 2 && dc === 0) || (dr === 0 && dc === 2);
-        if (!near && !cross) continue;
+        if (dr + dc > 3) continue;      // 3 шага по клеткам (вперёд/назад/вбок), то есть ромб вокруг короля
         if (magicProof(b, r, c)) continue;
         cells.push([r, c]);
     }
@@ -1668,6 +1721,7 @@ const blockedByForce = (col, k) => col === G.turn && G.forced && G.forced.length
 
 function abilityAvailable(col, k) {
     if (G.cd[col][k] > 0) return false;
+    if (G.disabled && G.disabled[col] && G.disabled[col][k] > 0) return false;      // отключено Красной обструкцией
     if (k === 'copy') {
         const eff = G.lastAb[other(col)];
         if (!eff || eff === 'misclick' || blockedByForce(col, eff)) return false;
@@ -1699,6 +1753,14 @@ let selectedHeroes = { w: 'paladin', b: 'mage' };
 
 // Ангел-хранитель: самоотверженная фигура в 3×3 от жертвы меняется с ней местами и гибнет вместо неё.
 // unsafe(r, c) — клетки, где жертва тоже погибла бы (туда её не переставляем). Возвращает фигуру, которая теперь стоит на месте жертвы (и должна погибнуть), или null.
+// Порядок обработки одновременно гибнущих фигур: сначала самые ценные, чтобы ангел спас именно их.
+// Равные по ценности: слон раньше коня, дальше «случайно» (по состоянию партии, одинаково у обоих игроков)
+function orderVictims(list) {
+    const seed = (G && G.log ? G.log.length : 0) * 131;
+    const key = v => [-(PIECE_VAL[v.p.t] || 0), v.p.t === 'b' ? 0 : 1, (seed + v.r * 17 + v.c * 7) % 97];
+    return list.slice().sort((a, b) => { const x = key(a), y = key(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
+}
+
 function guardSwap(r, c, unsafe) {
     const v = G.board[r][c];
     if (!v || v.t === 'k' || v.ghost) return null;
@@ -1713,6 +1775,8 @@ function guardSwap(r, c, unsafe) {
 }
 
 function toGrave(p) {
+    if (p.t === 'j') return;      // заводные челюсти не уходят в сброс
+    if (p.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(p)}: фигура погибла`);
     G.deaths = (G.deaths || 0) + 1;
     G.grave[p.orig || p.c].push({ t: p.t, x: [...(p.x || [])] });
 }
@@ -1726,13 +1790,15 @@ function startGame() {
         ep: null, sel: null, moves: [], mode: null, forced: [], forcedKind: null,
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
-        cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: []
+        cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
+        bananas: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }
     };
     HIST = [];
     ['w', 'b'].forEach(c => {
         const h = HEROES[G.hero[c]];
         h.abilities.forEach(k => { G.cd[c][k] = CONFIG.startCooldown; });
         if (CONFIG.cooldown[h.passive] !== undefined) G.cd[c][h.passive] = CONFIG.startCooldown;
+        if (G.hero[c] === 'jester') G.pretense[c] = 'pending';      // Притворство: выбор предателя перед первым ходом Шута
     });
     addLog('n', `Партия началась: Белые — ${HEROES[G.hero.w].name}, Чёрные — ${HEROES[G.hero.b].name}`);
     $('#setup').classList.add('hidden');
@@ -1780,17 +1846,22 @@ function computeState(c) {
 
 // Удар Сёмен-ути: все фигуры на вертикали погибают (кроме королей и фигур под барьером Мага)
 function shomenStrike(f, owner) {
-    const dead = [];
+    const dead = [], vic = [];
     for (let rr = 0; rr < 8; rr++) {
         const q = G.board[rr][f.c];
         G.fx.push({ r: rr, c: f.c, type: 'arrowhit' });
         if (!q || magicProof(G.board, rr, f.c)) continue;
         if (q.ghost) { vanishGhost(rr, f.c, 'удар Сёмен-ути'); continue; }
+        vic.push({ r: rr, c: f.c, p: q });
+    }
+    orderVictims(vic).forEach(({ r: rr }) => {
+        const q = G.board[rr][f.c];
+        if (!q) return;
         const dq = guardSwap(rr, f.c, (ar, ac) => ac === f.c) || q;
         G.board[rr][f.c] = null;
         toGrave(dq);
         dead.push(`${pieceSym(dq)}${sqName(rr, f.c)}`);
-    }
+    });
     sfx('boom');
     addLog(owner, `⚔️ Сёмен-ути по вертикали ${'abcdefgh'[f.c]}: ${dead.length ? 'погибли ' + dead.join(', ') : 'никого не задело'}`);
 }
@@ -1803,7 +1874,7 @@ function bombStep(c) {
         if (G.board[r][cc] !== p) return;
         p.bomb--;
         if (p.bomb > 0) return;
-        const dead = [];
+        const dead = [], vic = [];
         for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
             const rr = r + dr, c2 = cc + dc;
             if (!inb(rr, c2)) continue;
@@ -1811,11 +1882,16 @@ function bombStep(c) {
             const q = G.board[rr][c2];
             if (!q || magicProof(G.board, rr, c2)) continue;
             if (q.ghost) { vanishGhost(rr, c2, 'взрыв', true); continue; }
+            vic.push({ r: rr, c: c2, p: q });
+        }
+        orderVictims(vic).forEach(({ r: rr, c: c2 }) => {
+            const q = G.board[rr][c2];
+            if (!q) return;
             const dq = guardSwap(rr, c2, (ar, ac) => Math.abs(ar - r) <= 1 && Math.abs(ac - cc) <= 1) || q;
             G.board[rr][c2] = null;
             toGrave(dq);
             dead.push(`${pieceSym(dq)}${sqName(rr, c2)}`);
-        }
+        });
         if (G.board[r][cc] === p) { delete p.bomb; delete p.bombBy; }
         sfx('boom');
         addLog(c, `💣 Бумпуку: взрыв на ${sqName(r, cc)}: ${dead.length ? 'погибли ' + dead.join(', ') : 'никого не задело'}`);
@@ -1832,6 +1908,8 @@ function startTurn() {
     // 1. Взрываются огненные шары и прилетают стрелы игрока, чей ход начинается
     const mine = G.fire.filter(f => f.owner === c);
     G.fire = G.fire.filter(f => f.owner !== c);
+    const hitVal = f => { const q = f.kind === 'shomen' ? null : G.board[f.r][f.c]; return q && !q.ghost ? (PIECE_VAL[q.t] || 0) : 0; };
+    mine.sort((a, b) => hitVal(b) - hitVal(a));      // сначала то, что бьёт самые ценные фигуры: ангел спасёт их
     mine.forEach(f => {
         if (f.kind === 'shomen') { shomenStrike(f, c); return; }
         const arrow = f.kind === 'arrow';
@@ -1876,6 +1954,7 @@ function startTurn() {
         G.over = { winner: null, title: 'Ничья', text: 'На доске остались только короли.' };
     }
 
+    if (!G.over) startPretenseIfNeeded(c);
     HIST.push({ turn: c, state: snapshot() });
     if (HIST.length > 8) HIST.shift();
 
@@ -1906,7 +1985,9 @@ function continueTurn() {
 
 // Горящие клетки сжигают фигуры, оказавшиеся на них (поставленные способностями, например)
 function sweepBurn() {
-    G.burn.forEach(t => {
+    const ord = orderVictims(G.burn.filter(t => { const q = G.board[t.r][t.c]; return q && !q.ghost; }).map(t => ({ r: t.r, c: t.c, p: G.board[t.r][t.c], t })));
+    const rest = G.burn.filter(t => !ord.some(v => v.t === t));
+    [...ord.map(v => v.t), ...rest].forEach(t => {
         const p = G.board[t.r][t.c];
         if (!p || magicProof(G.board, t.r, t.c, t.owner, true)) return;
         if (p.ghost) { vanishGhost(t.r, t.c, 'огонь'); return; }
@@ -1956,7 +2037,7 @@ function sweepGens() {
     const occ = sign => G.gens.filter(g => g.sign === sign && G.board[g.r][g.c] && !G.board[g.r][g.c].ghost);
     const plus = occ('+'), minus = occ('-');
     if (!plus.length || !minus.length) return;
-    [...plus, ...minus].forEach(g => {
+    orderVictims([...plus, ...minus].map(g => ({ r: g.r, c: g.c, p: G.board[g.r][g.c], g }))).map(v => v.g).forEach(g => {
         const p = G.board[g.r][g.c];
         if (!p || magicProof(G.board, g.r, g.c)) return;
         const dp = guardSwap(g.r, g.c, (ar, ac) => G.gens.some(x => x.r === ar && x.c === ac)) || p;
@@ -1984,18 +2065,24 @@ const sharpAt = (r, c) => G.sharp.find(z => (r + c) % 2 === z.parity && !z.skip.
 // Острые клетки Самурая убивают фигуры, оказавшиеся на них, потом исчезают
 function sweepSharp() {
     G.sharp.forEach(z => {
+        const vic = [];
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             if ((r + c) % 2 !== z.parity || z.skip.includes(r + ',' + c)) continue;
             const p = G.board[r][c];
             if (!p || p.t === 'k' || magicProof(G.board, r, c)) continue;
             if (p.ghost) { vanishGhost(r, c, 'острая клетка'); continue; }
+            vic.push({ r, c, p });
+        }
+        orderVictims(vic).forEach(({ r, c }) => {
+            const p = G.board[r][c];
+            if (!p) return;
             const dp = guardSwap(r, c, (ar, ac) => (ar + ac) % 2 === z.parity && !z.skip.includes(ar + ',' + ac)) || p;
             G.board[r][c] = null;
             toGrave(dp);
             G.fx.push({ r, c, type: 'boom' });
             sfx('capture');
             addLog('n', `🗡 ${pieceSym(dp)} гибнет на острой клетке ${sqName(r, c)}`);
-        }
+        });
         z.left--;
     });
     const before = G.sharp.length;
@@ -2005,6 +2092,9 @@ function sweepSharp() {
 
 function endTurn() {
     const c = G.turn;
+    if (!G.done) G.done = { w: 0, b: 0 };
+    G.done[c]++;
+    if (G.done[c] === CONFIG.betrayAfter && G.board.some(row => row.some(q => q && q.betray === other(c)))) addLog('n', '🃏 Одна из фигур готова предавать');
     soulSync();
     G.bonus = null;
     G.noZForce = false;
@@ -2012,6 +2102,16 @@ function endTurn() {
     G.pairStep = null;
     G.board.forEach((row, r) => row.forEach((p, cc) => {
         if (!p) return;
+        // Заводные челюсти живут ограниченное число ходов владельца
+        if (p.t === 'j' && p.c === c) {
+            p.life--;
+            if (p.life <= 0) { G.board[r][cc] = null; G.fx.push({ r, c: cc, type: 'poof' }); addLog('n', `🦷 Заводные челюсти на ${sqName(r, cc)} ломаются и рассыпаются`); return; }
+        }
+        // Шутовской колпак слетает на ходе врага
+        if (p.cap > 0 && p.capBy && p.capBy !== c) {
+            p.cap--;
+            if (p.cap <= 0) { delete p.cap; delete p.capBy; addLog('n', `🤡 Колпак слетел с ${pieceSym(p)} на ${sqName(r, cc)}: время вышло`); }
+        }
         // Заморозка и капкан спадают в конце хода владельца фигуры
         if (p.c === c && p.frozen > 0) p.frozen--;
         if (p.c === c && p.snared > 0) p.snared--;
@@ -2039,6 +2139,7 @@ function endTurn() {
         }
     }));
     applyEffects(G.board, true);
+    sweepBananas();
     sweepBurn();
     sweepTraps();
     sweepVirus();
@@ -2048,6 +2149,10 @@ function endTurn() {
     sweepGens();
     G.vines.forEach(v => { if (v.owner === c) v.left--; });
     G.vines = G.vines.filter(v => v.left > 0);
+    Object.keys(G.disabled[c] || {}).forEach(k => {      // Красная обструкция: отключение спадает в конце ходов самого игрока
+        G.disabled[c][k]--;
+        if (G.disabled[c][k] <= 0) { delete G.disabled[c][k]; addLog('n', `🍅 Способность «${(ABILITIES[k] || PASSIVES[k]).name}» снова работает`); }
+    });
     soulSync();
     G.burn.forEach(t => { if (t.owner === c) t.life--; });      // горит столько ходов, сколько ходов у мага
     G.burn = G.burn.filter(t => t.life > 0);
@@ -2086,6 +2191,15 @@ function makeKingGhost(kr, kc, br, bc, realText, ghostText) {
 
 function executeMove(mv, promo, ctx) {
     ctx = ctx || {};
+    {   // Предательство: ход Шута предательской фигурой переводит её на его сторону навсегда
+        const q0 = G.board[mv.fr][mv.fc];
+        if (q0 && q0.betray && q0.betray === G.turn && q0.c !== G.turn && betrayReady(G.turn)) {
+            q0.c = G.turn; delete q0.betray;
+            addLog('n', `🃏 Предательство: ${pieceSym(q0)} ${sqName(mv.fr, mv.fc)} переходит на сторону Шута`);
+            G.fx.push({ r: mv.fr, c: mv.fc, type: 'hypno' });
+            sfx('hypno');
+        }
+    }
     const b = G.board, p = b[mv.fr][mv.fc], col = p.c;
     const sym = pieceSym(p), note = p.t === 'p' ? '' : sym;
     const from = sqName(mv.fr, mv.fc), to = sqName(mv.tr, mv.tc);
@@ -2147,7 +2261,11 @@ function executeMove(mv, promo, ctx) {
         if (mv.promo && !res.thorn && !res.burned) text += '=' + SYM[promo];
         if (mv.ep) text += ' (на проходе)';
     }
-    if (res.thorn) {
+    if (res.capBack) {
+        text += res.capSaved ? ` 🤡 колпак слетел с ${pieceSym(res.capBack)} на ${to}: ${sym} осталась жива` : ` 🤡 колпак слетел с ${pieceSym(res.capBack)} на ${to}: ${sym} погибла`;
+        G.fx.push({ r: mv.tr, c: mv.tc, type: 'boom' });
+        sfx('thorn');
+    } else if (res.thorn) {
         text += ` 🌵 шипы уничтожили ${sym}`;
         G.fx.push({ r: mv.tr, c: mv.tc, type: 'thorn' });
         sfx('thorn');
@@ -2355,7 +2473,8 @@ function useAbility(key, r, c, ref) {
     } else if (key === 'purify') {
         if (target.lie) revealLie(r, c);
         if (target.hypno && target.orig) target.c = target.orig;            // гипноз тоже снимается
-        ['scared', 'scaredT', 'zombie', 'shield', 'altruist', 'sup', 'lure', 'hypno', 'orig', 'fresh', 'bomb', 'bombBy', 'invis', 'phase', 'x', 'warded'].forEach(f => { delete target[f]; });
+        if (target.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(target)} на ${sqName(r, c)} (Очищение)`);
+        ['cap', 'capBy', 'betray', 'scared', 'scaredT', 'zombie', 'shield', 'altruist', 'sup', 'lure', 'hypno', 'orig', 'fresh', 'bomb', 'bombBy', 'invis', 'phase', 'x', 'warded'].forEach(f => { delete target[f]; });
         target.frozen = 0; target.snared = 0; target.shield = false;
         if (target.soul) { delete target.soul; G.soulList = G.soulList.filter(e => e.p !== target); }
         target.warded = CONFIG.wardTurns + 1;
@@ -2404,6 +2523,15 @@ function useAbility(key, r, c, ref) {
         text = `${A.icon} ${A.name} нацелена на ${sqName(r, c)} (прилетит в начале вашего следующего хода)`;
         G.fx.push({ r, c, type: 'cast' });
         sfx('arrow');
+    } else if (key === 'blunder') {
+        target.cap = CONFIG.capTurns; target.capBy = col;
+        text = `${A.icon} ${A.name}: на одну из фигур надет шутовской колпак (на какую, знает только Шут)`;
+        sfx('trap');
+    } else if (key === 'jaws') {
+        G.board[r][c] = { ...mk('j', col), moved: true, life: CONFIG.jawsTurns + 1 };
+        text = `${A.icon} ${A.name}: на ${sqName(r, c)} появляются челюсти (живут ${CONFIG.jawsTurns} ${plural(CONFIG.jawsTurns)})`;
+        G.fx.push({ r, c, type: 'revive' });
+        sfx('revive');
     } else if (key === 'trap') {
         G.traps.push({ r, c, owner: col });
         text = `${A.icon} ${A.name}: капкан установлен (место скрыто)`;
@@ -2652,9 +2780,12 @@ function instantAbility(k, via) {
     } else if (k === 'misclick') {
         const n = HIST.length, snap = HIST[n - 3];
         REW.undo = true;      // для перемотки: убрать только два отменённых хода
+        // перезарядка Мисклика (и зеркала) не зависит от перемотки времени, иначе два Повелителя могли бы отматывать друг друга бесконечно
+        const keepCd = { w: { misclick: G.cd.w.misclick, copy: G.cd.w.copy }, b: { misclick: G.cd.b.misclick, copy: G.cd.b.copy } };
         G = structuredClone(snap.state);
         HIST = HIST.slice(0, n - 2);
-        G.cd[col].misclick = cdOf(col, 'misclick');
+        ['w', 'b'].forEach(sd => { if (keepCd[sd].misclick !== undefined) G.cd[sd].misclick = keepCd[sd].misclick; if (keepCd[sd].copy !== undefined) G.cd[sd].copy = keepCd[sd].copy; });
+        G.cd[col][cdKey] = cdOf(col, cdKey);
         G.lastAb[col] = 'misclick';
         sfx('rewind');
         addLog(col, `${ABILITIES.misclick.icon} Мисклик! Время отмотано: отменены ход противника и ваш предыдущий ход`);
@@ -2688,9 +2819,9 @@ function doTimeSlow(k) {
     const col = G.turn, en = other(col), parts = [];
     HEROES[G.hero[en]].abilities.forEach(a => {
         if (a === k) {
-            G.cd[en][a] += 1;
+            G.cd[en][a] += 2;
             G.cdBonus[en][a] = (G.cdBonus[en][a] || 0) + 1;
-            parts.push(`${ABILITIES[a].name} +1 (и +1 навсегда)`);
+            parts.push(`${ABILITIES[a].name} +2 (и +1 навсегда)`);
         }
         else if (G.cd[en][a] > 0) { G.cd[en][a] += 1; parts.push(`${ABILITIES[a].name} +1`); }
     });
@@ -2704,6 +2835,7 @@ function doTimeSlow(k) {
 // Можно ли сейчас применить пассивку с кнопкой (Меткий глаз / Кагэватари)
 function canPassive(col, k) {
     if (G.cd[col][k] > 0 || G.bonus || G.pairStep || G.archUsed) return false;
+    if (G.disabled && G.disabled[col] && G.disabled[col][k] > 0) return false;
     if (k === 'teleport' && blockedByForce(col, k)) return false;
     if (k === 'teleport' && !G.board.some(row => row.some(p => p && p.c === col && p.t !== 'k' && !p.ghost))) return false;      // у самурая нет других фигур
     return abilityCells(k, col).length > 0;
@@ -2716,7 +2848,7 @@ function startMode(k, via) {
     G.sel = null; G.moves = [];
     const base = via ? { type: k, via } : { type: k };
     if (k === 'resurrect' || k === 'raise') G.mode = { ...base, piece: null, cells: [] };
-    else if (k === 'timeslow') G.mode = { ...base, cells: [] };
+    else if (k === 'timeslow' || k === 'tomato') G.mode = { ...base, cells: [] };
     else if (STAGED.includes(k)) G.mode = { ...base, stage: 'piece', cells: abilityCells(k, G.turn) };
     else G.mode = { ...base, cells: abilityCells(k, G.turn) };
 }
@@ -2729,6 +2861,33 @@ function onModeCell(r, c) {
     if (FREE_CELL_KEYS.includes(t) && hiddenFor(G.board[r][c], G.turn)) {
         revealPiece(r, c, 'на её клетку попытались поставить плитку или ловушку');
         cancelAbilityMode();
+        return;
+    }
+    if (t === 'pretense') {                  // Притворство: тайный выбор предателя
+        const tg = G.board[r][c];
+        tg.betray = G.turn;
+        G.pretense[G.turn] = 'done';
+        addLog('n', '🃏 Шут: Притворство применено втайне');
+        G.mode = null; G.sel = null; G.moves = [];
+        render();
+        return;
+    }
+    if (t === 'banana') {                    // Банановая кожура: сначала клетка, потом направление
+        const me = G.turn;
+        if (m.stage === 'piece') {
+            if (hiddenFor(G.board[r][c], me)) { revealPiece(r, c, 'на её клетку попытались положить банановую кожуру'); cancelAbilityMode(); return; }
+            m.first = [r, c]; m.stage = 'dir';
+            m.cells = [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dr, dc]) => [r + dr, c + dc]).filter(([rr, cc]) => inb(rr, cc));
+            render();
+            return;
+        }
+        placeBanana(m.first, [r, c]);
+        return;
+    }
+    if (t === 'jaws') {
+        const me = G.turn;
+        if (guardPlacement(me, r, c, nb => { nb[r][c] = { ...mk('j', me), moved: true }; })) { cancelAbilityMode(); return; }
+        useAbility('jaws', r, c);
         return;
     }
     if (t === 'resurrect' || t === 'raise') {
@@ -2979,7 +3138,7 @@ function onCell(r, c) {
         }
     }
     const p = G.board[r][c];
-    if (p && p.c === col) {
+    if (p && (p.c === col || (p.betray === col && betrayReady(col)))) {      // Шут может ходить предательской фигурой как своей (после 10-го хода врага)
         G.sel = { r, c }; G.moves = selectableMoves(r, c);
     } else { G.sel = null; G.moves = []; }
     render();
@@ -3022,6 +3181,7 @@ function applyInput(m) {
         case 'cell': pickOverride = m.pick || null; onCell(m.r, m.c); pickOverride = null; break;
         case 'ab': onAbility(m.k); break;
         case 'slow': doTimeSlow(m.k); break;
+        case 'tomato': doTomato(m.k); break;
         case 'grave': onGrave(m.i, m.col); break;
         case 'promo': applyPromo(m.p); break;
         case 'end': if (G.archUsed && !G.check && !G.pendingPromo) endTurn(); break;
@@ -3144,6 +3304,10 @@ function renderBoard() {
             if (ptm) html += `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me))) html += '<div class="trap-mark">🪤</div>';
+            {
+                const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
+                if (bn && jesterSees(bn.owner)) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.join(',')]}</i></div>`;
+            }
             if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${vn.left}</i></div>`; }
             if (G.virus.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark virus-mark">☣️</div>';
             {
@@ -3187,6 +3351,9 @@ function renderBoard() {
                 if (p.scared) html += `<span class="sc">😱${p.scaredT || ''}</span>`;
                 if (p.sup) html += '<span class="sp">⚛</span>';
                 if (p.altruist > 0) html += `<span class="al">👼${p.altruist}</span>`;
+                if (p.t === 'j') html += `<span class="jl">⏳${p.life}</span>`;
+                if (p.cap > 0 && jesterSees(p.capBy)) html += `<span class="cp">🤡${p.cap}</span>`;
+                if (p.betray && jesterSees(p.betray)) html += '<span class="bt">🃏</span>';
                 if (p.warded > 0) html += `<span class="wd">✴${p.warded}</span>`;
                 if (p.bomb) html += `<span class="bm">💣${p.bomb}</span>`;
                 if (p.t === 'p' && brotherImmune(G.board, r, c)) html += '<span class="br">⚜</span>';
@@ -3220,14 +3387,26 @@ function panelHTML(col) {
     h += `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b></div><div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
+    const tomMode = !G.over && G.mode && G.mode.type === 'tomato' && col !== G.turn && isActor();
     hero.abilities.forEach(k => {
         const a = ABILITIES[k], cd = G.cd[col][k];
+        if (tomMode) {            // Красная обструкция: нажмите на способность врага
+            if (G.disabled && G.disabled[col] && G.disabled[col][k] > 0) {      // уже отключённую выбрать нельзя
+                h += `<button class="ab" disabled title="${abilityDesc(k)}">
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">🍅 уже отключена</span></button>`;
+                return;
+            }
+            h += `<button class="ab slowable" data-tomato="${k}" title="${abilityDesc(k)}">
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">🍅 сюда</span></button>`;
+            return;
+        }
+        const offT = (G.disabled && G.disabled[col] && G.disabled[col][k]) || 0;
         // «Ход — это ложь» и зеркало, пока в нём лежит эта способность: перезарядка скрыта от соперника, чтобы не выдавать применение
         const secret = k === 'lie' || (k === 'copy' && G.lastAb[other(col)] === 'lie');
         const hideCd = secret && (NET.on ? col !== NET.me : !active);
         if (slowMode) {
             h += `<button class="ab slowable" data-slow="${k}" title="${abilityDesc(k)}">
-      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${secret ? '?' : ''} → +1</span>${(!secret && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${secret ? '?' : ''} → +2</span>${(!secret && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
             return;
         }
         const on = active && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
@@ -3239,9 +3418,10 @@ function panelHTML(col) {
         else if (active && k === 'shomen' && !G.deaths) sub = 'до первой смерти';
         else if (active && !can) sub = 'нет целей';
         else if (k === 'copy' && can) sub = '→ ' + ABILITIES[G.lastAb[other(col)]].name;
+        if (offT) sub = '🍅 отключена';
         if (hideCd) sub = 'скрыто';      // применение не должно быть видно по перезарядке
         h += `<button class="ab ${on ? 'on' : ''}" data-ab="${k}" ${can || on ? '' : 'disabled'} title="${abilityDesc(k)}">
-      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}${offT ? `<span class="tm-badge">🍅${offT}</span>` : ''}</button>`;
     });
 
     // Кнопка пассивки (Меткий глаз / Кагэватари): то же, что второй клик по королю
@@ -3319,7 +3499,7 @@ function renderStatus() {
         else if (t === 'trap') h = 'Выберите свободную клетку для невидимого капкана.';
         else if (t === 'arrow') h = 'Выберите клетку в радиусе от короля. Стрела прилетит в начале вашего следующего хода.';
         else if (t === 'lure') h = 'Выберите свободную клетку или свою фигуру для приманки.';
-        else if (t === 'aim') h = 'Выберите клетку: вокруг короля 3×3 или на 2 клетки по горизонтали и вертикали. Ход не тратится.';
+        else if (t === 'aim') h = 'Выберите клетку в пределах 3 шагов от короля. Ход не тратится.';
         else if (t === 'teleport') h = 'Выберите свободное безопасное поле для короля. Это тратит ход.';
         else if (t === 'shomen') h = 'Выберите любую клетку нужной вертикали. В начале вашего следующего хода все фигуры на ней погибнут (кроме королей).';
         else if (t === 'phase') h = 'Выберите свою фигуру (не короля), сквозь которую смогут проходить ваши фигуры.';
@@ -3335,9 +3515,14 @@ function renderStatus() {
         else if (t === 'groundhog') h = 'Выберите клетку для временной ловушки. Пустая: скрыто и бесплатно. С фигурой: видно, тратит ход.';
         else if (t === 'lie') h = m.stage === 'piece' ? 'Выберите фигуру, которая сделает ложный ход.' : m.stage === 'real' ? 'Выберите клетку НЕВИДИМОЙ фигуры (настоящий ход).' : 'Выберите клетку ИЛЛЮЗИИ (фейковый ход).';
         else if (t === 'superposition') h = 'Выберите любую фигуру (кроме короля): она получит суперпозицию.';
-        else if (t === 'timeslow') h = 'Выберите способность врага в его панели: её перезарядка +3, у остальных (если они перезаряжаются) +1.';
+        else if (t === 'timeslow') h = 'Выберите способность врага в его панели: её перезарядка +2 сейчас и +1 до конца партии, у остальных (если они перезаряжаются) +1.';
         else if (t === 'fukashi') h = 'Выберите свою фигуру, которая станет невидимой.';
         else if (t === 'fenyan') h = 'Выберите любую клетку нужного цвета: все клетки этого цвета станут острыми. Потом сделайте ход.';
+        else if (t === 'pretense') h = '🃏 Притворство: выберите вражеского слона или коня. Это тайно, враг ничего не увидит. После 10-го хода врага можно будет сделать ею ход как своей: она перейдёт к вам навсегда.';
+        else if (t === 'blunder') h = 'Выберите свою фигуру (не короля): на неё наденется шутовской колпак. Враг не узнает, на какую.';
+        else if (t === 'banana') h = m.stage === 'dir' ? 'Выберите соседнюю клетку: в эту сторону поскользнётся фигура. Ход не тратится.' : 'Выберите свободную клетку для невидимой банановой кожуры. Ход не тратится.';
+        else if (t === 'jaws') h = 'Выберите свободную клетку на своей половине доски: там появятся заводные челюсти.';
+        else if (t === 'tomato') h = '🍅 Нажмите на способность врага в его панели: она отключится на ' + CONFIG.tomatoTurns + ' ходов. Ход не тратится.';
         else if (t === 'kghost') h = 'Король ушёл из-под шаха: выберите клетку, где останется его иллюзия.';
         if (m.via) h = '🪞 Зеркало: ' + h;
     } else if (G.archUsed) {
@@ -3510,6 +3695,8 @@ $('#board').addEventListener('click', e => {
 
 $('#app').addEventListener('click', e => {
     if (!G || G.over || G.pendingPromo) return;
+    const tm = e.target.closest('[data-tomato]');
+    if (tm && !tm.disabled) { netDo({ t: 'tomato', k: tm.dataset.tomato }); return; }
     const sl = e.target.closest('[data-slow]');
     if (sl && !sl.disabled) { netDo({ t: 'slow', k: sl.dataset.slow }); return; }
     const ab = e.target.closest('[data-ab]');
@@ -3851,13 +4038,13 @@ const EN = {
     "Кагэватари": "Kagewatari",
     "Король телепортируется на любое безопасное свободное поле, даже из-под шаха. Второй клик по королю или кнопка. Тратит ход.": "The king teleports to any safe free square, even out of check. Click the king a second time or use the button. Costs a turn.",
     "Замедление времени": "Time Slow",
-    "Второй клик по королю или кнопка, затем способность врага: её перезарядка +1 сейчас и +1 на всю партию, у остальных перезаряжающихся +1 сейчас. ": "Click the king a second time or use the button, then pick an enemy ability: its cooldown +1 now and +1 for the whole game; other recharging abilities +1 now. ",
+    "Второй клик по королю или кнопка, затем способность врага: её перезарядка +2 сейчас и +1 на всю партию, у остальных перезаряжающихся +1 сейчас. ": "Click the king a second time or use the button, then pick an enemy ability: its cooldown +2 now and +1 for the whole game; other recharging abilities +1 now. ",
     "Тратит ход.": "Costs a turn.",
     "Ход не тратится.": "Costs no turn.",
     " Перезарядка ": " Cooldown ",
     "Меткий глаз": "Sharp Eye",
-    "Второй клик по королю или кнопка: метка стрелы в квадрате 3×3 вокруг короля и ещё на 2 клетки по горизонтали и вертикали. Ход не тратится.": "Click the king a second time or use the button: an arrow mark in the 3×3 square around the king plus 2 squares horizontally and vertically. Costs no turn.",
-    "Выберите клетку: вокруг короля 3×3 или на 2 клетки по горизонтали и вертикали. Ход не тратится.": "Choose a square: the 3×3 around your king or 2 squares away horizontally or vertically. Costs no turn.",
+    "Второй клик по королю или кнопка: метка стрелы в радиусе 3 шагов вокруг короля (шаг: на клетку вверх, вниз или вбок). Ход не тратится.": "Click the king a second time or use the button: an arrow mark within 3 steps of the king (a step is one square up, down or sideways). Costs no turn.",
+    "Выберите клетку в пределах 3 шагов от короля. Ход не тратится.": "Choose a square within 3 steps of your king. Costs no turn.",
     "Паладин": "Paladin",
     "Защита и святость": "Protection & Holiness",
     "Маг": "Mage",
@@ -4086,7 +4273,7 @@ const EN = {
     "Выберите клетку НЕВИДИМОЙ фигуры (настоящий ход).": "Choose the square of the INVISIBLE piece (the real move).",
     "Выберите клетку ИЛЛЮЗИИ (фейковый ход).": "Choose the square of the ILLUSION (the fake move).",
     "Выберите любую фигуру (кроме короля): она получит суперпозицию.": "Choose any piece (except the king): it gains superposition.",
-    "Выберите способность врага в его панели: её перезарядка +3, у остальных (если они перезаряжаются) +1.": "Choose an enemy ability in its panel: its cooldown +3; the others (if recharging) +1.",
+    "Выберите способность врага в его панели: её перезарядка +2 сейчас и +1 до конца партии, у остальных (если они перезаряжаются) +1.": "Choose an enemy ability in its panel: its cooldown +2 now and +1 for the rest of the game; the others (if recharging) +1.",
     "Выберите свою фигуру, которая станет невидимой.": "Choose your piece that will become invisible.",
     "Выберите любую клетку нужного цвета: все клетки этого цвета станут острыми. Потом сделайте ход.": "Choose any square of the colour you want: all squares of that colour become sharp. Then make a move.",
     "Король ушёл из-под шаха: выберите клетку, где останется его иллюзия.": "The king escaped check: choose the square where its illusion will stay.",
@@ -4164,6 +4351,43 @@ const EN = {
     "Сдаться": "Resign",
     "Новая игра": "New game",
     "Завершить ход": "End turn",
+    "Шут": "Jester",
+    "Трюки и подлянки": "Tricks and dirty tricks",
+    "Притворство": "Pretense",
+    "Бриллиантовый зевок": "Brilliant Blunder",
+    "Банановая кожура": "Banana Peel",
+    "Заводные челюсти": "Windup Jaws",
+    "Красная обструкция": "Red Obstruction",
+    "В начале партии тайно выберите вражеского слона или коня: Предательство. Враг ходит ею как обычно. После 10-го хода врага вы можете сделать ею ход как своей фигурой: она навсегда сменит цвет и будет подчиняться только вам.": "At the start of the game, secretly pick an enemy bishop or knight: Betrayal. The enemy moves it as usual. After the enemy's 10th move you can make a move with it as your own piece: it changes color for good and obeys only you.",
+    "Шутовской колпак на вашу фигуру (враг не видит, на какую): 3 хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает.": "A jester's hat on your piece (the enemy cannot see which): for 3 enemy turns it cannot capture or give check. Whoever captures it dies, and the hat falls off.",
+    "Невидимая для врага кожура на свободной клетке с направлением (вверх, вниз, влево, вправо): вставшая на неё фигура (не король) поскальзывается и съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.": "A peel invisible to the enemy on a free square with a direction (up, down, left, right): a piece (not a king) that steps on it slips onto the neighbouring square in that direction and the peel vanishes. Costs no turn.",
+    "Фигура на вашей половине доски: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт 3 ваших хода. Её можно срубить.": "A piece on your half of the board: moves and captures 1 square vertically and horizontally, lives for 3 of your turns. It can be captured.",
+    "Помидор в одну из способностей врага: она отключается на 5 ходов врага (перезарядка идёт как обычно). Нельзя бросить в уже отключённую способность. Ход не тратится.": "A tomato at one of the enemy's abilities: it is disabled for 5 enemy turns (its cooldown keeps running as usual). Cannot be thrown at an ability that is already disabled. Costs no turn.",
+    "🍅 уже отключена": "🍅 already disabled",
+    "(ход не потрачен)": "(no turn spent)",
+    "🃏 Одна из фигур готова предавать": "🃏 One of the pieces is ready to betray",
+    "🃏 Притворство: выберите вражеского слона или коня. Это тайно, враг ничего не увидит. После 10-го хода врага можно будет сделать ею ход как своей: она перейдёт к вам навсегда.": "🃏 Pretense: choose an enemy bishop or knight. It is secret, the enemy sees nothing. After the enemy's 10th move you can make a move with it as your own: it becomes yours for good.",
+    "Выберите свою фигуру (не короля): на неё наденется шутовской колпак. Враг не узнает, на какую.": "Choose your piece (not the king): it gets a jester's hat. The enemy will not know which.",
+    "Выберите соседнюю клетку: в эту сторону поскользнётся фигура. Ход не тратится.": "Choose a neighbouring square: a piece will slip in that direction. Costs no turn.",
+    "Выберите свободную клетку для невидимой банановой кожуры. Ход не тратится.": "Choose a free square for an invisible banana peel. Costs no turn.",
+    "Выберите свободную клетку на своей половине доски: там появятся заводные челюсти.": "Choose a free square on your half of the board: windup jaws will appear there.",
+    "🍅 Нажмите на способность врага в его панели: она отключится на 5 ходов. Ход не тратится.": "🍅 Click an enemy ability in its panel: it will be disabled for 5 turns. Costs no turn.",
+    "🃏 Шут: Притворство применено втайне": "🃏 Jester: Pretense used in secret",
+    "🃏 Предательство: ": "🃏 Betrayal: ",
+    " переходит на сторону Шута": " switches to the Jester's side",
+    "🤡 Колпак слетел с ": "🤡 The hat fell off ",
+    ": время вышло": ": time is up",
+    ": фигура погибла": ": the piece died",
+    " (Очищение)": " (Purify)",
+    " осталась жива": " stayed alive",
+    " погибла": " died",
+    "🦷 Заводные челюсти на ": "🦷 Windup jaws on ",
+    " ломаются и рассыпаются": " break and fall apart",
+    "🍌 Банановая кожура: ловушка установлена (место скрыто, ход не потрачен)": "🍌 Banana Peel: trap set (location hidden, no turn spent)",
+    "на одну из фигур надет шутовской колпак (на какую, знает только Шут)": "a jester's hat is put on one of the pieces (only the Jester knows which)",
+    "🍅 сюда": "🍅 here",
+    "🍅 отключена": "🍅 disabled",
+    " отключена на ": " is disabled for ",
     "на её клетку попытались поставить плитку или ловушку": "someone tried to place a tile or trap on its square",
     "на неё применили Ход сурка": "Groundhog Move was used on it",
     "🎲 Случайный герой": "🎲 Random hero",
@@ -4391,7 +4615,7 @@ function syncHeroButtons() {
     const has = h => G.hero.w === h || G.hero.b === h;
     const set = (id, on) => { const b = document.getElementById(id); if (b) b.classList.toggle('nohero', !on); };
     set('btnGhost', has('hypnotist'));                      // иллюзии Экстрасенса
-    set('btnTraps', has('hunter'));                         // капканы Охотника
+    set('btnTraps', has('hunter') || has('jester'));        // капканы Охотника и скрытое Шута (кожура, колпак, предатель)
     set('btnInvis', has('samurai') || has('hypnotist'));    // невидимки Самурая и Экстрасенса («Ход — это ложь»)
     // «Завершить ход» (Архитектор) скрывает updateEndBtn()
 }
@@ -4740,7 +4964,7 @@ const _abilityCellsV = abilityCells;
 abilityCells = function (key, col) {
     const prev = VIEWER;
     VIEWER = col;
-    try { return _abilityCellsV.apply(this, arguments); } finally { VIEWER = prev; }
+    try { return JESTER_KEYS.includes(key) ? jesterCells(key, col) : _abilityCellsV.apply(this, arguments); } finally { VIEWER = prev; }
 };
 const _onModeCellV = onModeCell;
 onModeCell = function () {
@@ -4748,3 +4972,132 @@ onModeCell = function () {
     VIEWER = G.turn;
     try { return _onModeCellV.apply(this, arguments); } finally { VIEWER = prev; }
 };
+
+
+
+
+// =====================================================================
+//  ШУТ
+// =====================================================================
+// Предательством можно пользоваться только после определённого хода врага
+const betrayReady = col => !!(G && G.done && (G.done[other(col)] || 0) >= CONFIG.betrayAfter);
+const jesterSees = side => !!side && showTraps && (NET.on ? side === NET.me : side === G.turn);      // скрытые вещи Шута видит только он
+
+// Фигура ходит как своя за Шута: на время подсчёта ходов её цвет подменяется
+const asJester = (p, col, fn) => {
+    if (p && p.betray === col && p.c !== col && betrayReady(col)) { const o = p.c; p.c = col; try { return fn(); } finally { p.c = o; } }
+    return fn();
+};
+const _selectableMovesJ = selectableMoves;
+selectableMoves = function (r, c) { return asJester(G.board[r][c], G.turn, () => _selectableMovesJ(r, c)); };
+
+// Фигура в колпаке не рубит и не создаёт шахи
+const _pseudoMovesJ = pseudoMoves;
+pseudoMoves = function (b, r, c) {
+    const mv = _pseudoMovesJ(b, r, c), p = b[r][c];
+    if (!p || !(p.cap > 0)) return mv;
+    return mv.filter(m => {
+        if (m.ep) return false;
+        const t = b[m.tr][m.tc];
+        if (t && t.c !== p.c && !t.ghost) return false;
+        return !givesCheck(b, m);
+    });
+};
+
+const JESTER_KEYS = ['blunder', 'banana', 'jaws', 'tomato', 'pretense'];
+function jesterCells(key, col) {
+    const b = G.board, cells = [];
+    if (key === 'blunder') {
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            const p = b[r][c];
+            if (p && p.c === col && !p.ghost && p.t !== 'k' && p.t !== 'j' && !(p.cap > 0)) cells.push([r, c]);
+        }
+    } else if (key === 'banana') {
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            if (isFreeCell(r, c) && !G.bananas.some(x => x.r === r && x.c === c) && !G.traps.some(x => x.r === r && x.c === c)) cells.push([r, c]);
+        }
+    } else if (key === 'jaws') {
+        ownHalf(col).forEach(r => {
+            for (let c = 0; c < 8; c++) {
+                if (!isFreeCell(r, c)) continue;
+                const nb = cloneBoard(b);
+                nb[r][c] = { ...mk('j', col), moved: true };
+                if (safeAfter(nb, col)) cells.push([r, c]);
+            }
+        });
+    } else if (key === 'tomato') {
+        if (HEROES[G.hero[other(col)]].abilities.some(k => !(G.disabled[other(col)][k] > 0))) cells.push([0, 0]);      // цель выбирается кнопкой в панели врага
+    } else if (key === 'pretense') {
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            const p = b[r][c];
+            if (p && p.c !== col && !p.ghost && !p.invis && (p.t === 'b' || p.t === 'n') && !p.betray) cells.push([r, c]);
+        }
+    }
+    return cells;
+}
+
+// Притворство: перед первым ходом Шут обязан тайно выбрать предателя
+function startPretenseIfNeeded(c) {
+    if (!G.pretense || G.pretense[c] !== 'pending') return;
+    const cells = jesterCells('pretense', c);
+    if (!cells.length) { G.pretense[c] = 'done'; return; }
+    G.sel = null; G.moves = [];
+    G.mode = { type: 'pretense', locked: true, cells };
+}
+
+function placeBanana(from, to) {
+    const col = G.turn, cdKey = (G.mode && G.mode.via) || 'banana';
+    G.bananas.push({ r: from[0], c: from[1], owner: col, dir: [to[0] - from[0], to[1] - from[1]] });
+    G.cd[col][cdKey] = cdOf(col, cdKey);
+    G.lastAb[col] = 'banana';
+    sfx('trap');
+    addLog(col, '🍌 Банановая кожура: ловушка установлена (место скрыто, ход не потрачен)');
+    G.mode = null; G.sel = null; G.moves = [];
+    render();
+}
+
+// Фигура (не король), вставшая на кожуру, съезжает на соседнюю клетку и кожура исчезает
+function sweepBananas() {
+    if (!G.bananas || !G.bananas.length) return;
+    G.bananas = G.bananas.filter(bn => {
+        const p = G.board[bn.r][bn.c];
+        if (!p || p.t === 'k' || p.ghost) return true;
+        const tr = bn.r + bn.dir[0], tc = bn.c + bn.dir[1];
+        const sq = sqName(bn.r, bn.c);
+        sfx('trap');
+        if (inb(tr, tc) && !G.board[tr][tc]) {
+            G.board[tr][tc] = p;
+            G.board[bn.r][bn.c] = null;
+            p.prev = [bn.r, bn.c];
+            if (!p.invis) G.fx.push({ r: tr, c: tc, type: 'land' });
+            addLog('n', p.invis ? '🍌 Невидимая фигура поскальзывается на банановой кожуре' : `🍌 ${pieceSym(p)} поскальзывается на кожуре на ${sq} и съезжает на ${sqName(tr, tc)}`);
+        } else {
+            addLog('n', p.invis ? '🍌 Невидимая фигура наступает на банановую кожуру' : `🍌 ${pieceSym(p)} наступает на кожуру на ${sq}, но съехать некуда`);
+        }
+        return false;
+    });
+}
+
+// Красная обструкция: способность врага отключена на несколько его ходов
+function doTomato(k) {
+    if (!G.mode || G.mode.type !== 'tomato') return;
+    const col = G.turn, en = other(col);
+    if (!HEROES[G.hero[en]].abilities.includes(k)) return;
+    if (G.disabled[en][k] > 0) return;      // в уже отключённую способность помидор не бросить
+    const cdKey = G.mode.via || 'tomato';
+    G.disabled[en][k] = CONFIG.tomatoTurns;
+    G.cd[col][cdKey] = cdOf(col, cdKey);
+    G.lastAb[col] = 'tomato';
+    sfx('cast');
+    addLog(col, `🍅 Красная обструкция: способность «${ABILITIES[k].name}» врага отключена на ${CONFIG.tomatoTurns} ${plural(CONFIG.tomatoTurns)} (ход не потрачен)`);
+    G.mode = null; G.sel = null; G.moves = [];
+    render();      // ход не тратится
+}
+
+// Своя модель челюстей: pieces/jaws.png
+(function () {
+    if (typeof Image === 'undefined') return;
+    const im = new Image();
+    im.onload = () => { document.documentElement.style.setProperty('--img-jaws', 'url("pieces/jaws.png")'); if (document.body) document.body.classList.add('img-jaws'); };
+    im.src = 'pieces/jaws.png';
+})();
