@@ -226,7 +226,7 @@ const ABILITIES = {
 Object.assign(ABILITIES, {
     blunder: {
         icon: '🤡', name: 'Бриллиантовый зевок',
-        desc: 'Шутовской колпак на вашу фигуру (враг не видит, на какую): ' + CONFIG.capTurns + ' хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает.'
+        desc: 'Шутовской колпак на вашу фигуру (враг не видит, на какую): ' + (CONFIG.capTurns - 1) + ' хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает. Перед третьим ходом врага колпак слетает сам: фигура снова создаёт угрозу, и её можно срубить.'
     },
     banana: {
         free: true,
@@ -2135,9 +2135,10 @@ function endTurn() {
             if (p.life <= 0) { G.board[r][cc] = null; G.fx.push({ r, c: cc, type: 'poof' }); addLog('n', `🦷 Заводные челюсти на ${sqName(r, cc)} ломаются и рассыпаются`); return; }
         }
         // Шутовской колпак слетает на ходе врага
-        if (p.cap > 0 && p.capBy && p.capBy !== c) {
-            p.cap--;
-            if (p.cap <= 0) { delete p.cap; delete p.capBy; addLog('n', `🤡 Колпак слетел с ${pieceSym(p)} на ${sqName(r, cc)}: время вышло`); }
+        // Колпак висит на первых ходах врага; когда ход в очередной раз переходит к врагу, последний срок вышел, и колпак слетает ещё до его хода
+        if (p.cap > 0 && p.capBy) {
+            if (p.capBy !== c) p.cap--;
+            if (p.capBy === c ? p.cap <= 1 : p.cap <= 0) { delete p.cap; delete p.capBy; addLog('n', `🤡 Колпак слетел с ${pieceSym(p)} на ${sqName(r, cc)}: время вышло`); }
         }
         // Заморозка и капкан спадают в конце хода владельца фигуры
         if (p.c === c && p.frozen > 0) p.frozen--;
@@ -4385,7 +4386,7 @@ const EN = {
     "Заводные челюсти": "Windup Jaws",
     "Красная обструкция": "Red Obstruction",
     "В начале партии тайно выберите вражеского слона или коня: Предательство. Враг ходит ею как обычно. После 10-го хода врага можно потратить ход и дважды нажать на неё: она навсегда сменит цвет и будет подчиняться только вам (в этот ход сама не ходит).": "At the start of the game, secretly pick an enemy bishop or knight: Betrayal. The enemy moves it as usual. After the enemy's 10th move you can spend your turn and click it twice: it changes color for good and obeys only you (it does not move on that turn).",
-    "Шутовской колпак на вашу фигуру (враг не видит, на какую): 3 хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает.": "A jester's hat on your piece (the enemy cannot see which): for 3 enemy turns it cannot capture or give check. Whoever captures it dies, and the hat falls off.",
+    "Шутовской колпак на вашу фигуру (враг не видит, на какую): 2 хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает. Перед третьим ходом врага колпак слетает сам: фигура снова создаёт угрозу, и её можно срубить.": "A jester's hat on your piece (the enemy cannot see which): for 2 enemy turns it cannot capture or give check. Whoever captures it dies, and the hat falls off. Before the enemy's third turn the hat falls off by itself: the piece threatens again and can be captured.",
     "Невидимая для врага кожура на свободной клетке с направлением (вверх, вниз, влево, вправо): вставшая на неё фигура (не король) поскальзывается и съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.": "A peel invisible to the enemy on a free square with a direction (up, down, left, right): a piece (not a king) that steps on it slips onto the neighbouring square in that direction and the peel vanishes. Costs no turn.",
     "Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт 3 ваших хода. Её можно срубить.": "A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for 3 of your turns. It can be captured.",
     "Помидор в одну из способностей врага: она отключается на 5 ходов врага (перезарядка идёт как обычно). Нельзя бросить в уже отключённую способность. Ход не тратится.": "A tomato at one of the enemy's abilities: it is disabled for 5 enemy turns (its cooldown keeps running as usual). Cannot be thrown at an ability that is already disabled. Costs no turn.",
