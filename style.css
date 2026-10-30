@@ -3491,3 +3491,20 @@ button {
         line-height: 14px;
     }
 }
+
+/* ===== Цвет названия пассивки под цвет героя ===== */
+.panel[class*="h-"] .passive b {
+    color: var(--hc);
+}
+
+.hero-card[data-hero] .hc-passive b {
+    color: var(--hc);
+}
+
+.panel.h-mage .passive b, .hero-card[data-hero="mage"] .hc-passive b {
+    color: #7ee8ff;
+}
+
+.panel.h-architect .passive b, .hero-card[data-hero="architect"] .hc-passive b {
+    color: #ff2a2a;
+}
