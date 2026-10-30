@@ -646,8 +646,8 @@ function pseudoMoves(b, r, c) {
             const tr = r + d, tc = c + dc;
             if (!inb(tr, tc)) return;
             const t = b[tr][tc];
-            if (t && !ghost && supOpen(b, t)) add(tr, tc, { promo: tr === last });
-            else if (canTake(t, tr, tc)) add(tr, tc, { promo: tr === last });
+            if (t && supOpen(b, t)) return;      // фигуру в суперпозиции пешка рубить не может
+            if (canTake(t, tr, tc)) add(tr, tc, { promo: tr === last });
             else if (!t && !ghost && G.ep && G.ep.r === tr && G.ep.c === tc) {
                 const v = b[G.ep.pr][G.ep.pc];
                 if (v && v.t === 'p' && v.c !== p.c && !v.frozen && !v.ghost && !brotherImmune(b, G.ep.pr, G.ep.pc)) {
@@ -1398,6 +1398,8 @@ function arrowCells(col, range, ignoreFrozen) {
 /* ---------- Архитектор: вспомогательные функции ---------- */
 // VIEWER: чьими глазами смотрим (внутри abilityCells и onModeCell). Вражеская невидимка для него выглядит как свободная клетка
 let VIEWER = null;
+// Для заводных челюстей годится любая пустая клетка, в том числе с плиткой или порталом
+const isEmptyCell = (r, c) => !G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER));
 const isFreeCell = (r, c) => (!G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
     !G.gens.some(x => x.r === r && x.c === c) && !G.virus.some(x => x.r === r && x.c === c) && !G.vines.some(x => x.r === r && x.c === c) &&
     !G.rituals.some(x => x.r === r && x.c === c);
@@ -5049,7 +5051,7 @@ function jesterCells(key, col) {
     } else if (key === 'jaws') {
         ownThree(col).forEach(r => {
             for (let c = 0; c < 8; c++) {
-                if (!isFreeCell(r, c)) continue;
+                if (!isEmptyCell(r, c)) continue;
                 const nb = cloneBoard(b);
                 nb[r][c] = { ...mk('j', col), moved: true };
                 bananaSlideOnBoard(nb, r, c, col);      // поставленные на свою кожуру челюсти съедут: учитываем это
