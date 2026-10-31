@@ -3257,6 +3257,7 @@ function showPromo(mv, ctx) {
 
 /* Конец партии */
 function showGameOver() {
+    if (NET.on && RELAY && G && G.over && !G.repSent) { G.repSent = true; netSend({ t: 'result', res: G.over.winner || 'd' }); }   // итог для рейтинга
     setTimeout(() => {
         if (!G || !G.over) return;
         $('#goTitle').textContent = G.over.title;
@@ -3575,7 +3576,7 @@ function renderStatus() {
     renderChat();
     const ni = $('#netInfo');
     ni.classList.toggle('hidden', !NET.on);
-    if (NET.on) ni.textContent = `Онлайн: вы играете ${NET.me === 'w' ? 'белыми' : 'чёрными'}${G.turn === NET.me ? ' · ваш ход' : ''}${NET.lost ? ' · соединение потеряно' : ''}`;
+    if (NET.on) ni.textContent = `Онлайн: вы играете ${NET.me === 'w' ? 'белыми' : 'чёрными'}${G.turn === NET.me ? ' · ваш ход' : ''}${NET.lost ? ' · соединение потеряно' : ''}${NET.peerKnown ? ' · ' + peerText() : ''}`;
 }
 
 function renderLog() {
@@ -3671,6 +3672,7 @@ function openSetup() {
     $('#gameover').classList.add('hidden');
     $('#promo').classList.add('hidden');
     $('#setup').classList.remove('hidden');
+    updatePeerLabel();
 }
 
 $('#setup').addEventListener('click', e => {
@@ -3939,6 +3941,7 @@ function attachConn(c) {
         $('#lobby').classList.add('hidden');
         openSetup();
         tcOnOpen();
+        sendAuth();
     });
     c.on('data', netRecv);
     c.on('close', () => {
@@ -3951,6 +3954,10 @@ function attachConn(c) {
 
 function netRecv(m) {
     switch (m.t) {
+        case 'peer':
+            NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0;
+            updatePeerLabel(); if (G) render();
+            break;
         case 'ready':
             // соперник всё ещё жмёт «Готов», хотя у нас партия уже началась: наше «start» потерялось, шлём ещё раз
             if (NET.host && NET.lastStart && m.ready && G && !G.over && ((G.done ? G.done.w + G.done.b : 0) === 0)) { netSend({ t: 'start', ...NET.lastStart }); break; }
@@ -4534,6 +4541,16 @@ const EN = {
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
     "возвращается": "returns",
+    "🏆 Рейтинг": "🏆 Leaderboard",
+    "Рейтинг": "Rating",
+    "Ник": "Nick",
+    "В / П / Н": "W / L / D",
+    "Загрузка...": "Loading...",
+    "Пока никого нет.": "Nobody yet.",
+    "Не удалось загрузить рейтинг.": "Could not load the leaderboard.",
+    "Этот ник уже занят, придумайте другой.": "This nickname is taken, pick another one.",
+    "Не удалось сохранить ник. Попробуйте ещё раз.": "Could not save the nickname. Try again.",
+    "Нужен вход в аккаунт.": "Please sign in.",
     "👤 Войти / Регистрация": "👤 Sign in / Sign up",
     "Выйти": "Sign out",
     "Вход": "Sign in",
@@ -5224,29 +5241,59 @@ function doTomato(k) {
     im.src = 'pieces/jaws.png';
 })();
 
-
 /* =====================================================================
-   АККАУНТЫ (Supabase): вход через Google или почту + ник.
-   Ключ ниже публичный (publishable), его можно хранить в коде.
+   АККАУНТЫ (Supabase): вход, ник, рейтинг. Ключ ниже публичный (publishable).
+   Ники и рейтинг хранятся в таблице profiles; менять рейтинг может только сервер.
    ===================================================================== */
 const SUPA_URL = 'https://fuqopbjpxeugdvnlxanb.supabase.co';
 const SUPA_KEY = 'sb_publishable_xVvPSDswx_P2D-kguqgznQ_5cjBAcMN';
 let SB = null;
 try { if (window.supabase && window.supabase.createClient) SB = window.supabase.createClient(SUPA_URL, SUPA_KEY); } catch (e) { SB = null; }
-const ACC = { user: null, nick: '' };
+const ACC = { user: null, profile: null, needNick: false, loading: false };
 let authMode = 'login';   // login | signup | nick
 const NICK_RE = /^[\p{L}\p{N}_\- ]{3,16}$/u;
 const authMsg = t => { $('#authMsg').textContent = t || ''; };
 
+const peerText = () => (LANG === 'en' ? 'Opponent: ' : 'Соперник: ') + (NET.oppNick ? NET.oppNick + (NET.oppRating ? ' (⭐ ' + NET.oppRating + ')' : '') : (LANG === 'en' ? 'guest' : 'гость'));
+function updatePeerLabel() {
+    const el = $('#setupPeer');
+    if (!el) return;
+    const show = !!(NET.on && NET.peerKnown);
+    el.classList.toggle('hidden', !show);
+    if (show) el.textContent = peerText();
+}
+async function sendAuth() {
+    if (!RELAY) return;      // токен отправляем только на наш сервер, никогда по PeerJS
+    let token = '';
+    try { if (SB) { const { data } = await SB.auth.getSession(); if (data && data.session) token = data.session.access_token; } } catch (e) { /* играем гостем */ }
+    netSend({ t: 'auth', token });
+}
+
 function accRefresh() {
-    const u = ACC.user;
-    ACC.nick = u && u.user_metadata && u.user_metadata.nick ? String(u.user_metadata.nick) : '';
+    const u = ACC.user, p = ACC.profile;
     const nm = $('#accName');
-    nm.textContent = u ? '👤 ' + (ACC.nick || (u.email || '').split('@')[0]) : '';
+    nm.textContent = u ? '👤 ' + (p ? p.nick + ' · ⭐ ' + p.rating : (u.email || '').split('@')[0]) : '';
     nm.classList.toggle('hidden', !u);
     $('#accBtn').classList.toggle('hidden', !!u);
     $('#accOut').classList.toggle('hidden', !u);
-    if (u && !ACC.nick && $('#auth').classList.contains('hidden')) openAuth('nick');
+    if (u && ACC.needNick && !p && $('#auth').classList.contains('hidden')) openAuth('nick');
+}
+
+async function loadProfile() {
+    if (!SB || !ACC.user || ACC.loading) return;
+    ACC.loading = true;
+    const uid = ACC.user.id;
+    const get = () => SB.from('profiles').select('nick,rating,wins,losses,draws').eq('id', uid).maybeSingle();
+    try {
+        let { data, error } = await get();
+        if (error) throw error;
+        if (!data) {                          // профиля ещё нет: пробуем ник, указанный при регистрации
+            const want = ACC.user.user_metadata && ACC.user.user_metadata.nick;
+            if (want) { const r = await SB.rpc('set_nick', { p_nick: want }); if (!r.error) { const g = await get(); data = g.data; } }
+        }
+        if (ACC.user && ACC.user.id === uid) { ACC.profile = data || null; ACC.needNick = !data; accRefresh(); }
+    } catch (e) { /* без сети профиль не показываем, но и ник не просим */ }
+    ACC.loading = false;
 }
 
 function openAuth(mode) {
@@ -5261,13 +5308,15 @@ function openAuth(mode) {
     $('#authSubmit').textContent = nick ? 'Сохранить ник' : signup ? 'Регистрация' : 'Войти';
     $('#authSwitch').classList.toggle('hidden', nick);
     $('#authSwitch').textContent = signup ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Регистрация';
-    $('#authClose').classList.toggle('hidden', false);
     authMsg('');
     $('#auth').classList.remove('hidden');
 }
 
 function authError(err) {
     const m = String((err && err.message) || '');
+    if (/nick_taken/i.test(m)) return 'Этот ник уже занят, придумайте другой.';
+    if (/bad_nick/i.test(m)) return 'Ник: 3–16 символов, буквы, цифры, пробел, _ и -.';
+    if (/not_authenticated/i.test(m)) return 'Нужен вход в аккаунт.';
     if (/invalid login/i.test(m)) return 'Неверная почта или пароль.';
     if (/already registered|already been registered/i.test(m)) return 'Эта почта уже зарегистрирована. Нажмите «Войти».';
     if (/not confirmed/i.test(m)) return 'Подтвердите почту по ссылке из письма, затем войдите.';
@@ -5284,10 +5333,11 @@ async function authSubmit() {
         if (authMode === 'nick') {
             const nick = $('#authNick').value.trim();
             if (!NICK_RE.test(nick)) { authMsg('Ник: 3–16 символов, буквы, цифры, пробел, _ и -.'); return; }
-            const { data, error } = await SB.auth.updateUser({ data: { nick } });
+            const { error } = await SB.rpc('set_nick', { p_nick: nick });
             if (error) { authMsg(authError(error)); return; }
-            ACC.user = data.user; accRefresh();
+            ACC.needNick = false; ACC.loading = false;
             $('#auth').classList.add('hidden');
+            await loadProfile();
             return;
         }
         const email = $('#authEmail').value.trim(), pass = $('#authPass').value;
@@ -5298,23 +5348,49 @@ async function authSubmit() {
             if (pass.length < 6) { authMsg('Пароль должен быть не короче 6 символов.'); return; }
             const { data, error } = await SB.auth.signUp({ email, password: pass, options: { data: { nick }, emailRedirectTo: location.origin + location.pathname } });
             if (error) { authMsg(authError(error)); return; }
-            if (data.session) { ACC.user = data.user; accRefresh(); $('#auth').classList.add('hidden'); }
+            if (data.session) $('#auth').classList.add('hidden');
             else authMsg('Письмо отправлено. Подтвердите почту по ссылке в письме и затем войдите.');
             return;
         }
-        const { data, error } = await SB.auth.signInWithPassword({ email, password: pass });
+        const { error } = await SB.auth.signInWithPassword({ email, password: pass });
         if (error) { authMsg(authError(error)); return; }
-        ACC.user = data.user; accRefresh();
         $('#auth').classList.add('hidden');
     } catch (e) { authMsg('Не удалось выполнить вход. Попробуйте ещё раз.'); }
     finally { btn.disabled = false; }
+}
+
+async function openTop() {
+    $('#top').classList.remove('hidden');
+    const box = $('#topList');
+    box.textContent = 'Загрузка...';
+    if (!SB) { box.textContent = 'Не удалось загрузить рейтинг.'; return; }
+    try {
+        const { data, error } = await SB.from('profiles').select('id,nick,rating,wins,losses,draws').order('rating', { ascending: false }).limit(20);
+        if (error) throw error;
+        box.textContent = '';
+        if (!data.length) { box.textContent = 'Пока никого нет.'; return; }
+        data.forEach((p, i) => {
+            const row = document.createElement('div');
+            row.className = 'top-row' + (ACC.user && ACC.user.id === p.id ? ' me' : '');
+            [i + 1, p.nick, p.rating, `${p.wins} / ${p.losses} / ${p.draws}`].forEach(v => {
+                const sp = document.createElement('span');
+                sp.textContent = v;
+                sp.setAttribute('data-notr', '');
+                row.appendChild(sp);
+            });
+            box.appendChild(row);
+        });
+    } catch (e) { box.textContent = 'Не удалось загрузить рейтинг.'; }
 }
 
 $('#accBtn').addEventListener('click', () => {
     if (!SB) { uiAlert('Не загрузилась библиотека входа: проверьте интернет и обновите страницу.'); return; }
     openAuth('login');
 });
-$('#accOut').addEventListener('click', async () => { if (SB) { try { await SB.auth.signOut(); } catch (e) { /* выйдем и так */ } } ACC.user = null; accRefresh(); });
+$('#accName').addEventListener('click', () => { if (ACC.user && !ACC.profile) openAuth('nick'); });
+$('#accOut').addEventListener('click', async () => { if (SB) { try { await SB.auth.signOut(); } catch (e) { /* выйдем и так */ } } ACC.user = null; ACC.profile = null; ACC.needNick = false; accRefresh(); });
+$('#accTop').addEventListener('click', openTop);
+$('#topClose').addEventListener('click', () => $('#top').classList.add('hidden'));
 $('#authSubmit').addEventListener('click', authSubmit);
 $('#authSwitch').addEventListener('click', () => openAuth(authMode === 'login' ? 'signup' : 'login'));
 $('#authClose').addEventListener('click', () => $('#auth').classList.add('hidden'));
@@ -5326,6 +5402,12 @@ $('#authGoogle').addEventListener('click', async () => {
 });
 
 if (SB) {
-    SB.auth.getSession().then(({ data }) => { ACC.user = data && data.session ? data.session.user : null; accRefresh(); }).catch(() => { });
-    SB.auth.onAuthStateChange((ev, session) => { ACC.user = session ? session.user : null; accRefresh(); });
+    SB.auth.onAuthStateChange((ev, session) => {
+        const prev = ACC.user && ACC.user.id;
+        ACC.user = session ? session.user : null;
+        if (!ACC.user) { ACC.profile = null; ACC.needNick = false; accRefresh(); return; }
+        if (ACC.user.id !== prev) ACC.profile = null;
+        accRefresh();
+        if (!ACC.profile) setTimeout(loadProfile, 0);
+    });
 }

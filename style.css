@@ -3612,3 +3612,48 @@ button {
     font-size: 14px;
     color: #ffb4c8;
 }
+
+/* ===================== Рейтинг ===================== */
+.top-card {
+    width: min(460px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+    .top-card h2 {
+        margin: 0 0 4px;
+    }
+
+.top-row {
+    display: grid;
+    grid-template-columns: 30px 1fr 70px 90px;
+    gap: 8px;
+    padding: 7px 10px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+    .top-row span:nth-child(3), .top-row span:nth-child(4) {
+        text-align: right;
+    }
+
+    .top-row.me {
+        color: var(--gold);
+        border: 1px solid var(--gold);
+    }
+
+.top-head {
+    font-size: 13px;
+    opacity: 0.7;
+    background: none;
+}
+
+.top-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 50vh;
+    overflow-y: auto;
+}

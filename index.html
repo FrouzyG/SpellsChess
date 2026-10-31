@@ -15,6 +15,7 @@
             <h1 class="logo"><span class="logo-sp">Spells</span><span class="logo-ch">Chess</span></h1>
             <p id="setupNet" class="sub hidden"></p>
             <p id="setupTc" class="sub hidden"></p>
+            <p id="setupPeer" class="sub hidden" data-notr></p>
             <p class="sub">Каждая сторона выбирает героя. В свой ход можно либо походить фигурой, либо применить способность героя. Все способности стартуют с перезарядкой 3.</p>
             <div class="pick-row">
                 <section class="side-pick" data-side="w">
@@ -46,6 +47,7 @@
                 <span id="accName" class="acc-name hidden" data-notr></span>
                 <button id="accBtn" class="small-btn">👤 Войти / Регистрация</button>
                 <button id="accOut" class="small-btn hidden">Выйти</button>
+                <button id="accTop" class="small-btn">🏆 Рейтинг</button>
             </div>
             <div id="tcBox" class="tc-box">
                 <div class="tc-title">Время партии</div>
@@ -173,6 +175,16 @@
             <button id="authSubmit" class="big-btn">Войти</button>
             <button id="authSwitch" class="small-btn">Нет аккаунта? Регистрация</button>
             <button id="authClose" class="small-btn">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Таблица лидеров -->
+    <div id="top" class="overlay hidden">
+        <div class="small-card top-card">
+            <h2>🏆 Рейтинг</h2>
+            <div class="top-row top-head"><span>#</span><span>Ник</span><span>Рейтинг</span><span>В / П / Н</span></div>
+            <div id="topList" class="top-list"></div>
+            <button id="topClose" class="small-btn">Закрыть</button>
         </div>
     </div>
 

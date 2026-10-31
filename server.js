@@ -9,6 +9,9 @@ const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon' };
 const rooms = {};   // код -> комната (см. makeRoom)
+const SUPA_URL = process.env.SUPABASE_URL || 'https://fuqopbjpxeugdvnlxanb.supabase.co';
+const SUPA_PUB = process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_xVvPSDswx_P2D-kguqgznQ_5cjBAcMN';
+const SUPA_SECRET = process.env.SUPABASE_SECRET_KEY || '';   // секретный ключ: ТОЛЬКО в переменных окружения Render, не в коде
 const GRACE = 30000; // сколько секунд ждём, пока оборвавшийся игрок переподключится
 let waitList = [];  // комнаты, где кто-то ждёт соперника в «Быстрой игре»: { code, tc } (tc: 'any', 'inf' или число минут)
 const unwait = code => { waitList = waitList.filter(w => w.code !== code); };
@@ -20,13 +23,72 @@ const open = r => { push(r.host, { t: '__open' }); push(r.guest, { t: '__open' }
 
 // Комната хранит журнал сообщений для каждого получателя: если связь на миг оборвалась,
 // после переподключения пропущенное доставится заново (браузер сам шлёт Last-Event-ID).
-const makeRoom = () => ({ host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
+const makeRoom = () => ({ user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
 const deliver = (r, to, data) => {
     const id = ++r.seq[to];
     r.log[to].push({ id, data });
     if (r.log[to].length > 400) r.log[to].shift();
     if (r[to]) r[to].write('id: ' + id + '\ndata: ' + data + '\n\n');
 };
+
+// ---------- Аккаунты (Supabase): проверка входа и запись результатов ----------
+const sbSignal = () => AbortSignal.timeout(8000);
+async function sbUser(token) {
+    try {
+        const r = await fetch(SUPA_URL + '/auth/v1/user', { headers: { apikey: SUPA_PUB, Authorization: 'Bearer ' + token }, signal: sbSignal() });
+        if (!r.ok) return null;
+        const u = await r.json();
+        return u && /^[0-9a-f-]{36}$/i.test(u.id || '') ? u.id : null;
+    } catch (e) { return null; }
+}
+async function sbProfile(uid) {
+    try {
+        const r = await fetch(`${SUPA_URL}/rest/v1/profiles?id=eq.${uid}&select=nick,rating`, { headers: { apikey: SUPA_PUB }, signal: sbSignal() });
+        const a = await r.json();
+        return Array.isArray(a) && a[0] ? a[0] : null;
+    } catch (e) { return null; }
+}
+async function handleAuth(room, r, role, token) {
+    const o = other(role);
+    let info = { nick: '', rating: 0 };
+    r.user[role] = null;
+    if (typeof token === 'string' && token.length > 20 && token.length < 4096) {
+        const uid = await sbUser(token);
+        const prof = uid ? await sbProfile(uid) : null;
+        if (uid && prof) { r.user[role] = { id: uid }; info = { nick: String(prof.nick || '').slice(0, 16), rating: prof.rating | 0 }; }
+    }
+    if (rooms[room] !== r) return;
+    r.peer[role] = info;
+    deliver(r, o, JSON.stringify({ t: 'peer', nick: info.nick, rating: info.rating }));
+    if (r.peer[o]) deliver(r, role, JSON.stringify({ t: 'peer', nick: r.peer[o].nick, rating: r.peer[o].rating }));
+}
+// Результат партии: оба игрока сообщают итог, записываем, если оба вошли в аккаунт и их сообщения совпали.
+function recordGame(r) {
+    if (!SUPA_SECRET || !r.gid || r.recorded === r.gid) return;
+    if (!r.user.host || !r.user.guest) return;
+    const res = r.rep.host || r.rep.guest;
+    r.recorded = r.gid;
+    const headers = { apikey: SUPA_SECRET, 'Content-Type': 'application/json' };
+    if (!SUPA_SECRET.startsWith('sb_')) headers.Authorization = 'Bearer ' + SUPA_SECRET;
+    fetch(SUPA_URL + '/rest/v1/rpc/record_result', {
+        method: 'POST', headers, signal: sbSignal(),
+        body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res })
+    }).then(x => { if (!x.ok) x.text().then(t => console.log('record_result: ошибка', x.status, t)); })
+        .catch(e => console.log('record_result: сбой', e.message));
+}
+function handleResult(r, role, res) {
+    if (!r.gid || !['w', 'b', 'd'].includes(res) || r.recorded === r.gid) return;
+    if (!r.user.host || !r.user.guest) return;
+    r.rep[role] = res;
+    const o = other(role);
+    if (r.rep[o]) {
+        clearTimeout(r.repTimer);
+        if (r.rep[o] === res) recordGame(r);           // совпало: записываем
+        return;                                         // не совпало: не записываем вообще
+    }
+    clearTimeout(r.repTimer);
+    r.repTimer = setTimeout(() => { if (!r[o] && !r.rep[o]) recordGame(r); }, 25000);   // соперник ушёл, не успев ответить
+}
 
 const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -86,7 +148,7 @@ const server = http.createServer((req, res) => {
             r[role] = null;
             r.timer[role] = setTimeout(() => {  // даём время переподключиться
                 if (r[role] || rooms[room] !== r) return;
-                r.sid[role] = null;
+                r.sid[role] = null; r.user[role] = null; r.peer[role] = null;
                 const o = other(role);
                 if (r[o]) push(r[o], { t: '__close' });
                 if (role === 'host' || (!r.host && !r.guest)) { delete rooms[room]; unwait(room); }
@@ -105,7 +167,14 @@ const server = http.createServer((req, res) => {
             if (r && (role === 'host' || role === 'guest')) {
                 if (mid && mid <= r.lastMid[role]) { res.end('ok'); return; }   // повторная отправка того же сообщения
                 if (mid) r.lastMid[role] = mid;
-                deliver(r, other(role), body.replace(/\n/g, ' '));
+                let msg = null;
+                try { msg = JSON.parse(body); } catch (e) { }
+                if (msg && msg.t === 'auth') handleAuth(room, r, role, msg.token);
+                else if (msg && msg.t === 'result') handleResult(r, role, msg.res);
+                else {
+                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; clearTimeout(r.repTimer); }
+                    deliver(r, other(role), body.replace(/\n/g, ' '));
+                }
             }
             res.end('ok');
         });
