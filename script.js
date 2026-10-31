@@ -3663,7 +3663,7 @@ function applyTheme(id) {
 
 function openSetup() {
     buildSetup();
-    NET.ready = false; NET.oppReady = false; NET.oppHero = null;
+    NET.ready = false; NET.oppReady = false; NET.oppHero = null; NET.lastStart = null;
     buildSetup();
     const sn = $('#setupNet');
     sn.classList.toggle('hidden', !NET.on);
@@ -3710,11 +3710,17 @@ function maybeStart() {
     if (!(NET.on && NET.host && NET.ready && NET.oppReady && NET.oppHero)) return;
     _seed = (Math.random() * 2147483647) | 0;
     const heroes = { w: selectedHeroes.w, b: NET.oppHero };
-    netSend({ t: 'start', seed: _seed, heroes, tc: NET.tc || 0 });
+    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0 };
+    netSend({ t: 'start', ...NET.lastStart });
     selectedHeroes = heroes;
     NET.ready = false; NET.oppReady = false;
     startGame();
 }
+
+// Пока вы нажали «Готов», а партия не началась, раз в 3 секунды повторяем сигнал (на случай потерянного сообщения)
+setInterval(() => {
+    if (NET.on && !NET.lost && NET.ready && !$('#setup').classList.contains('hidden')) netSend({ t: 'ready', ready: true, hero: selectedHeroes[NET.me] });
+}, 3000);
 
 $('#startBtn').addEventListener('click', () => {
     if (NET.on) { toggleReady(); return; }
@@ -3839,24 +3845,42 @@ const newCode = () => Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ2
 
 /* ---------- Запасной способ: через собственный сервер (server.js), по обычному TCP. Работает через Radmin VPN ---------- */
 let RELAY = false;
+let RELAY_CHECKED = false;
 fetch('/ping').then(r => r.text()).then(t => {
     RELAY = t.trim() === 'spellschess';
     if (RELAY) lobbyStatus('Режим «через сервер» включён: создавайте комнату или входите по коду.');
-}).catch(() => { });
+}).catch(() => { }).finally(() => { RELAY_CHECKED = true; });
+
+// На бесплатном Render сервер просыпается до минуты: пока не выяснили, есть ли сервер, комнату не создаём (иначе игра уйдёт в PeerJS и двое не соединятся)
+function whenRelayChecked(fn) {
+    if (RELAY_CHECKED) { fn(); return; }
+    lobbyStatus('Сервер просыпается, подождите немного...');
+    setTimeout(() => whenRelayChecked(fn), 1000);
+}
 
 function relayConn(code, role) {
     const h = {};
     let queue = Promise.resolve();
-    const es = new EventSource(`/events?room=${code}&role=${role}`);
+    const sid = Math.random().toString(36).slice(2, 12);
+    let mid = 0;
+    const es = new EventSource(`/events?room=${code}&role=${role}&sid=${sid}`);
     const conn = {
         open: false,
         on(ev, fn) { h[ev] = fn; },
-        send(m) { queue = queue.then(() => fetch(`/send?room=${code}&role=${role}`, { method: 'POST', body: JSON.stringify(m) }).catch(() => { })); },
+        send(m) {
+            const my = ++mid;
+            queue = queue.then(async () => {      // до 4 попыток; сервер отбрасывает дубликаты по номеру
+                for (let i = 0; i < 4; i++) {
+                    try { const r = await fetch(`/send?room=${code}&role=${role}&sid=${sid}&mid=${my}`, { method: 'POST', body: JSON.stringify(m) }); if (r.ok) return; } catch (e) { /* повторим */ }
+                    await new Promise(ok => setTimeout(ok, 700 * (i + 1)));
+                }
+            });
+        },
         close() { es.close(); }
     };
     es.onmessage = e => {
         const m = JSON.parse(e.data);
-        if (m.t === '__open') { conn.open = true; if (h.open) h.open(); }
+        if (m.t === '__open') { if (!conn.open) { conn.open = true; if (h.open) h.open(); } }
         else if (m.t === '__close') { conn.open = false; if (h.close) h.close(); }
         else if (m.t === '__nohost') { lobbyStatus('Комнаты с таким кодом нет.'); es.close(); }
         else if (m.t === '__taken') { lobbyStatus('Такой код уже занят, нажмите «Создать комнату» ещё раз.'); es.close(); $('#lobbyHost').disabled = false; }
@@ -3928,13 +3952,15 @@ function attachConn(c) {
 function netRecv(m) {
     switch (m.t) {
         case 'ready':
+            // соперник всё ещё жмёт «Готов», хотя у нас партия уже началась: наше «start» потерялось, шлём ещё раз
+            if (NET.host && NET.lastStart && m.ready && G && !G.over && ((G.done ? G.done.w + G.done.b : 0) === 0)) { netSend({ t: 'start', ...NET.lastStart }); break; }
             NET.oppReady = !!m.ready;
             NET.oppHero = m.ready ? m.hero : null;
             buildSetup();
             maybeStart();
             break;
         case 'start':
-            if (!NET.host) { if (m.tc !== undefined) NET.tc = m.tc; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
+            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
             break;
         case 'chat':
             if (!NET.muted && typeof m.text === 'string') { chatMsgs.push({ me: false, text: m.text.slice(0, 300) }); renderChat(); }
@@ -3962,9 +3988,10 @@ $('#themeRow').addEventListener('click', e => {
 });
 $('#btnTheme').addEventListener('click', () => applyTheme(THEMES[(THEMES.findIndex(t => t.id === themeId) + 1) % THEMES.length].id));
 $('#lobbyLocal').addEventListener('click', () => $('#lobby').classList.add('hidden'));
-$('#lobbyHost').addEventListener('click', () => { $('#lobbyHost').disabled = true; hostRoom(); });
-$('#lobbyJoin').addEventListener('click', joinRoom);
+$('#lobbyHost').addEventListener('click', () => { $('#lobbyHost').disabled = true; whenRelayChecked(hostRoom); });
+$('#lobbyJoin').addEventListener('click', () => whenRelayChecked(joinRoom));
 $('#lobbyQuick').addEventListener('click', async () => {
+    while (!RELAY_CHECKED) { lobbyStatus('Сервер просыпается, подождите немного...'); await new Promise(ok => setTimeout(ok, 1000)); }
     if (!RELAY) { lobbyStatus('Быстрая игра работает только на сайте с сервером игры.'); return; }
     try {
         NET.pref = quickPref();

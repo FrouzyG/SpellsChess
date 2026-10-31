@@ -8,7 +8,8 @@ const os = require('os');
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon' };
-const rooms = {};   // код -> { host: res, guest: res }
+const rooms = {};   // код -> комната (см. makeRoom)
+const GRACE = 30000; // сколько секунд ждём, пока оборвавшийся игрок переподключится
 let waitList = [];  // комнаты, где кто-то ждёт соперника в «Быстрой игре»: { code, tc } (tc: 'any', 'inf' или число минут)
 const unwait = code => { waitList = waitList.filter(w => w.code !== code); };
 
@@ -16,6 +17,16 @@ const other = role => (role === 'host' ? 'guest' : 'host');
 const push = (res, obj) => { if (res) res.write('data: ' + JSON.stringify(obj) + '\n\n'); };
 const makeCode = () => Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
 const open = r => { push(r.host, { t: '__open' }); push(r.guest, { t: '__open' }); };
+
+// Комната хранит журнал сообщений для каждого получателя: если связь на миг оборвалась,
+// после переподключения пропущенное доставится заново (браузер сам шлёт Last-Event-ID).
+const makeRoom = () => ({ host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
+const deliver = (r, to, data) => {
+    const id = ++r.seq[to];
+    r.log[to].push({ id, data });
+    if (r.log[to].length > 400) r.log[to].shift();
+    if (r[to]) r[to].write('id: ' + id + '\ndata: ' + data + '\n\n');
+};
 
 const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -38,7 +49,7 @@ const server = http.createServer((req, res) => {
         }
         if (Object.keys(rooms).length > 500) { res.statusCode = 503; res.end('{}'); return; }
         const code = makeCode();
-        rooms[code] = { host: null, guest: null };
+        rooms[code] = makeRoom();
         waitList.push({ code, tc });
         setTimeout(() => {                       // если создатель так и не подключился
             const r = rooms[code];
@@ -50,37 +61,52 @@ const server = http.createServer((req, res) => {
 
     if (url.pathname === '/events') {
         if (role !== 'host' && role !== 'guest') { res.writeHead(400); res.end(); return; }
+        const sid = (url.searchParams.get('sid') || '').slice(0, 24);
+        const lastId = parseInt(req.headers['last-event-id'] || '0', 10) || 0;
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-        res.write(': ok\n\n');
+        res.write('retry: 1500\n: ok\n\n');
         let r = rooms[room];
         if (role === 'host') {
-            if (r && r.host) { push(res, { t: '__taken' }); res.end(); return; }
-            if (!r) { if (Object.keys(rooms).length > 500) { res.end(); return; } r = rooms[room] = { host: null, guest: null }; }
-            r.host = res;
-            if (r.guest) open(r);
+            if (r && r.sid.host && r.sid.host !== sid) { push(res, { t: '__taken' }); res.end(); return; }
+            if (!r) { if (Object.keys(rooms).length > 500) { res.end(); return; } r = rooms[room] = makeRoom(); }
         } else {
-            if (!r || r.guest) { push(res, { t: '__nohost' }); res.end(); return; }
-            r.guest = res;
-            if (r.host) open(r);
+            if (!r || (r.sid.guest && r.sid.guest !== sid)) { push(res, { t: '__nohost' }); res.end(); return; }
         }
+        const old = r[role];
+        if (old && old !== res) { try { old.end(); } catch (e) { } }
+        clearTimeout(r.timer[role]);
+        r[role] = res;
+        r.sid[role] = sid;
+        r.log[role].filter(e => e.id > lastId).forEach(e => res.write('id: ' + e.id + '\ndata: ' + e.data + '\n\n'));   // пропущенное
+        if (r.host && r.guest && !r.opened) { r.opened = true; open(r); }
         const beat = setInterval(() => res.write(': ping\n\n'), 15000);
         req.on('close', () => {
             clearInterval(beat);
-            const cur = rooms[room];
-            if (!cur || cur[role] !== res) return;
-            cur[role] = null;
-            push(cur[other(role)], { t: '__close' });
-            if (role === 'host' || (!cur.host && !cur.guest)) { delete rooms[room]; unwait(room); }
+            if (r[role] !== res) return;        // уже заменено новым подключением
+            r[role] = null;
+            r.timer[role] = setTimeout(() => {  // даём время переподключиться
+                if (r[role] || rooms[room] !== r) return;
+                r.sid[role] = null;
+                const o = other(role);
+                if (r[o]) push(r[o], { t: '__close' });
+                if (role === 'host' || (!r.host && !r.guest)) { delete rooms[room]; unwait(room); }
+                else r.opened = false;
+            }, GRACE);
         });
         return;
     }
 
     if (url.pathname === '/send' && req.method === 'POST') {
+        const mid = parseInt(url.searchParams.get('mid') || '0', 10) || 0;
         let body = '';
         req.on('data', d => { body += d; if (body.length > 1e6) req.destroy(); });
         req.on('end', () => {
             const r = rooms[room];
-            if (r && r[other(role)]) r[other(role)].write('data: ' + body.replace(/\n/g, ' ') + '\n\n');
+            if (r && (role === 'host' || role === 'guest')) {
+                if (mid && mid <= r.lastMid[role]) { res.end('ok'); return; }   // повторная отправка того же сообщения
+                if (mid) r.lastMid[role] = mid;
+                deliver(r, other(role), body.replace(/\n/g, ' '));
+            }
             res.end('ok');
         });
         return;
