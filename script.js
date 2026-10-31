@@ -1756,10 +1756,12 @@ function abilityAvailable(col, k) {
     return abilityPossible(col, k);
 }
 
+// Способности Шута, не тратящие ход и не спасающие короля (кожура, помидор): для мата и пата не считаются «действием»
+const NOT_AN_ESCAPE = ['banana', 'tomato'];
 function hasAnyAction(col) {
     if (col === G.turn && G.forced && G.forced.length) return true;
     if (anyLegalMove(G.board, col)) return true;
-    return HEROES[G.hero[col]].abilities.some(k => abilityAvailable(col, k));
+    return HEROES[G.hero[col]].abilities.some(k => !NOT_AN_ESCAPE.includes(k) && abilityAvailable(col, k));
 }
 
 function hasBonusMove(col) {
@@ -5121,6 +5123,7 @@ const JESTER_KEYS = ['blunder', 'banana', 'jaws', 'tomato', 'pretense'];
 function jesterCells(key, col) {
     const b = G.board, cells = [];
     if (key === 'blunder') {
+        if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом колпак не спасает короля, а ход тратит: нельзя
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             const p = b[r][c];
             if (p && p.c === col && !p.ghost && p.t !== 'k' && p.t !== 'j' && !(p.cap > 0)) cells.push([r, c]);

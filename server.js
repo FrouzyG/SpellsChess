@@ -59,12 +59,14 @@ async function handleAuth(room, r, role, token) {
     }
     if (rooms[room] !== r) return;
     r.peer[role] = info;
+    console.log('вход:', room, role, info.nick ? 'игрок ' + info.nick : 'гость');
     deliver(r, o, JSON.stringify({ t: 'peer', nick: info.nick, rating: info.rating }));
     if (r.peer[o]) deliver(r, role, JSON.stringify({ t: 'peer', nick: r.peer[o].nick, rating: r.peer[o].rating }));
 }
 // Результат партии: оба игрока сообщают итог, записываем, если оба вошли в аккаунт и их сообщения совпали.
 function recordGame(r) {
-    if (!SUPA_SECRET || !r.gid || r.recorded === r.gid) return;
+    if (!r.gid || r.recorded === r.gid) return;
+    if (!SUPA_SECRET) { console.log('результат НЕ записан: в Render не задана переменная SUPABASE_SECRET_KEY'); return; }
     if (!r.user.host || !r.user.guest) return;
     const res = r.rep.host || r.rep.guest;
     r.recorded = r.gid;
@@ -73,10 +75,11 @@ function recordGame(r) {
     fetch(SUPA_URL + '/rest/v1/rpc/record_result', {
         method: 'POST', headers, signal: sbSignal(),
         body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res })
-    }).then(x => { if (!x.ok) x.text().then(t => console.log('record_result: ошибка', x.status, t)); })
+    }).then(x => { if (!x.ok) x.text().then(t => console.log('record_result: ОШИБКА', x.status, t)); else console.log('результат записан:', r.gid, res); })
         .catch(e => console.log('record_result: сбой', e.message));
 }
 function handleResult(r, role, res) {
+    console.log('итог партии от', role + ':', res, '| игра', r.gid || 'нет', '| оба вошли в аккаунт:', !!(r.user.host && r.user.guest));
     if (!r.gid || !['w', 'b', 'd'].includes(res) || r.recorded === r.gid) return;
     if (!r.user.host || !r.user.guest) return;
     r.rep[role] = res;
@@ -221,5 +224,6 @@ server.listen(PORT, '0.0.0.0', () => {
         console.log('   http://' + i.address + ':' + PORT + (i.address.startsWith('26.') ? '   <- это адрес Radmin VPN' : ''));
     });
     console.log('');
+    console.log(' Секретный ключ Supabase: ' + (SUPA_SECRET ? 'задан' : 'НЕ ЗАДАН (рейтинг не будет меняться)'));
     console.log(' Не закрывайте это окно, пока играете.');
 });
