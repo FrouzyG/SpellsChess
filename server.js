@@ -23,7 +23,7 @@ const open = r => { push(r.host, { t: '__open' }); push(r.guest, { t: '__open' }
 
 // Комната хранит журнал сообщений для каждого получателя: если связь на миг оборвалась,
 // после переподключения пропущенное доставится заново (браузер сам шлёт Last-Event-ID).
-const makeRoom = () => ({ user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
+const makeRoom = () => ({ user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
 const deliver = (r, to, data) => {
     const id = ++r.seq[to];
     r.log[to].push({ id, data });
@@ -50,18 +50,18 @@ async function sbProfile(uid) {
 }
 async function handleAuth(room, r, role, token) {
     const o = other(role);
-    let info = { nick: '', rating: 0 };
+    let info = { nick: '', rating: 0, id: null };
     r.user[role] = null;
     if (typeof token === 'string' && token.length > 20 && token.length < 4096) {
         const uid = await sbUser(token);
         const prof = uid ? await sbProfile(uid) : null;
-        if (uid && prof) { r.user[role] = { id: uid }; info = { nick: String(prof.nick || '').slice(0, 16), rating: prof.rating | 0 }; }
+        if (uid && prof) { r.user[role] = { id: uid }; info = { nick: String(prof.nick || '').slice(0, 16), rating: prof.rating | 0, id: uid }; }
     }
     if (rooms[room] !== r) return;
     r.peer[role] = info;
     console.log('вход:', room, role, info.nick ? 'игрок ' + info.nick : 'гость');
-    deliver(r, o, JSON.stringify({ t: 'peer', nick: info.nick, rating: info.rating }));
-    if (r.peer[o]) deliver(r, role, JSON.stringify({ t: 'peer', nick: r.peer[o].nick, rating: r.peer[o].rating }));
+    deliver(r, o, JSON.stringify({ t: 'peer', nick: info.nick, rating: info.rating, id: info.id }));
+    if (r.peer[o]) deliver(r, role, JSON.stringify({ t: 'peer', nick: r.peer[o].nick, rating: r.peer[o].rating, id: r.peer[o].id }));
 }
 // Результат партии: оба игрока сообщают итог, записываем, если оба вошли в аккаунт и их сообщения совпали.
 function recordGame(r) {
@@ -74,15 +74,16 @@ function recordGame(r) {
     if (!SUPA_SECRET.startsWith('sb_')) headers.Authorization = 'Bearer ' + SUPA_SECRET;
     fetch(SUPA_URL + '/rest/v1/rpc/record_result', {
         method: 'POST', headers, signal: sbSignal(),
-        body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res })
+        body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null })
     }).then(x => { if (!x.ok) x.text().then(t => console.log('record_result: ОШИБКА', x.status, t)); else console.log('результат записан:', r.gid, res); })
         .catch(e => console.log('record_result: сбой', e.message));
 }
-function handleResult(r, role, res) {
+function handleResult(r, role, res, msg) {
     console.log('итог партии от', role + ':', res, '| игра', r.gid || 'нет', '| оба вошли в аккаунт:', !!(r.user.host && r.user.guest));
     if (!r.gid || !['w', 'b', 'd'].includes(res) || r.recorded === r.gid) return;
     if (!r.user.host || !r.user.guest) return;
     r.rep[role] = res;
+    if (msg && (role === 'host' || !r.meta)) r.meta = { reason: String(msg.reason || '').slice(0, 20), moves: Math.max(0, Math.min(999, msg.moves | 0)) };
     const o = other(role);
     if (r.rep[o]) {
         clearTimeout(r.repTimer);
@@ -173,9 +174,9 @@ const server = http.createServer((req, res) => {
                 let msg = null;
                 try { msg = JSON.parse(body); } catch (e) { }
                 if (msg && msg.t === 'auth') handleAuth(room, r, role, msg.token);
-                else if (msg && msg.t === 'result') handleResult(r, role, msg.res);
+                else if (msg && msg.t === 'result') handleResult(r, role, msg.res, msg);
                 else {
-                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; clearTimeout(r.repTimer); }
+                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
                     deliver(r, other(role), body.replace(/\n/g, ' '));
                 }
             }

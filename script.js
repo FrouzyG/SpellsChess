@@ -3259,7 +3259,7 @@ function showPromo(mv, ctx) {
 
 /* Конец партии */
 function showGameOver() {
-    if (NET.on && RELAY && G && G.over && !G.repSent) { G.repSent = true; netSend({ t: 'result', res: G.over.winner || 'd' }); }   // итог для рейтинга
+    if (NET.on && RELAY && G && G.over && !G.repSent) { G.repSent = true; netSend({ t: 'result', res: G.over.winner || 'd', reason: G.over.title, moves: G.done ? G.done.w + G.done.b : 0 }); }   // итог для рейтинга
     setTimeout(() => {
         if (!G || !G.over) return;
         $('#goTitle').textContent = G.over.title;
@@ -3957,7 +3957,7 @@ function attachConn(c) {
 function netRecv(m) {
     switch (m.t) {
         case 'peer':
-            NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0;
+            NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0; NET.oppId = /^[0-9a-f-]{36}$/i.test(m.id || '') ? m.id : null;
             updatePeerLabel(); if (G) render();
             break;
         case 'ready':
@@ -4543,6 +4543,20 @@ const EN = {
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
     "возвращается": "returns",
+    "Найти игрока по нику": "Find a player by nick",
+    "Найти": "Find",
+    "Никого не нашли.": "Nobody found.",
+    "Сменить аватар": "Change avatar",
+    "Не удалось сменить аватар.": "Could not change the avatar.",
+    "Партий": "Games",
+    "Побед %": "Win rate",
+    "Любимый герой": "Favourite hero",
+    "История партий": "Match history",
+    "Партий пока нет.": "No games yet.",
+    "Игрок не найден.": "Player not found.",
+    "Не удалось загрузить профиль.": "Could not load the profile.",
+    "Победа": "Win",
+    "Поражение": "Loss",
     "🏆 Рейтинг": "🏆 Leaderboard",
     "Рейтинг": "Rating",
     "Ник": "Nick",
@@ -5263,6 +5277,7 @@ function updatePeerLabel() {
     if (!el) return;
     const show = !!(NET.on && NET.peerKnown);
     el.classList.toggle('hidden', !show);
+    el.classList.toggle('link', !!NET.oppId);
     if (show) el.textContent = peerText();
 }
 async function sendAuth() {
@@ -5275,7 +5290,7 @@ async function sendAuth() {
 function accRefresh() {
     const u = ACC.user, p = ACC.profile;
     const nm = $('#accName');
-    nm.textContent = u ? '👤 ' + (p ? p.nick + ' · ⭐ ' + p.rating : (u.email || '').split('@')[0]) : '';
+    nm.textContent = u ? (p && p.avatar ? p.avatar : '👤') + ' ' + (p ? p.nick + ' · ⭐ ' + p.rating : (u.email || '').split('@')[0]) : '';
     nm.classList.toggle('hidden', !u);
     $('#accBtn').classList.toggle('hidden', !!u);
     $('#accOut').classList.toggle('hidden', !u);
@@ -5286,7 +5301,7 @@ async function loadProfile() {
     if (!SB || !ACC.user || ACC.loading) return;
     ACC.loading = true;
     const uid = ACC.user.id;
-    const get = () => SB.from('profiles').select('nick,rating,wins,losses,draws').eq('id', uid).maybeSingle();
+    const get = () => SB.from('profiles').select('nick,rating,wins,losses,draws,avatar').eq('id', uid).maybeSingle();
     try {
         let { data, error } = await get();
         if (error) throw error;
@@ -5319,6 +5334,7 @@ function authError(err) {
     const m = String((err && err.message) || '');
     if (/nick_taken/i.test(m)) return 'Этот ник уже занят, придумайте другой.';
     if (/bad_nick/i.test(m)) return 'Ник: 3–16 символов, буквы, цифры, пробел, _ и -.';
+    if (/bad_avatar/i.test(m)) return 'Не удалось сменить аватар.';
     if (/not_authenticated/i.test(m)) return 'Нужен вход в аккаунт.';
     if (/invalid login/i.test(m)) return 'Неверная почта или пароль.';
     if (/already registered|already been registered/i.test(m)) return 'Эта почта уже зарегистрирована. Нажмите «Войти».';
@@ -5362,37 +5378,139 @@ async function authSubmit() {
     finally { btn.disabled = false; }
 }
 
-async function openTop() {
+const mkEl = (tag, cls, text, notr) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; if (notr) e.setAttribute('data-notr', ''); return e; };
+const PLAYER_COLS = 'id,nick,rating,wins,losses,draws,avatar';
+
+function renderPlayers(box, data) {
+    box.textContent = '';
+    if (!data.length) { box.textContent = 'Никого не нашли.'; return; }
+    data.forEach((p, i) => {
+        const row = mkEl('div', 'top-row link' + (ACC.user && ACC.user.id === p.id ? ' me' : ''));
+        row.append(mkEl('span', '', i + 1, true), mkEl('span', '', (p.avatar || '👤') + ' ' + p.nick, true), mkEl('span', '', p.rating, true), mkEl('span', '', `${p.wins} / ${p.losses} / ${p.draws}`, true));
+        row.addEventListener('click', () => openProfile(p.id));
+        box.appendChild(row);
+    });
+}
+
+async function openTop(query) {
     $('#top').classList.remove('hidden');
     const box = $('#topList');
     box.textContent = 'Загрузка...';
     if (!SB) { box.textContent = 'Не удалось загрузить рейтинг.'; return; }
     try {
-        const { data, error } = await SB.from('profiles').select('id,nick,rating,wins,losses,draws').order('rating', { ascending: false }).limit(20);
+        let q = SB.from('profiles').select(PLAYER_COLS).order('rating', { ascending: false }).limit(20);
+        if (query) q = q.ilike('nick', '%' + query + '%');
+        const { data, error } = await q;
         if (error) throw error;
-        box.textContent = '';
-        if (!data.length) { box.textContent = 'Пока никого нет.'; return; }
-        data.forEach((p, i) => {
-            const row = document.createElement('div');
-            row.className = 'top-row' + (ACC.user && ACC.user.id === p.id ? ' me' : '');
-            [i + 1, p.nick, p.rating, `${p.wins} / ${p.losses} / ${p.draws}`].forEach(v => {
-                const sp = document.createElement('span');
-                sp.textContent = v;
-                sp.setAttribute('data-notr', '');
-                row.appendChild(sp);
-            });
-            box.appendChild(row);
-        });
+        if (!data.length && !query) { box.textContent = 'Пока никого нет.'; return; }
+        renderPlayers(box, data);
     } catch (e) { box.textContent = 'Не удалось загрузить рейтинг.'; }
+}
+function findPlayers() { openTop($('#topSearch').value.trim().replace(/[%_,()*\\]/g, '')); }
+
+/* ---------- Профиль игрока: статистика, график рейтинга, история партий ---------- */
+const heroLabel = id => (HEROES[id] ? HEROES[id].icon + ' ' + HEROES[id].name : '—');
+const AVATARS = [...Object.values(HEROES).map(h => h.icon), '😎', '🦊', '🐉', '👑', '🎩', '🔥', '❄️', '⚡'];
+
+async function openProfile(uid) {
+    if (!SB || !/^[0-9a-f-]{36}$/i.test(uid || '')) return;
+    $('#prof').classList.remove('hidden');
+    const gl = $('#profGames');
+    $('#profNick').textContent = '…'; $('#profAva').textContent = ''; $('#profSub').textContent = '';
+    $('#profStats').textContent = ''; $('#profGraph').innerHTML = '';
+    $('#profAvaPick').classList.add('hidden'); $('#profAvaBtn').classList.add('hidden');
+    gl.textContent = 'Загрузка...';
+    try {
+        const pr = await SB.from('profiles').select('id,nick,rating,wins,losses,draws,avatar,created_at').eq('id', uid).maybeSingle();
+        if (pr.error) throw pr.error;
+        const p = pr.data;
+        if (!p) { $('#profNick').textContent = ''; gl.textContent = 'Игрок не найден.'; return; }
+        const gm = await SB.from('games').select('id,white,black,result,created_at,white_hero,black_hero,white_delta,black_delta,reason,moves')
+            .or(`white.eq.${uid},black.eq.${uid}`).order('created_at', { ascending: false }).limit(30);
+        if (gm.error) throw gm.error;
+        const games = gm.data || [];
+        const oppIds = [...new Set(games.map(g => (g.white === uid ? g.black : g.white)))];
+        const names = {};
+        if (oppIds.length) { const o = await SB.from('profiles').select('id,nick,avatar').in('id', oppIds); (o.data || []).forEach(x => { names[x.id] = x; }); }
+
+        $('#profNick').textContent = p.nick;
+        $('#profAva').textContent = p.avatar || '👤';
+        $('#profSub').textContent = `⭐ ${p.rating}` + (p.created_at ? (LANG === 'en' ? ' · joined ' : ' · на сайте с ') + new Date(p.created_at).toLocaleDateString() : '');
+        const mine = ACC.user && ACC.user.id === uid;
+        $('#profAvaBtn').classList.toggle('hidden', !mine);
+
+        // Статистика
+        const total = p.wins + p.losses + p.draws;
+        const heroCount = {};
+        games.forEach(g => { const hid = g.white === uid ? g.white_hero : g.black_hero; if (hid) heroCount[hid] = (heroCount[hid] || 0) + 1; });
+        const fav = Object.keys(heroCount).sort((a, b) => heroCount[b] - heroCount[a])[0];
+        const box = (label, val, notr) => { const d = mkEl('div', 'stat-box'); d.append(mkEl('b', '', val, notr), mkEl('span', '', label)); return d; };
+        $('#profStats').append(box('Рейтинг', p.rating, true), box('Партий', total, true), box('Побед %', total ? Math.round(100 * p.wins / total) + '%' : '—', true), box('Любимый герой', fav ? heroLabel(fav) : '—'));
+
+        // График рейтинга: идём от текущего значения назад по изменениям
+        const deltaOf = g => (g.white === uid ? g.white_delta : g.black_delta) || 0;
+        const ratings = [p.rating];
+        games.forEach(g => { ratings.unshift(ratings[0] - deltaOf(g)); });
+        if (ratings.length > 1) {
+            const lo = Math.min(...ratings), hi = Math.max(...ratings), span = Math.max(hi - lo, 10);
+            const pts = ratings.map((v, i) => `${(i / (ratings.length - 1)) * 292 + 4},${62 - ((v - lo) / span) * 54 + 4}`).join(' ');
+            $('#profGraph').innerHTML = `<polyline points="${pts}"/>`;
+        }
+
+        // История партий
+        gl.textContent = '';
+        if (!games.length) gl.textContent = 'Партий пока нет.';
+        games.forEach(g => {
+            const my = g.white === uid, oppId = my ? g.black : g.white, opp = names[oppId];
+            const res = g.result === 'd' ? 'd' : ((g.result === 'w') === my ? 'w' : 'l');
+            const d = my ? g.white_delta : g.black_delta;
+            const row = mkEl('div', 'game-row ' + res);
+            const oppEl = mkEl('span', 'opp-link', (opp ? (opp.avatar || '👤') + ' ' + opp.nick : '?'), true);
+            oppEl.addEventListener('click', () => openProfile(oppId));
+            row.append(
+                mkEl('span', '', new Date(g.created_at).toLocaleDateString(), true),
+                oppEl,
+                mkEl('span', 'badge', res === 'w' ? 'Победа' : res === 'l' ? 'Поражение' : 'Ничья'),
+                mkEl('span', 'delta', d == null ? '' : (d > 0 ? '+' : '') + d, true)
+            );
+            const sub = mkEl('span', 'game-sub');
+            sub.append(mkEl('span', '', heroLabel(my ? g.white_hero : g.black_hero) + ' vs ' + heroLabel(my ? g.black_hero : g.white_hero)));
+            if (g.reason) sub.append(mkEl('span', '', ' · ' + g.reason));
+            if (g.moves) sub.append(mkEl('span', '', ' · ' + g.moves + (LANG === 'en' ? ' moves' : ' ходов'), true));
+            row.appendChild(sub);
+            gl.appendChild(row);
+        });
+    } catch (e) { gl.textContent = 'Не удалось загрузить профиль.'; }
+}
+
+function openAvatarPick() {
+    const box = $('#profAvaPick');
+    box.textContent = '';
+    AVATARS.forEach(a => {
+        const b = mkEl('button', '', a, true);
+        b.addEventListener('click', async () => {
+            const { error } = await SB.rpc('set_avatar', { p_avatar: a });
+            if (error) { uiAlert(authError(error)); return; }
+            ACC.loading = false; await loadProfile();
+            if (ACC.user) openProfile(ACC.user.id);
+        });
+        box.appendChild(b);
+    });
+    box.classList.toggle('hidden');
 }
 
 $('#accBtn').addEventListener('click', () => {
     if (!SB) { uiAlert('Не загрузилась библиотека входа: проверьте интернет и обновите страницу.'); return; }
     openAuth('login');
 });
-$('#accName').addEventListener('click', () => { if (ACC.user && !ACC.profile) openAuth('nick'); });
+$('#accName').addEventListener('click', () => { if (!ACC.user) return; if (ACC.profile) openProfile(ACC.user.id); else openAuth('nick'); });
 $('#accOut').addEventListener('click', async () => { if (SB) { try { await SB.auth.signOut(); } catch (e) { /* выйдем и так */ } } ACC.user = null; ACC.profile = null; ACC.needNick = false; accRefresh(); });
-$('#accTop').addEventListener('click', openTop);
+$('#accTop').addEventListener('click', () => { $('#topSearch').value = ''; openTop(); });
+$('#topFind').addEventListener('click', findPlayers);
+$('#topSearch').addEventListener('keydown', e => { if (e.key === 'Enter') findPlayers(); });
+$('#profClose').addEventListener('click', () => $('#prof').classList.add('hidden'));
+$('#profAvaBtn').addEventListener('click', openAvatarPick);
+$('#setupPeer').addEventListener('click', () => { if (NET.oppId) openProfile(NET.oppId); });
 $('#topClose').addEventListener('click', () => $('#top').classList.add('hidden'));
 $('#authSubmit').addEventListener('click', authSubmit);
 $('#authSwitch').addEventListener('click', () => openAuth(authMode === 'login' ? 'signup' : 'login'));

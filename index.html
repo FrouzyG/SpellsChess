@@ -182,9 +182,33 @@
     <div id="top" class="overlay hidden">
         <div class="small-card top-card">
             <h2>🏆 Рейтинг</h2>
+            <div class="top-search">
+                <input id="topSearch" maxlength="16" placeholder="Найти игрока по нику">
+                <button id="topFind" class="small-btn">Найти</button>
+            </div>
             <div class="top-row top-head"><span>#</span><span>Ник</span><span>Рейтинг</span><span>В / П / Н</span></div>
             <div id="topList" class="top-list"></div>
             <button id="topClose" class="small-btn">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Профиль игрока -->
+    <div id="prof" class="overlay hidden">
+        <div class="small-card prof-card">
+            <div class="prof-head">
+                <span id="profAva" class="prof-ava" data-notr></span>
+                <div class="prof-title">
+                    <h2 id="profNick" data-notr></h2>
+                    <div id="profSub" class="prof-sub" data-notr></div>
+                </div>
+                <button id="profAvaBtn" class="small-btn hidden">Сменить аватар</button>
+            </div>
+            <div id="profAvaPick" class="ava-pick hidden"></div>
+            <div id="profStats" class="prof-stats"></div>
+            <svg id="profGraph" class="prof-graph" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
+            <h3 class="prof-h">История партий</h3>
+            <div id="profGames" class="top-list"></div>
+            <button id="profClose" class="small-btn">Закрыть</button>
         </div>
     </div>
 
