@@ -3508,3 +3508,8 @@ button {
 .panel.h-architect .passive b, .hero-card[data-hero="architect"] .hc-passive b {
     color: #ff2a2a;
 }
+
+.log-sub {
+    margin-top: 2px;
+    opacity: 0.9;
+}

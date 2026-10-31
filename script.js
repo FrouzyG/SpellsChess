@@ -1833,11 +1833,13 @@ function startGame() {
     startTurn();
 }
 
-function addLog(c, text) { G.log.push({ c, text }); }
+function addLog(c, text) { G.log.push({ c, text, n: logNo() }); }
+// номер хода для записи журнала: 0 для первой записи (старт партии), дальше номер текущего хода
+const logNo = () => (G.log.length ? (G.turnNo || 0) + 1 : 0);
 
 // Ход невидимой фигуры: в журнале просто «сделала ход», подробности раскроются, когда фигура станет видимой
 function logHidden(c, p, real) {
-    G.log.push({ c, text: '🥷 Невидимая фигура сделала ход', hid: uidOf(p), real });
+    G.log.push({ c, text: '🥷 Невидимая фигура сделала ход', hid: uidOf(p), real, n: logNo() });
 }
 
 // Плитки (сейчас только конвейеры) уничтожаются огненным шаром. Ловушки (капкан) плитками не считаются.
@@ -2190,6 +2192,7 @@ function endTurn() {
     checkInvis();
     checkIllusions();
     G.turn = other(c);
+    G.turnNo = (G.turnNo || 0) + 1;
     startTurn();
 }
 
@@ -3326,14 +3329,14 @@ function renderBoard() {
                     : `<div class="fire-mark ${f.owner}">🔥</div>`;
             });
             const cvm = G.conv.find(x => x.r === r && x.c === c);
-            if (cvm) html += `<div class="conv-mark">${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[cvm.dir.join(',')]}</div>`;
+            if (cvm) html += `<div class="conv-mark">${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[cvm.dir.map(x => (flip ? -x : x)).join(',')]}</div>`;
             const ptm = G.portals.find(x => x.r === r && x.c === c);
             if (ptm) html += `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me))) html += '<div class="trap-mark">🪤</div>';
             {
                 const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
-                if (bn && jesterSees(bn.owner)) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.join(',')]}</i></div>`;
+                if (bn && jesterSees(bn.owner)) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
             }
             if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${vn.left}</i></div>`; }
             if (G.virus.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark virus-mark">☣️</div>';
@@ -3577,7 +3580,17 @@ function renderStatus() {
 
 function renderLog() {
     const ol = $('#log');
-    ol.innerHTML = G.log.map(e => `<li class="${e.c}">${e.text}</li>`).join('');
+    // Все записи одного хода (ход фигурой, способности, события) идут под одним номером
+    const groups = [];
+    G.log.forEach(e => {
+        const g = groups[groups.length - 1];
+        if (e.n && g && g.n === e.n) g.items.push(e); else groups.push({ n: e.n, items: [e] });
+    });
+    ol.innerHTML = groups.map(g => {
+        const who = (g.items.find(e => e.c === 'w' || e.c === 'b') || g.items[0]).c;
+        if (!g.n) return `<li class="${who}" style="list-style:none">${g.items.map(e => e.text).join('<br>')}</li>`;
+        return `<li class="${who}" value="${g.n}">${g.items.map((e, i) => (i ? `<div class="log-sub">${e.text}</div>` : e.text)).join('')}</li>`;
+    }).join('');
     ol.scrollTop = ol.scrollHeight;
 }
 
