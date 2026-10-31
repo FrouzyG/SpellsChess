@@ -3513,3 +3513,40 @@ button {
     margin-top: 2px;
     opacity: 0.9;
 }
+
+/* ===================== Окно конца партии: ровные кнопки ===================== */
+.big-btn.secondary {
+    margin-right: 0;
+    color: var(--gold);
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid var(--gold);
+}
+
+    .big-btn.secondary:hover {
+        background: rgba(255, 255, 255, 0.13);
+        filter: none;
+    }
+
+#gameover .small-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 28px 28px 26px;
+}
+
+    #gameover .small-card h2 {
+        margin: 0;
+        font-size: 30px;
+    }
+
+    #gameover .small-card p {
+        margin: 0 0 8px;
+        font-size: 17px;
+        opacity: 0.9;
+    }
+
+    #gameover .small-card .big-btn {
+        width: 100%;
+        margin: 0;
+        box-sizing: border-box;
+    }
