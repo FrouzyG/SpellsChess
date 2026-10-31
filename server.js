@@ -23,7 +23,7 @@ const open = r => { push(r.host, { t: '__open' }); push(r.guest, { t: '__open' }
 
 // Комната хранит журнал сообщений для каждого получателя: если связь на миг оборвалась,
 // после переподключения пропущенное доставится заново (браузер сам шлёт Last-Event-ID).
-const makeRoom = () => ({ user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
+const makeRoom = () => ({ rated: true, user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
 const deliver = (r, to, data) => {
     const id = ++r.seq[to];
     r.log[to].push({ id, data });
@@ -74,7 +74,7 @@ function recordGame(r) {
     if (!SUPA_SECRET.startsWith('sb_')) headers.Authorization = 'Bearer ' + SUPA_SECRET;
     fetch(SUPA_URL + '/rest/v1/rpc/record_result', {
         method: 'POST', headers, signal: sbSignal(),
-        body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null })
+        body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null, p_rated: r.rated !== false })
     }).then(x => { if (!x.ok) x.text().then(t => console.log('record_result: ОШИБКА', x.status, t)); else console.log('результат записан:', r.gid, res); })
         .catch(e => console.log('record_result: сбой', e.message));
 }
@@ -105,8 +105,9 @@ const server = http.createServer((req, res) => {
     if (url.pathname === '/quick') {
         res.setHeader('Content-Type', 'application/json');
         const tc = (url.searchParams.get('tc') || 'any').slice(0, 6);
+        const rated = url.searchParams.get('rated') !== '0';     // дружеские и рейтинговые ищут друг друга отдельно
         // ищем ожидающего, чьё время подходит: одинаковое, либо кто-то из двоих согласен на любое
-        const idx = waitList.findIndex(w => rooms[w.code] && !rooms[w.code].guest && (w.tc === tc || w.tc === 'any' || tc === 'any'));
+        const idx = waitList.findIndex(w => rooms[w.code] && !rooms[w.code].guest && w.rated === rated && (w.tc === tc || w.tc === 'any' || tc === 'any'));
         if (idx >= 0) {
             const code = waitList[idx].code;
             waitList.splice(idx, 1);
@@ -116,7 +117,7 @@ const server = http.createServer((req, res) => {
         if (Object.keys(rooms).length > 500) { res.statusCode = 503; res.end('{}'); return; }
         const code = makeCode();
         rooms[code] = makeRoom();
-        waitList.push({ code, tc });
+        waitList.push({ code, tc, rated });
         setTimeout(() => {                       // если создатель так и не подключился
             const r = rooms[code];
             if (r && !r.host) { delete rooms[code]; unwait(code); }
@@ -176,7 +177,7 @@ const server = http.createServer((req, res) => {
                 if (msg && msg.t === 'auth') handleAuth(room, r, role, msg.token);
                 else if (msg && msg.t === 'result') handleResult(r, role, msg.res, msg);
                 else {
-                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
+                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; r.rated = msg.rated !== false; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
                     deliver(r, other(role), body.replace(/\n/g, ' '));
                 }
             }

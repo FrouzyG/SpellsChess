@@ -75,7 +75,7 @@ const ABILITIES = {
     // --- Маг
     fireball: {
         icon: '🔥', name: 'Огненный шар',
-        desc: 'Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем клетка горит 3 хода: вставшие на неё и прошедшие сквозь фигуры сгорают (конь перепрыгивает). Уничтожает плитки.'
+        desc: 'Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.'
     },
     freeze: {
         icon: '❄️', name: 'Заморозка',
@@ -123,7 +123,7 @@ const ABILITIES = {
     },
     scream: {
         icon: '😱', name: 'Скример',
-        desc: 'Дальность хода вражеской фигуры (не короля) становится 1: ладья по прямым, слон по диагонали, ферзь в любую сторону, конь как слон. Пешка идёт только на 1 вперёд и не рубит. Страх спадает после хода, у пешки и через ' + CONFIG.scaredPawnTurns + ' хода.'
+        desc: 'Вражеская фигура (не король) ходит только на 1 клетку: конь как слон, пешка вперёд без рубки. Страх спадает после её хода, у пешки через ' + CONFIG.scaredPawnTurns + ' хода.'
     },
     // --- Самурай
     shomen: {
@@ -132,12 +132,12 @@ const ABILITIES = {
     },
     fukashi: {
         icon: '🥷', name: 'Фукаши',
-        desc: 'Фигура невидима для врага, но блокирует ходы: пройти сквозь неё значит срубить её. Раскрывается, если срубила, дала шах или ей грозит пешка (по диагонали). Если пешка идёт прямо на неё или фигура, которую она связывает, пытается сойти с линии, невидимка раскрывается, а ход не тратится.'
+        desc: 'Невидима для врага, но блокирует ходы (пройти сквозь неё значит срубить). Раскрывается, если рубит, даёт шах или ей грозит пешка. Если ход врага упирается в неё, она раскрывается, а ход не тратится.'
     },
     fenyan: {
         free: true,
         icon: '🗡️', name: 'Фен-Янь',
-        desc: 'Все клетки одного цвета острые на ваш ход и ход врага: вставшая на острую клетку фигура погибает. Клетки, на которых в момент применения стоят фигуры, острыми не становятся.'
+        desc: 'Все клетки одного цвета острые на ваш ход и ход врага: вставшая на них фигура погибает. Занятые клетки острыми не становятся.'
     },
     // --- Архитектор
     conveyor: {
@@ -164,7 +164,7 @@ const ABILITIES = {
     // --- Новые способности
     guardian: {
         icon: '👼', name: 'Ангел-хранитель',
-        desc: 'На ' + CONFIG.guardianTurns + ' ходов союзная фигура самоотверженна: если рядом (3×3) другую союзную фигуру убивают (рубкой, огненным шаром, стрелой, взрывом и т. п.), она меняется с ней местами и гибнет вместо неё.'
+        desc: 'На ' + CONFIG.guardianTurns + ' ходов фигура прикрывает союзников в 3×3: если любую из них убивают (рубкой или магией), она меняется с ней местами и гибнет вместо неё.'
     },
     purify: {
         icon: '✴️', name: 'Очищение',
@@ -172,7 +172,7 @@ const ABILITIES = {
     },
     lie: {
         icon: '🤥', name: 'Ход — это ложь',
-        desc: 'Выберите клетку, куда встанет невидимая фигура, и клетку её иллюзии (оба хода обычные ходы фигуры). Невидимость и иллюзия раскрываются и рассеиваются по обычным правилам, ошибки игрока на его совести. После хода врага правда раскрывается.'
+        desc: 'Выберите клетку, куда встанет невидимая фигура, и клетку её иллюзии (оба хода обычные). После хода врага правда раскрывается.'
     },
     virus: {
         icon: '☣️', name: 'Вирус',
@@ -199,7 +199,7 @@ const ABILITIES = {
     groundhog: {
         free: true,
         icon: '⏳', name: 'Ход сурка',
-        desc: 'Ловушка (королю не страшна) стоит, пока не сработает один раз: фигура на ней возвращается туда, откуда пришла. На пустой клетке скрыта и ход не тратит, на фигуре видна, тратит ход и срабатывает на новую фигуру.'
+        desc: 'Одноразовая ловушка (королю не страшна): вставшая на неё фигура возвращается, откуда пришла. На пустой клетке скрыта и ход не тратит; на фигуре видна и тратит ход.'
     },
     // --- Повелитель времени
     zawarudo: {
@@ -214,7 +214,7 @@ const ABILITIES = {
     },
     superposition: {
         icon: '⚛️', name: 'Суперпозиция',
-        desc: 'Одноразово: фигура (не король) не мешает, если на её клетку встала или прошла сквозь неё другая фигура, и возвращается на клетку прошлого хода. Если вернуться нельзя, ничего не происходит. Если на клетку возврата встала ходившая фигура, её рубят.'
+        desc: 'Одноразово: фигура (не король) не мешает, через неё можно пройти и встать на её клетку, а она возвращается на клетку прошлого хода (если там встала ходившая фигура, ту рубят).'
     },
     lure: {
         icon: '🎣', name: 'Приманка',
@@ -226,12 +226,12 @@ const ABILITIES = {
 Object.assign(ABILITIES, {
     blunder: {
         icon: '🤡', name: 'Бриллиантовый зевок',
-        desc: 'Шутовской колпак на вашу фигуру (враг не видит, на какую): ' + (CONFIG.capTurns - 1) + ' хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает. Перед третьим ходом врага колпак слетает сам: фигура снова создаёт угрозу, и её можно срубить.'
+        desc: 'Тайный колпак на вашей фигуре: ' + (CONFIG.capTurns - 1) + ' хода врага она не рубит и не даёт шах. Срубивший её погибает. Перед третьим ходом врага колпак слетает.'
     },
     banana: {
         free: true,
         icon: '🍌', name: 'Банановая кожура',
-        desc: 'Невидимая для врага кожура на свободной клетке с направлением (вверх, вниз, влево, вправо): вставшая на неё фигура (не король) поскальзывается и съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.'
+        desc: 'Скрытая кожура на свободной клетке с направлением: вставшая на неё фигура (не король) съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.'
     },
     jaws: {
         icon: '🦷', name: 'Заводные челюсти',
@@ -240,7 +240,7 @@ Object.assign(ABILITIES, {
     tomato: {
         free: true,
         icon: '🍅', name: 'Красная обструкция',
-        desc: 'Помидор в одну из способностей врага: она отключается на ' + CONFIG.tomatoTurns + ' ходов врага (перезарядка идёт как обычно). Нельзя бросить в уже отключённую способность. Ход не тратится.'
+        desc: 'Отключает способность врага на ' + CONFIG.tomatoTurns + ' ходов (перезарядка идёт). Ход не тратится.'
     }
 });
 
@@ -255,7 +255,7 @@ const PASSIVES = {
     },
     doubleVision: {
         icon: '👀', name: 'Двоится в глазах',
-        desc: 'Король, ушедший из-под шаха сам, оставляет иллюзию на другой клетке, куда мог уйти. Она появляется одновременно с ним и дальше ходит с королём как обычная.'
+        desc: 'Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит с королём как обычная.'
     },
     harvest: {
         icon: '🌾', name: 'Жатва',
@@ -263,7 +263,7 @@ const PASSIVES = {
     },
     paranormal: {
         icon: '🌫️', name: 'Паранормальщина',
-        desc: 'Король прозрачен для ваших фигур. Рядом с вашей фигурой он может «вселиться» в цепочку ваших фигур (каждая в 3×3 от предыдущей) и появиться на свободной клетке в 3×3 от любой из них.'
+        desc: 'Король прозрачен для ваших фигур и может «вселиться» в цепочку ваших фигур (каждая в 3×3 от предыдущей), появившись рядом с любой из них.'
     },
     multi: {
         icon: '🧰', name: 'Мастер на все руки',
@@ -287,7 +287,7 @@ const PASSIVES = {
 
 PASSIVES.pretense = {
     icon: '🃏', name: 'Притворство',
-    desc: 'В начале партии тайно выберите вражеского слона или коня: Предательство. Враг ходит ею как обычно. После ' + CONFIG.betrayAfter + '-го хода врага можно потратить ход и дважды нажать на неё: она навсегда сменит цвет и будет подчиняться только вам (в этот ход сама не ходит).'
+    desc: 'В начале партии тайно выберите вражеского слона или коня. После ' + CONFIG.betrayAfter + '-го хода врага можно потратить ход и дважды нажать на неё: она навсегда перейдёт к вам.'
 };
 
 const HEROES = {
@@ -913,7 +913,7 @@ function applyEffects(b, log) {
         let r = cv.r, c = cv.c;
         while (inb(r, c) && b[r][c]) { chain.push([r, c]); r += dr; c += dc; }
         if (!inb(r, c)) return;                     // некуда толкать: остаются на месте
-        if (chain.some(([cr, cc]) => auraProtected(b, cr, cc))) return;   // магический барьер Мага: конвейер не двигает
+        if (chain.some(([cr, cc]) => { const q = b[cr][cc]; return q && q.t !== 'k' && q.warded > 0; })) return;   // конвейер не двигает только фигуры под «Очищением»; барьер Мага ему не помеха
         for (let i = chain.length - 1; i >= 0; i--) {
             const [cr, cc] = chain[i], q = b[cr][cc];
             b[cr + dr][cc + dc] = q;
@@ -3578,7 +3578,7 @@ function renderStatus() {
     renderChat();
     const ni = $('#netInfo');
     ni.classList.toggle('hidden', !NET.on);
-    if (NET.on) ni.textContent = `Онлайн: вы играете ${NET.me === 'w' ? 'белыми' : 'чёрными'}${G.turn === NET.me ? ' · ваш ход' : ''}${NET.lost ? ' · соединение потеряно' : ''}${NET.peerKnown ? ' · ' + peerText() : ''}`;
+    if (NET.on) ni.textContent = `Онлайн: вы играете ${NET.me === 'w' ? 'белыми' : 'чёрными'}${G.turn === NET.me ? ' · ваш ход' : ''}${NET.lost ? ' · соединение потеряно' : ''}${NET.peerKnown ? ' · ' + peerText() : ''}${NET.rated === false ? ' · дружеская партия' : ''}`;
 }
 
 function renderLog() {
@@ -3611,6 +3611,7 @@ function buildSetup() {
     const sb = $('#startBtn');
     if (NET.on) sb.textContent = NET.ready ? 'Отменить готовность' : 'Готов';
     else sb.textContent = 'Начать партию';
+    if (NET.on && NET.oppLeft) { sb.textContent = 'Оппонент отключился'; sb.disabled = true; } else sb.disabled = false;
     ['w', 'b'].forEach(side => {
         if (NET.on && side !== NET.me) {          // героя соперника не показываем до начала партии
             $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML =
@@ -3669,12 +3670,15 @@ function openSetup() {
     NET.ready = false; NET.oppReady = false; NET.oppHero = null; NET.lastStart = null;
     buildSetup();
     const sn = $('#setupNet');
+    sn.classList.remove('warn');
     sn.classList.toggle('hidden', !NET.on);
     if (NET.on) sn.textContent = `Вы играете ${NET.me === 'w' ? 'белыми' : 'чёрными'}. Выберите героя и нажмите «Готов»: партия начнётся, когда готовы оба. Героя соперника вы увидите только на старте.`;
     $('#gameover').classList.add('hidden');
     $('#promo').classList.add('hidden');
     $('#setup').classList.remove('hidden');
     updatePeerLabel();
+    $('#setupLeave').classList.toggle('hidden', !NET.on);
+    if (NET.on && NET.oppLeft) markOppLeft();
 }
 
 $('#setup').addEventListener('click', e => {
@@ -3703,6 +3707,7 @@ $('#setup').addEventListener('click', e => {
     buildSetup();
 });
 function toggleReady() {
+    if (NET.oppLeft) return;
     NET.ready = !NET.ready;
     netSend({ t: 'ready', ready: NET.ready, hero: selectedHeroes[NET.me] });
     buildSetup();
@@ -3714,7 +3719,7 @@ function maybeStart() {
     if (!(NET.on && NET.host && NET.ready && NET.oppReady && NET.oppHero)) return;
     _seed = (Math.random() * 2147483647) | 0;
     const heroes = { w: selectedHeroes.w, b: NET.oppHero };
-    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0 };
+    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0, rated: NET.rated !== false };
     netSend({ t: 'start', ...NET.lastStart });
     selectedHeroes = heroes;
     NET.ready = false; NET.oppReady = false;
@@ -3940,6 +3945,7 @@ function attachConn(c) {
     c.on('open', () => {
         NET.on = true;
         NET.me = NET.host ? 'w' : 'b';
+        NET.oppLeft = false;
         $('#lobby').classList.add('hidden');
         openSetup();
         tcOnOpen();
@@ -3949,6 +3955,8 @@ function attachConn(c) {
     c.on('close', () => {
         if (!NET.on) return;
         NET.lost = true;
+        NET.oppLeft = true;
+        if (!$('#setup').classList.contains('hidden')) { markOppLeft(); return; }
         if (G) render();
         uiAlert('Соединение с соперником потеряно.');
     });
@@ -3956,6 +3964,11 @@ function attachConn(c) {
 
 function netRecv(m) {
     switch (m.t) {
+        case 'leave':
+            NET.lost = true; NET.oppLeft = true;
+            if (!$('#setup').classList.contains('hidden')) markOppLeft();
+            else { if (G) render(); uiAlert('Соперник покинул партию.'); }
+            break;
         case 'peer':
             NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0; NET.oppId = /^[0-9a-f-]{36}$/i.test(m.id || '') ? m.id : null;
             updatePeerLabel(); if (G) render();
@@ -3969,7 +3982,7 @@ function netRecv(m) {
             maybeStart();
             break;
         case 'start':
-            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
+            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; if (m.rated !== undefined) NET.rated = m.rated !== false; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
             break;
         case 'chat':
             if (!NET.muted && typeof m.text === 'string') { chatMsgs.push({ me: false, text: m.text.slice(0, 300) }); renderChat(); }
@@ -4004,7 +4017,8 @@ $('#lobbyQuick').addEventListener('click', async () => {
     if (!RELAY) { lobbyStatus('Быстрая игра работает только на сайте с сервером игры.'); return; }
     try {
         NET.pref = quickPref();
-        const j = await (await fetch('/quick?tc=' + encodeURIComponent(NET.pref))).json();
+        NET.rated = TCSEL.rated;
+        const j = await (await fetch('/quick?tc=' + encodeURIComponent(NET.pref) + '&rated=' + (TCSEL.rated ? 1 : 0))).json();
         if (!j.room) { lobbyStatus('Сервер занят, попробуйте позже.'); return; }
         NET.host = j.role === 'host';
         lobbyStatus(NET.host ? 'Ищем соперника... оставайтесь на этой странице.' : 'Соперник найден, подключаемся...');
@@ -4430,7 +4444,7 @@ const EN = {
     "Новая игра": "New game",
     "Завершить ход": "End turn",
     "Шут": "Jester",
-    "Трюки и сюрпризы": "Tricks and surprises",
+    "Трюки и сюрпризы": "Tricks & Surprises",
     "Притворство": "Pretense",
     "Бриллиантовый зевок": "Brilliant Blunder",
     "Банановая кожура": "Banana Peel",
@@ -4543,6 +4557,36 @@ const EN = {
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
     "возвращается": "returns",
+    "Рейтинговая партия": "Rated game",
+    "Выйти из партии": "Leave the game",
+    "Оппонент отключился": "Opponent disconnected",
+    "⚠️ Оппонент отключился.": "⚠️ Your opponent disconnected.",
+    "Соперник покинул партию.": "Your opponent left the game.",
+    " Дружеская партия: рейтинг не меняется.": " Friendly game: rating does not change.",
+    " Партия рейтинговая.": " Rated game.",
+    " · дружеская партия": " · friendly game",
+    " · Дружеская": " · Friendly",
+    "📜 Профиль": "📜 Profile",
+    "Достижения": "Achievements",
+    "Бета-тестер": "Beta tester",
+    "Участвовал в бета-тестировании SpellsChess": "Took part in the SpellsChess beta test",
+    "Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.": "A mark within 6 squares of your king. It explodes at the start of your turn, then burns for 3 turns: pieces on it burn up. Destroys tiles.",
+    "Вражеская фигура (не король) ходит только на 1 клетку: конь как слон, пешка вперёд без рубки. Страх спадает после её хода, у пешки через ": "An enemy piece (not a king) moves only 1 square: a knight like a bishop, a pawn forward without capturing. The fear wears off after its move, for a pawn after ",
+    " ходов фигура прикрывает союзников в 3×3: если любую из них убивают (рубкой или магией), она меняется с ней местами и гибнет вместо неё.": " turns the piece covers allies in 3×3: if one of them is killed (by capture or magic), it swaps places with that ally and dies instead.",
+    "Выберите клетку, куда встанет невидимая фигура, и клетку её иллюзии (оба хода обычные). После хода врага правда раскрывается.": "Choose the square for the invisible piece and the square for its illusion (both are normal moves). After the enemy's move the truth is revealed.",
+    "Одноразово: фигура (не король) не мешает, через неё можно пройти и встать на её клетку, а она возвращается на клетку прошлого хода (если там встала ходившая фигура, ту рубят).": "One-time: a piece (not a king) does not block: others can pass through it or stop on its square, and it returns to its previous square (if the moving piece stopped there, it is captured).",
+    "Невидима для врага, но блокирует ходы (пройти сквозь неё значит срубить). Раскрывается, если рубит, даёт шах или ей грозит пешка. Если ход врага упирается в неё, она раскрывается, а ход не тратится.": "Invisible to the enemy but blocks moves (passing through it means capturing it). Revealed if it captures, gives check or is threatened by a pawn. If the enemy's move runs into it, it is revealed and the move is not spent.",
+    "Все клетки одного цвета острые на ваш ход и ход врага: вставшая на них фигура погибает. Занятые клетки острыми не становятся.": "All squares of one color are sharp on your turn and the enemy's: a piece that stops on them dies. Occupied squares do not become sharp.",
+    "Одноразовая ловушка (королю не страшна): вставшая на неё фигура возвращается, откуда пришла. На пустой клетке скрыта и ход не тратит; на фигуре видна и тратит ход.": "A one-time trap (kings are immune): a piece that steps on it goes back where it came from. On an empty square it is hidden and costs no turn; on a piece it is visible and costs a turn.",
+    "Тайный колпак на вашей фигуре: ": "A secret cap on your piece: ",
+    " хода врага она не рубит и не даёт шах. Срубивший её погибает. Перед третьим ходом врага колпак слетает.": " enemy turns it can't capture or give check. Whoever captures it dies. Before the enemy's third turn the cap falls off.",
+    "Скрытая кожура на свободной клетке с направлением: вставшая на неё фигура (не король) съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.": "A hidden peel on a free square with a direction: a piece (not a king) that steps on it slides to the neighboring square that way, and the peel disappears. Costs no turn.",
+    "Отключает способность врага на ": "Disables an enemy ability for ",
+    " ходов (перезарядка идёт). Ход не тратится.": " turns (its cooldown keeps running). Costs no turn.",
+    "Король прозрачен для ваших фигур и может «вселиться» в цепочку ваших фигур (каждая в 3×3 от предыдущей), появившись рядом с любой из них.": "The king is transparent to your pieces and can \"possess\" a chain of your pieces (each within 3×3 of the previous one), appearing next to any of them.",
+    "Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит с королём как обычная.": "A king that escapes check leaves an illusion on another square it could have gone to. Afterwards it moves with the king like a normal illusion.",
+    "В начале партии тайно выберите вражеского слона или коня. После ": "At the start, secretly choose an enemy bishop or knight. After the enemy's ",
+    "-го хода врага можно потратить ход и дважды нажать на неё: она навсегда перейдёт к вам.": "th turn you can spend a turn and click it twice: it joins you for good.",
     "Найти игрока по нику": "Find a player by nick",
     "Найти": "Find",
     "Никого не нашли.": "Nobody found.",
@@ -4944,9 +4988,10 @@ updateConfirmUI();
 // =====================================================================
 //  ВРЕМЯ ПАРТИИ: выбор в лобби, шахматные часы, подбор соперника по времени
 // =====================================================================
-const TCSEL = { mins: 30, inf: false, quick: 'any' };     // mins — всего минут на партию (каждому поровну); quick: any | time | inf
+const TCSEL = { mins: 30, inf: false, quick: 'any', rated: true };     // mins — всего минут на партию (каждому поровну); quick: any | time | inf
 try { Object.assign(TCSEL, JSON.parse(localStorage.getItem('sc_tc') || '{}')); } catch (e) { }
 TCSEL.mins = Math.max(1, Math.min(180, +TCSEL.mins || 30));
+TCSEL.rated = TCSEL.rated !== false;
 
 const prefToTc = p => (p === 'inf' ? 0 : (+p || 30));                       // 0 = без лимита
 const roomPref = () => (TCSEL.inf ? 'inf' : String(TCSEL.mins));
@@ -4964,6 +5009,7 @@ function renderTcBox() {
     g('tcVal').textContent = TCSEL.inf ? '∞' : `${TCSEL.mins} мин`;
     g('tcSub').textContent = TCSEL.inf ? 'без ограничения времени' : `${fmtNum(TCSEL.mins / 2)} мин на игрока`;
     g('tcInf').checked = TCSEL.inf;
+    g('ratedChk').checked = TCSEL.rated;
     ['tcM5', 'tcM1', 'tcP1', 'tcP5'].forEach(id => { g(id).disabled = TCSEL.inf; });
     g('tcBox').classList.toggle('inf', TCSEL.inf);
     document.querySelectorAll('#quickPick button').forEach(b => b.classList.toggle('on', b.dataset.q === TCSEL.quick));
@@ -4975,6 +5021,7 @@ function tcStep(d) {
 }
 [['tcM5', -5], ['tcM1', -1], ['tcP1', 1], ['tcP5', 5]].forEach(([id, d]) => document.getElementById(id).addEventListener('click', () => tcStep(d)));
 document.getElementById('tcInf').addEventListener('change', e => { TCSEL.inf = e.target.checked; saveTc(); renderTcBox(); });
+document.getElementById('ratedChk').addEventListener('change', e => { TCSEL.rated = e.target.checked; saveTc(); });
 document.getElementById('quickPick').addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -4982,14 +5029,15 @@ document.getElementById('quickPick').addEventListener('click', e => {
     saveTc(); renderTcBox();
 });
 // выбор времени запоминаем до того, как сработают обработчики создания комнаты и входа
-document.getElementById('lobbyHost').addEventListener('click', () => { NET.pref = roomPref(); }, true);
-document.getElementById('lobbyJoin').addEventListener('click', () => { NET.pref = 'any'; }, true);
+document.getElementById('lobbyHost').addEventListener('click', () => { NET.pref = roomPref(); NET.rated = TCSEL.rated; }, true);
+document.getElementById('lobbyJoin').addEventListener('click', () => { NET.pref = 'any'; NET.rated = undefined; }, true);
 renderTcBox();
 
 // После соединения хозяин сообщает итоговое время. Если он искал «любое», берётся время гостя (оба «любое»: 30 минут)
 function tcOnOpen() {
     const pref = NET.pref || 'any';
     if (NET.host) {
+        netSend({ t: 'mode', rated: NET.rated !== false });
         if (pref !== 'any') { NET.tc = prefToTc(pref); netSend({ t: 'tc', tc: NET.tc }); }
         else NET.tc = undefined;
     } else netSend({ t: 'tcpref', pref });
@@ -4997,8 +5045,9 @@ function tcOnOpen() {
 }
 const _netRecvTc = netRecv;
 netRecv = function (m) {
+    if (m && m.t === 'mode') { if (!NET.host) { NET.rated = m.rated !== false; updateSetupTc(); } return; }
     if (m && m.t === 'tcpref') {
-        if (NET.host && (NET.pref || 'any') === 'any') { NET.tc = m.pref === 'any' ? 30 : prefToTc(m.pref); netSend({ t: 'tc', tc: NET.tc }); updateSetupTc(); }
+        if (NET.host && (NET.pref || 'any') === 'any') { NET.tc = m.pref === 'any' ? 90 : prefToTc(m.pref); netSend({ t: 'tc', tc: NET.tc }); updateSetupTc(); }   /* оба «любое»: 90 минут, по 45 на игрока */
         return;
     }
     if (m && m.t === 'tc') { if (!NET.host && typeof m.tc === 'number') { NET.tc = m.tc; updateSetupTc(); } return; }
@@ -5014,7 +5063,7 @@ function updateSetupTc() {
     if (!el) return;
     const tc = curTc();
     el.classList.remove('hidden');
-    el.textContent = tc === null ? 'Время партии: определится, когда подключится соперник.' : `Время партии: ${fmtTc(tc)}.`;
+    el.textContent = (tc === null ? 'Время партии: определится, когда подключится соперник.' : `Время партии: ${fmtTc(tc)}.`) + (NET.on && NET.rated !== undefined ? (NET.rated === false ? ' Дружеская партия: рейтинг не меняется.' : ' Партия рейтинговая.') : '');
 }
 const _openSetupTc = openSetup;
 openSetup = function () { _openSetupTc.apply(this, arguments); updateSetupTc(); };
@@ -5294,6 +5343,7 @@ function accRefresh() {
     nm.classList.toggle('hidden', !u);
     $('#accBtn').classList.toggle('hidden', !!u);
     $('#accOut').classList.toggle('hidden', !u);
+    $('#accProf').classList.toggle('hidden', !u);
     if (u && ACC.needNick && !p && $('#auth').classList.contains('hidden')) openAuth('nick');
 }
 
@@ -5409,6 +5459,7 @@ async function openTop(query) {
 function findPlayers() { openTop($('#topSearch').value.trim().replace(/[%_,()*\\]/g, '')); }
 
 /* ---------- Профиль игрока: статистика, график рейтинга, история партий ---------- */
+const ACH = { beta: { name: 'Бета-тестер', desc: 'Участвовал в бета-тестировании SpellsChess', img: 'achievements/beta.png' } };
 const heroLabel = id => (HEROES[id] ? HEROES[id].icon + ' ' + HEROES[id].name : '—');
 const AVATARS = [...Object.values(HEROES).map(h => h.icon), '😎', '🦊', '🐉', '👑', '🎩', '🔥', '❄️', '⚡'];
 
@@ -5425,7 +5476,7 @@ async function openProfile(uid) {
         if (pr.error) throw pr.error;
         const p = pr.data;
         if (!p) { $('#profNick').textContent = ''; gl.textContent = 'Игрок не найден.'; return; }
-        const gm = await SB.from('games').select('id,white,black,result,created_at,white_hero,black_hero,white_delta,black_delta,reason,moves')
+        const gm = await SB.from('games').select('id,white,black,result,created_at,white_hero,black_hero,white_delta,black_delta,reason,moves,rated')
             .or(`white.eq.${uid},black.eq.${uid}`).order('created_at', { ascending: false }).limit(30);
         if (gm.error) throw gm.error;
         const games = gm.data || [];
@@ -5438,6 +5489,23 @@ async function openProfile(uid) {
         $('#profSub').textContent = `⭐ ${p.rating}` + (p.created_at ? (LANG === 'en' ? ' · joined ' : ' · на сайте с ') + new Date(p.created_at).toLocaleDateString() : '');
         const mine = ACC.user && ACC.user.id === uid;
         $('#profAvaBtn').classList.toggle('hidden', !mine);
+
+        // Достижения
+        const achBox = $('#profAch'); achBox.textContent = ''; $('#profAchH').classList.add('hidden');
+        try {
+            const ar = await SB.from('user_achievements').select('ach').eq('user_id', uid);
+            (ar.data || []).forEach(x => {
+                const d = ACH[x.ach];
+                if (!d) return;
+                const bx = mkEl('div', 'ach');
+                bx.title = d.name + ' — ' + d.desc;
+                const im = document.createElement('img');
+                im.src = d.img; im.alt = d.name;
+                bx.append(im, mkEl('span', '', d.name));
+                achBox.appendChild(bx);
+                $('#profAchH').classList.remove('hidden');
+            });
+        } catch (e) { /* достижения необязательны */ }
 
         // Статистика
         const total = p.wins + p.losses + p.draws;
@@ -5475,6 +5543,7 @@ async function openProfile(uid) {
             );
             const sub = mkEl('span', 'game-sub');
             sub.append(mkEl('span', '', heroLabel(my ? g.white_hero : g.black_hero) + ' vs ' + heroLabel(my ? g.black_hero : g.white_hero)));
+            if (g.rated === false) sub.append(mkEl('span', 'tag-friendly', ' · Дружеская'));
             if (g.reason) sub.append(mkEl('span', '', ' · ' + g.reason));
             if (g.moves) sub.append(mkEl('span', '', ' · ' + g.moves + (LANG === 'en' ? ' moves' : ' ходов'), true));
             row.appendChild(sub);
@@ -5505,6 +5574,7 @@ $('#accBtn').addEventListener('click', () => {
 });
 $('#accName').addEventListener('click', () => { if (!ACC.user) return; if (ACC.profile) openProfile(ACC.user.id); else openAuth('nick'); });
 $('#accOut').addEventListener('click', async () => { if (SB) { try { await SB.auth.signOut(); } catch (e) { /* выйдем и так */ } } ACC.user = null; ACC.profile = null; ACC.needNick = false; accRefresh(); });
+$('#accProf').addEventListener('click', () => { if (ACC.user) openProfile(ACC.user.id); });
 $('#accTop').addEventListener('click', () => { $('#topSearch').value = ''; openTop(); });
 $('#topFind').addEventListener('click', findPlayers);
 $('#topSearch').addEventListener('keydown', e => { if (e.key === 'Enter') findPlayers(); });
@@ -5532,3 +5602,19 @@ if (SB) {
         if (!ACC.profile) setTimeout(loadProfile, 0);
     });
 }
+
+
+/* ---------- Выход из онлайн-партии (на экране выбора героев) и сообщение «оппонент отключился» ---------- */
+function markOppLeft() {
+    const sn = $('#setupNet');
+    sn.classList.remove('hidden');
+    sn.classList.add('warn');
+    sn.textContent = '⚠️ Оппонент отключился.';
+    $('#setupPeer').classList.add('hidden');
+    buildSetup();
+}
+$('#setupLeave').addEventListener('click', () => {
+    netSend({ t: 'leave' });
+    $('#setupLeave').disabled = true;
+    setTimeout(() => { try { if (NET.conn && NET.conn.close) NET.conn.close(); } catch (e) { /* всё равно перезагрузим */ } location.reload(); }, 500);
+});

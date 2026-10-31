@@ -29,6 +29,7 @@
             </div>
             <div class="theme-pick"><h3>Доска</h3><div id="themeRow"></div></div>
             <button id="startBtn" class="big-btn">Начать партию</button>
+            <button id="setupLeave" class="big-btn secondary hidden">Выйти из партии</button>
             <div class="foot">
                 <a id="donateSetup" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
                 <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a></div>
@@ -46,6 +47,7 @@
             <div id="accBar" class="acc-bar">
                 <span id="accName" class="acc-name hidden" data-notr></span>
                 <button id="accBtn" class="small-btn">👤 Войти / Регистрация</button>
+                <button id="accProf" class="small-btn hidden">📜 Профиль</button>
                 <button id="accOut" class="small-btn hidden">Выйти</button>
                 <button id="accTop" class="small-btn">🏆 Рейтинг</button>
             </div>
@@ -60,6 +62,7 @@
                 </div>
                 <div id="tcSub" class="tc-sub" data-notr>15 мин на игрока</div>
                 <label class="tc-inf"><input type="checkbox" id="tcInf"> Без лимита времени</label>
+                <label class="tc-inf"><input type="checkbox" id="ratedChk" checked> Рейтинговая партия</label>
             </div>
             <button id="lobbyLocal" class="big-btn">Вдвоём за одним экраном</button>
             <div class="lobby-sep">онлайн</div>
@@ -205,6 +208,8 @@
             </div>
             <div id="profAvaPick" class="ava-pick hidden"></div>
             <div id="profStats" class="prof-stats"></div>
+            <h3 id="profAchH" class="prof-h hidden">Достижения</h3>
+            <div id="profAch" class="ach-row"></div>
             <svg id="profGraph" class="prof-graph" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
             <h3 class="prof-h">История партий</h3>
             <div id="profGames" class="top-list"></div>

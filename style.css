@@ -3833,3 +3833,45 @@ button {
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+/* ===================== Достижения, предупреждения ===================== */
+.ach-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.ach {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 84px;
+    font-size: 12px;
+    text-align: center;
+}
+
+    .ach img {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        border: 2px solid var(--gold);
+    }
+
+#setupNet.warn {
+    padding: 10px 14px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffb4c8;
+    background: rgba(255, 80, 120, 0.12);
+    border: 1px solid #ff6b8a;
+    border-radius: 10px;
+}
+
+#setupLeave {
+    margin-top: 10px;
+}
+
+.game-row .tag-friendly {
+    color: #9ad7ff;
+}
