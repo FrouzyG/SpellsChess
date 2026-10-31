@@ -3917,3 +3917,77 @@ button {
     max-height: 190px;
     overflow-y: auto;
 }
+
+/* ===================== Список комнат ===================== */
+.rooms-card {
+    width: min(560px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+}
+
+    .rooms-card h2 {
+        margin: 0;
+    }
+
+.rooms-create {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+    .rooms-create input, .room-row input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 9px 12px;
+        font-size: 15px;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid var(--pink);
+        border-radius: 8px;
+    }
+
+    .rooms-create .big-btn {
+        width: 100%;
+        margin: 0;
+    }
+
+.rooms-info {
+    font-size: 13px;
+    opacity: 0.75;
+}
+
+.rooms-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.room-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    align-items: center;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+    .room-row .room-sub {
+        font-size: 13px;
+        opacity: 0.75;
+    }
+
+    .room-row .room-pw {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 8px;
+    }
+
+        .room-row .room-pw.hidden {
+            display: none;
+        }

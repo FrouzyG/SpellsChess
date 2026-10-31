@@ -3869,12 +3869,12 @@ function whenRelayChecked(fn) {
     setTimeout(() => whenRelayChecked(fn), 1000);
 }
 
-function relayConn(code, role) {
+function relayConn(code, role, ticket) {
     const h = {};
     let queue = Promise.resolve();
     const sid = Math.random().toString(36).slice(2, 12);
     let mid = 0;
-    const es = new EventSource(`/events?room=${code}&role=${role}&sid=${sid}`);
+    const es = new EventSource(`/events?room=${code}&role=${role}&sid=${sid}` + (ticket ? `&ticket=${ticket}` : ''));
     const conn = {
         open: false,
         on(ev, fn) { h[ev] = fn; },
@@ -3893,6 +3893,7 @@ function relayConn(code, role) {
         const m = JSON.parse(e.data);
         if (m.t === '__open') { if (!conn.open) { conn.open = true; if (h.open) h.open(); } }
         else if (m.t === '__close') { conn.open = false; if (h.close) h.close(); }
+        else if (m.t === '__badpass') { lobbyStatus('Неверный пароль или комната уже занята.'); es.close(); }
         else if (m.t === '__nohost') { lobbyStatus('Комнаты с таким кодом нет.'); es.close(); }
         else if (m.t === '__taken') { lobbyStatus('Такой код уже занят, нажмите «Создать комнату» ещё раз.'); es.close(); $('#lobbyHost').disabled = false; }
         else if (h.data) h.data(m);
@@ -4559,6 +4560,25 @@ const EN = {
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
     "возвращается": "returns",
+    "🚪 Список комнат": "🚪 Room list",
+    "🚪 Комнаты": "🚪 Rooms",
+    "Пароль комнаты (необязательно)": "Room password (optional)",
+    "Создать комнату": "Create a room",
+    "Открытые комнаты": "Open rooms",
+    "⟳ Обновить": "⟳ Refresh",
+    "Пароль": "Password",
+    "Открытых комнат пока нет.": "No open rooms yet.",
+    "Не удалось загрузить список комнат.": "Could not load the room list.",
+    "Комнаты работают только на сайте с сервером игры.": "Rooms work only on the site with the game server.",
+    "Список комнат работает только на сайте с сервером игры.": "The room list works only on the site with the game server.",
+    "Сервер занят, попробуйте позже.": "The server is busy, try again later.",
+    "Не удалось связаться с сервером.": "Could not reach the server.",
+    "Комната создана (с паролем) и видна в списке. Ждём соперника...": "Room created (password-protected) and visible in the list. Waiting for an opponent...",
+    "Комната создана и видна в списке. Ждём соперника...": "Room created and visible in the list. Waiting for an opponent...",
+    "Неверный пароль.": "Wrong password.",
+    "Слишком много попыток, подождите минуту.": "Too many attempts, wait a minute.",
+    "Комната уже занята или закрыта.": "The room is already taken or closed.",
+    "Неверный пароль или комната уже занята.": "Wrong password or the room is already taken.",
     "⟵ Выйти": "⟵ Leave",
     "Выйти из партии?": "Leave the game?",
     "▶ Повтор": "▶ Replay",
@@ -4761,8 +4781,8 @@ setLang(LANG);
 (function () {
     const g = id => document.getElementById(id);
     const app = g('app'), st = g('status'), hi = g('hint'), ms = g('mStatus'), mh = g('mHint');
-    const end = g('btnEnd'), mEnd = g('mEnd'), chat = g('chat'), mChat = g('mChat');
-    if (!app || !ms || !mh || !mEnd || !mChat) return;
+    const end = g('btnEnd'), mEnd = g('mEnd'), chat = g('chat');
+    if (!app || !ms || !mh || !mEnd) return;
 
     const sync = () => {
         if (ms.textContent !== st.textContent) ms.textContent = st.textContent;
@@ -4771,12 +4791,10 @@ setLang(LANG);
         if (mh.textContent !== hi.textContent) mh.textContent = hi.textContent;
         mEnd.classList.toggle('hidden', end.classList.contains('hidden'));
         mEnd.disabled = end.disabled;
-        mChat.classList.toggle('hidden', chat.classList.contains('hidden'));
     };
     const obs = new MutationObserver(sync);
     [st, hi].forEach(n => obs.observe(n, { childList: true, characterData: true, subtree: true, attributes: true }));
     obs.observe(end, { attributes: true });
-    obs.observe(chat, { attributes: true });
     sync();
 
     const openSheet = target => {
@@ -4786,8 +4804,6 @@ setLang(LANG);
     const closeSheet = () => app.classList.remove('sheet-open');
 
     g('mMenu').addEventListener('click', () => openSheet(null));
-    g('mLog').addEventListener('click', () => { openSheet(g('log').previousElementSibling); setTimeout(() => { const l = g('log'); l.scrollTop = l.scrollHeight; }, 80); });
-    g('mChat').addEventListener('click', () => openSheet(chat));
     g('mClose').addEventListener('click', closeSheet);
     mEnd.addEventListener('click', () => end.click());
     app.addEventListener('click', e => { if (e.target === app) closeSheet(); });      // тап по затемнению закрывает окно
@@ -5353,7 +5369,6 @@ function accRefresh() {
     nm.classList.toggle('hidden', !u);
     $('#accBtn').classList.toggle('hidden', !!u);
     $('#accOut').classList.toggle('hidden', !u);
-    $('#accProf').classList.toggle('hidden', !u);
     if (u && ACC.needNick && !p && $('#auth').classList.contains('hidden')) openAuth('nick');
 }
 
@@ -5590,7 +5605,6 @@ $('#accBtn').addEventListener('click', () => {
 });
 $('#accName').addEventListener('click', () => { if (!ACC.user) return; if (ACC.profile) openProfile(ACC.user.id); else openAuth('nick'); });
 $('#accOut').addEventListener('click', async () => { if (SB) { try { await SB.auth.signOut(); } catch (e) { /* выйдем и так */ } } ACC.user = null; ACC.profile = null; ACC.needNick = false; accRefresh(); });
-$('#accProf').addEventListener('click', () => { if (ACC.user) openProfile(ACC.user.id); });
 $('#accTop').addEventListener('click', () => { $('#topSearch').value = ''; openTop(); });
 $('#topFind').addEventListener('click', findPlayers);
 $('#topSearch').addEventListener('keydown', e => { if (e.key === 'Enter') findPlayers(); });
@@ -5687,3 +5701,98 @@ function replayAuto() {
 $('#rwPlay').addEventListener('click', replayAuto);
 $('#rpExit').addEventListener('click', () => location.reload());
 ['btnDraw', 'btnResign', 'btnNew', 'btnEnd'].forEach(id => $('#' + id).addEventListener('click', e => { if (REPLAY.on) { e.stopImmediatePropagation(); e.preventDefault(); } }, true));
+
+
+/* =====================================================================
+   СПИСОК КОМНАТ: открытые комнаты, вход с паролем или без
+   ===================================================================== */
+const ROOMS = { timer: null };
+
+function roomsMsg(t) { $('#roomsMsg').textContent = t || ''; }
+function roomsInfoText() {
+    $('#roomMakeInfo').textContent = (TCSEL.inf ? '∞' : TCSEL.mins + (LANG === 'en' ? ' min' : ' мин')) + ' · ' + (TCSEL.rated ? (LANG === 'en' ? 'rated' : 'рейтинговая') : (LANG === 'en' ? 'friendly' : 'дружеская')) + (LANG === 'en' ? ' (change in the main menu)' : ' (меняется в главном меню)');
+}
+
+async function loadRooms() {
+    const box = $('#roomsList');
+    try {
+        const list = await (await fetch('/lobby/list')).json();
+        box.textContent = '';
+        if (!list.length) { box.textContent = 'Открытых комнат пока нет.'; return; }
+        list.forEach(rm => {
+            const row = mkEl('div', 'room-row');
+            const left = mkEl('div');
+            left.append(mkEl('div', '', (rm.pass ? '🔒 ' : '') + (rm.nick ? rm.nick + (rm.rating ? ' (⭐ ' + rm.rating + ')' : '') : (LANG === 'en' ? 'Guest' : 'Гость')), true));
+            const tcv = prefToTc(rm.tc);
+            left.append(mkEl('div', 'room-sub', (tcv > 0 ? tcv + (LANG === 'en' ? ' min' : ' мин') : '∞') + ' · ' + (rm.rated ? (LANG === 'en' ? 'rated' : 'рейтинговая') : (LANG === 'en' ? 'friendly' : 'дружеская')), true));
+            const btn = mkEl('button', 'small-btn', 'Войти');
+            row.append(left, btn);
+            const pwBox = mkEl('div', 'room-pw hidden');
+            const inp = document.createElement('input');
+            inp.type = 'password'; inp.maxLength = 20; inp.placeholder = 'Пароль'; inp.autocomplete = 'off';
+            pwBox.appendChild(inp);
+            if (rm.pass) row.appendChild(pwBox);
+            const go = () => {
+                if (rm.pass && pwBox.classList.contains('hidden')) { pwBox.classList.remove('hidden'); inp.focus(); return; }
+                joinListed(rm.room, inp.value);
+            };
+            btn.addEventListener('click', go);
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+            box.appendChild(row);
+        });
+    } catch (e) { box.textContent = 'Не удалось загрузить список комнат.'; }
+}
+
+function openRooms() {
+    if (NET.on) return;
+    roomsMsg('');
+    roomsInfoText();
+    $('#rooms').classList.remove('hidden');
+    $('#roomsList').textContent = 'Загрузка...';
+    loadRooms();
+    clearInterval(ROOMS.timer);
+    ROOMS.timer = setInterval(() => { if ($('#rooms').classList.contains('hidden')) { clearInterval(ROOMS.timer); return; } if (!document.activeElement || document.activeElement.type !== 'password') loadRooms(); }, 5000);
+}
+function closeRooms() { clearInterval(ROOMS.timer); $('#rooms').classList.add('hidden'); }
+
+async function makeListedRoom() {
+    if (!RELAY) { roomsMsg('Комнаты работают только на сайте с сервером игры.'); return; }
+    const btn = $('#roomMake');
+    btn.disabled = true;
+    try {
+        let token = '';
+        try { if (SB) { const { data } = await SB.auth.getSession(); if (data && data.session) token = data.session.access_token; } } catch (e) { /* без входа тоже можно */ }
+        const pref = roomPref();
+        const j = await (await fetch('/lobby/create', { method: 'POST', body: JSON.stringify({ tc: pref, rated: TCSEL.rated, pass: $('#roomPass').value, token }) })).json();
+        if (!j.room) { roomsMsg('Сервер занят, попробуйте позже.'); return; }
+        if (NET.conn && !NET.on) { try { NET.conn.close(); } catch (e) { /* старую комнату закрываем */ } NET.conn = null; }
+        NET.pref = pref; NET.rated = TCSEL.rated; NET.host = true;
+        $('#roomCode').textContent = j.room;
+        $('#hostBox').classList.remove('hidden');
+        lobbyStatus($('#roomPass').value ? 'Комната создана (с паролем) и видна в списке. Ждём соперника...' : 'Комната создана и видна в списке. Ждём соперника...');
+        closeRooms();
+        attachConn(relayConn(j.room, 'host'));
+    } catch (e) { roomsMsg('Не удалось связаться с сервером.'); }
+    finally { btn.disabled = false; }
+}
+
+async function joinListed(room, pw) {
+    try {
+        const r = await fetch('/lobby/join', { method: 'POST', body: JSON.stringify({ room, pw }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.status === 403) { roomsMsg('Неверный пароль.'); return; }
+        if (r.status === 429) { roomsMsg('Слишком много попыток, подождите минуту.'); return; }
+        if (!r.ok || !j.ticket) { roomsMsg('Комната уже занята или закрыта.'); loadRooms(); return; }
+        if (NET.conn && !NET.on) { try { NET.conn.close(); } catch (e) { /* прежнее ожидание закрываем */ } NET.conn = null; }
+        NET.host = false; NET.pref = 'any'; NET.rated = undefined;
+        $('#hostBox').classList.add('hidden');
+        lobbyStatus('Подключаемся...');
+        closeRooms();
+        attachConn(relayConn(room, 'guest', j.ticket));
+    } catch (e) { roomsMsg('Не удалось связаться с сервером.'); }
+}
+
+$('#lobbyRooms').addEventListener('click', () => whenRelayChecked(() => { if (!RELAY) { lobbyStatus('Список комнат работает только на сайте с сервером игры.'); return; } openRooms(); }));
+$('#roomMake').addEventListener('click', makeListedRoom);
+$('#roomsRefresh').addEventListener('click', () => { roomsMsg(''); loadRooms(); });
+$('#roomsClose').addEventListener('click', closeRooms);

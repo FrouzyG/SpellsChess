@@ -47,7 +47,6 @@
             <div id="accBar" class="acc-bar">
                 <span id="accName" class="acc-name hidden" data-notr></span>
                 <button id="accBtn" class="small-btn">👤 Войти / Регистрация</button>
-                <button id="accProf" class="small-btn hidden">📜 Профиль</button>
                 <button id="accOut" class="small-btn hidden">Выйти</button>
                 <button id="accTop" class="small-btn">🏆 Рейтинг</button>
             </div>
@@ -67,6 +66,7 @@
             <button id="lobbyLocal" class="big-btn">Вдвоём за одним экраном</button>
             <div class="lobby-sep">онлайн</div>
             <button id="lobbyQuick" class="big-btn">Быстрая игра: найти соперника</button>
+            <button id="lobbyRooms" class="big-btn">🚪 Список комнат</button>
             <div class="quick-line">Искать партию:</div>
             <div id="quickPick" class="seg">
                 <button data-q="any">Любая</button>
@@ -113,8 +113,6 @@
             <div id="mHint" class="m-hint" data-notr></div>
         </div>
         <div id="mBar" class="m-bar">
-            <button id="mLog" class="small-btn">📜 Журнал</button>
-            <button id="mChat" class="small-btn hidden">💬 Чат</button>
             <button id="mMenu" class="small-btn">☰ Меню</button>
             <button id="mEnd" class="small-btn hidden" disabled>Завершить ход</button>
         </div>
@@ -167,6 +165,22 @@
             </details>
         </aside>
     </main>
+
+    <!-- Список комнат -->
+    <div id="rooms" class="overlay hidden">
+        <div class="small-card rooms-card">
+            <h2>🚪 Комнаты</h2>
+            <div class="rooms-create">
+                <input id="roomPass" maxlength="20" placeholder="Пароль комнаты (необязательно)" autocomplete="off">
+                <button id="roomMake" class="big-btn">Создать комнату</button>
+                <div id="roomMakeInfo" class="rooms-info" data-notr></div>
+            </div>
+            <div class="rooms-head"><b>Открытые комнаты</b><button id="roomsRefresh" class="small-btn">⟳ Обновить</button></div>
+            <div id="roomsList" class="top-list"></div>
+            <p id="roomsMsg" class="auth-msg"></p>
+            <button id="roomsClose" class="small-btn">Закрыть</button>
+        </div>
+    </div>
 
     <!-- Вход и регистрация -->
     <div id="auth" class="overlay hidden">

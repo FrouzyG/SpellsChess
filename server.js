@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -23,7 +24,7 @@ const open = r => { push(r.host, { t: '__open' }); push(r.guest, { t: '__open' }
 
 // Комната хранит журнал сообщений для каждого получателя: если связь на миг оборвалась,
 // после переподключения пропущенное доставится заново (браузер сам шлёт Last-Event-ID).
-const makeRoom = () => ({ inlog: null, seed: null, tcv: null, rated: true, user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
+const makeRoom = () => ({ pub: null, tickets: new Set(), failN: 0, lockUntil: 0, inlog: null, seed: null, tcv: null, rated: true, user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
 const deliver = (r, to, data) => {
     const id = ++r.seq[to];
     r.log[to].push({ id, data });
@@ -94,6 +95,16 @@ function handleResult(r, role, res, msg) {
     r.repTimer = setTimeout(() => { if (!r[o] && !r.rep[o]) recordGame(r); }, 25000);   // соперник ушёл, не успев ответить
 }
 
+
+// ---------- Список комнат: создание (можно с паролем), просмотр, вход ----------
+const hashPw = (pw, salt) => crypto.scryptSync(String(pw), salt, 32);
+const readJson = (req, cb) => {
+    let body = '';
+    req.on('data', d => { body += d; if (body.length > 20000) req.destroy(); });
+    req.on('end', () => { let j = {}; try { j = JSON.parse(body || '{}'); } catch (e) { } cb(j && typeof j === 'object' ? j : {}); });
+};
+const sendJson = (res, code, obj) => { res.statusCode = code; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(obj)); };
+
 const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     const room = (url.searchParams.get('room') || '').toUpperCase().slice(0, 12);
@@ -126,6 +137,58 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // Список комнат
+    if (url.pathname === '/lobby/list') {
+        const list = Object.entries(rooms)
+            .filter(([, r]) => r.pub && r.host && !r.guest)
+            .sort((a, b) => b[1].pub.created - a[1].pub.created)
+            .slice(0, 50)
+            .map(([code, r]) => ({ room: code, nick: r.pub.nick, rating: r.pub.rating, tc: r.pub.tc, rated: r.pub.rated, pass: !!r.pub.hash }));
+        sendJson(res, 200, list);
+        return;
+    }
+    if (url.pathname === '/lobby/create' && req.method === 'POST') {
+        readJson(req, async j => {
+            if (Object.keys(rooms).length > 500) { sendJson(res, 503, {}); return; }
+            const pass = typeof j.pass === 'string' ? j.pass.slice(0, 20) : '';
+            let nick = '', rating = 0;
+            if (typeof j.token === 'string' && j.token.length > 20 && j.token.length < 4096) {
+                const uid = await sbUser(j.token);
+                const prof = uid ? await sbProfile(uid) : null;
+                if (prof) { nick = String(prof.nick || '').slice(0, 16); rating = prof.rating | 0; }
+            }
+            const code = makeCode();
+            const r = rooms[code] = makeRoom();
+            const salt = crypto.randomBytes(8).toString('hex');
+            r.pub = { nick, rating, tc: String(j.tc || 'inf').slice(0, 6), rated: j.rated !== false, created: Date.now(), salt, hash: pass ? hashPw(pass, salt) : null };
+            setTimeout(() => { const x = rooms[code]; if (x && !x.host) delete rooms[code]; }, 60000);   // хозяин так и не подключился
+            sendJson(res, 200, { room: code });
+        });
+        return;
+    }
+    if (url.pathname === '/lobby/join' && req.method === 'POST') {
+        readJson(req, j => {
+            const code = String(j.room || '').toUpperCase().slice(0, 12);
+            const r = rooms[code];
+            if (!r || !r.pub || !r.host || r.guest) { sendJson(res, 404, { error: 'gone' }); return; }
+            if (Date.now() < r.lockUntil) { sendJson(res, 429, { error: 'locked' }); return; }
+            if (r.pub.hash) {
+                let ok = false;
+                try { ok = crypto.timingSafeEqual(hashPw(String(j.pw || '').slice(0, 20), r.pub.salt), r.pub.hash); } catch (e) { }
+                if (!ok) {
+                    if (++r.failN >= 8) { r.failN = 0; r.lockUntil = Date.now() + 60000; }
+                    sendJson(res, 403, { error: 'pass' });
+                    return;
+                }
+            }
+            const ticket = crypto.randomBytes(12).toString('hex');
+            r.tickets.add(ticket);
+            setTimeout(() => r.tickets.delete(ticket), 30000);
+            sendJson(res, 200, { ticket });
+        });
+        return;
+    }
+
     if (url.pathname === '/events') {
         if (role !== 'host' && role !== 'guest') { res.writeHead(400); res.end(); return; }
         const sid = (url.searchParams.get('sid') || '').slice(0, 24);
@@ -138,6 +201,11 @@ const server = http.createServer((req, res) => {
             if (!r) { if (Object.keys(rooms).length > 500) { res.end(); return; } r = rooms[room] = makeRoom(); }
         } else {
             if (!r || (r.sid.guest && r.sid.guest !== sid)) { push(res, { t: '__nohost' }); res.end(); return; }
+            if (r.pub && r.pub.hash && r.sid.guest !== sid) {           // комната с паролем: нужен билет, выданный после проверки пароля
+                const tk = url.searchParams.get('ticket') || '';
+                if (!r.tickets.has(tk)) { push(res, { t: '__badpass' }); res.end(); return; }
+                r.tickets.delete(tk);
+            }
         }
         const old = r[role];
         if (old && old !== res) { try { old.end(); } catch (e) { } }
