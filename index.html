@@ -42,6 +42,11 @@
             <button id="langLobby" class="small-btn lang-top">🌐 English</button>
             <h1 class="logo"><span class="logo-sp">Spells</span><span class="logo-ch">Chess</span></h1>
             <p class="sub">Как будете играть?</p>
+            <div id="accBar" class="acc-bar">
+                <span id="accName" class="acc-name hidden" data-notr></span>
+                <button id="accBtn" class="small-btn">👤 Войти / Регистрация</button>
+                <button id="accOut" class="small-btn hidden">Выйти</button>
+            </div>
             <div id="tcBox" class="tc-box">
                 <div class="tc-title">Время партии</div>
                 <div class="tc-row">
@@ -153,6 +158,24 @@
         </aside>
     </main>
 
+    <!-- Вход и регистрация -->
+    <div id="auth" class="overlay hidden">
+        <div class="small-card auth-card">
+            <h2 id="authTitle">Вход</h2>
+            <div id="authGoogleBox">
+                <button id="authGoogle" class="big-btn google-btn">Войти через Google</button>
+                <div class="lobby-sep">или по почте</div>
+            </div>
+            <input id="authEmail" type="email" autocomplete="email" placeholder="Почта">
+            <input id="authPass" type="password" autocomplete="current-password" placeholder="Пароль (от 6 символов)">
+            <input id="authNick" maxlength="16" autocomplete="nickname" placeholder="Ник (3–16 символов)" class="hidden">
+            <p id="authMsg" class="auth-msg"></p>
+            <button id="authSubmit" class="big-btn">Войти</button>
+            <button id="authSwitch" class="small-btn">Нет аккаунта? Регистрация</button>
+            <button id="authClose" class="small-btn">Закрыть</button>
+        </div>
+    </div>
+
     <!-- Выбор фигуры при превращении пешки -->
     <div id="promo" class="overlay hidden">
         <div class="small-card">
@@ -172,6 +195,7 @@
     </div>
 
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

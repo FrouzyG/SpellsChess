@@ -3550,3 +3550,65 @@ button {
         margin: 0;
         box-sizing: border-box;
     }
+
+/* ===================== Аккаунт ===================== */
+.acc-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 0 14px;
+}
+
+.acc-name {
+    padding: 6px 12px;
+    font-weight: 600;
+    color: var(--gold);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+}
+
+.auth-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+    .auth-card h2 {
+        margin: 0 0 4px;
+    }
+
+    .auth-card input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 11px 12px;
+        font-size: 16px;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid var(--pink);
+        border-radius: 8px;
+    }
+
+        .auth-card input.hidden {
+            display: none;
+        }
+
+    .auth-card .big-btn {
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0;
+    }
+
+    .auth-card .google-btn {
+        color: #222;
+        background: #fff;
+    }
+
+.auth-msg {
+    min-height: 18px;
+    margin: 0;
+    font-size: 14px;
+    color: #ffb4c8;
+}

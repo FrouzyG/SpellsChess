@@ -4533,7 +4533,31 @@ const EN = {
     " · соединение потеряно": " · connection lost",
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
-    "возвращается": "returns"
+    "возвращается": "returns",
+    "👤 Войти / Регистрация": "👤 Sign in / Sign up",
+    "Выйти": "Sign out",
+    "Вход": "Sign in",
+    "Регистрация": "Sign up",
+    "Войти через Google": "Sign in with Google",
+    "или по почте": "or with email",
+    "Почта": "Email",
+    "Пароль (от 6 символов)": "Password (6+ characters)",
+    "Ник (3–16 символов)": "Nickname (3–16 characters)",
+    "Нет аккаунта? Регистрация": "No account? Sign up",
+    "Уже есть аккаунт? Войти": "Already have an account? Sign in",
+    "Закрыть": "Close",
+    "Как вас называть?": "Choose a nickname",
+    "Сохранить ник": "Save nickname",
+    "Введите почту и пароль.": "Enter email and password.",
+    "Пароль должен быть не короче 6 символов.": "Password must be at least 6 characters.",
+    "Ник: 3–16 символов, буквы, цифры, пробел, _ и -.": "Nickname: 3–16 characters, letters, digits, space, _ and -.",
+    "Неверная почта или пароль.": "Wrong email or password.",
+    "Эта почта уже зарегистрирована. Нажмите «Войти».": "This email is already registered. Press “Sign in”.",
+    "Письмо отправлено. Подтвердите почту по ссылке в письме и затем войдите.": "Email sent. Confirm your email via the link, then sign in.",
+    "Подтвердите почту по ссылке из письма, затем войдите.": "Confirm your email via the link, then sign in.",
+    "Слишком много попыток, подождите немного.": "Too many attempts, please wait a bit.",
+    "Не загрузилась библиотека входа: проверьте интернет и обновите страницу.": "The sign-in library did not load: check your internet and refresh the page.",
+    "Не удалось выполнить вход. Попробуйте ещё раз.": "Sign-in failed. Please try again."
 };
 
 let LANG = 'ru';
@@ -5199,3 +5223,109 @@ function doTomato(k) {
     im.onload = () => { document.documentElement.style.setProperty('--img-jaws', 'url("pieces/jaws.png")'); if (document.body) document.body.classList.add('img-jaws'); };
     im.src = 'pieces/jaws.png';
 })();
+
+
+/* =====================================================================
+   АККАУНТЫ (Supabase): вход через Google или почту + ник.
+   Ключ ниже публичный (publishable), его можно хранить в коде.
+   ===================================================================== */
+const SUPA_URL = 'https://fuqopbjpxeugdvnlxanb.supabase.co';
+const SUPA_KEY = 'sb_publishable_xVvPSDswx_P2D-kguqgznQ_5cjBAcMN';
+let SB = null;
+try { if (window.supabase && window.supabase.createClient) SB = window.supabase.createClient(SUPA_URL, SUPA_KEY); } catch (e) { SB = null; }
+const ACC = { user: null, nick: '' };
+let authMode = 'login';   // login | signup | nick
+const NICK_RE = /^[\p{L}\p{N}_\- ]{3,16}$/u;
+const authMsg = t => { $('#authMsg').textContent = t || ''; };
+
+function accRefresh() {
+    const u = ACC.user;
+    ACC.nick = u && u.user_metadata && u.user_metadata.nick ? String(u.user_metadata.nick) : '';
+    const nm = $('#accName');
+    nm.textContent = u ? '👤 ' + (ACC.nick || (u.email || '').split('@')[0]) : '';
+    nm.classList.toggle('hidden', !u);
+    $('#accBtn').classList.toggle('hidden', !!u);
+    $('#accOut').classList.toggle('hidden', !u);
+    if (u && !ACC.nick && $('#auth').classList.contains('hidden')) openAuth('nick');
+}
+
+function openAuth(mode) {
+    authMode = mode;
+    const nick = mode === 'nick', signup = mode === 'signup';
+    $('#authTitle').textContent = nick ? 'Как вас называть?' : signup ? 'Регистрация' : 'Вход';
+    $('#authGoogleBox').classList.toggle('hidden', nick);
+    $('#authEmail').classList.toggle('hidden', nick);
+    $('#authPass').classList.toggle('hidden', nick);
+    $('#authNick').classList.toggle('hidden', !(nick || signup));
+    $('#authPass').autocomplete = signup ? 'new-password' : 'current-password';
+    $('#authSubmit').textContent = nick ? 'Сохранить ник' : signup ? 'Регистрация' : 'Войти';
+    $('#authSwitch').classList.toggle('hidden', nick);
+    $('#authSwitch').textContent = signup ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Регистрация';
+    $('#authClose').classList.toggle('hidden', false);
+    authMsg('');
+    $('#auth').classList.remove('hidden');
+}
+
+function authError(err) {
+    const m = String((err && err.message) || '');
+    if (/invalid login/i.test(m)) return 'Неверная почта или пароль.';
+    if (/already registered|already been registered/i.test(m)) return 'Эта почта уже зарегистрирована. Нажмите «Войти».';
+    if (/not confirmed/i.test(m)) return 'Подтвердите почту по ссылке из письма, затем войдите.';
+    if (/rate limit|too many/i.test(m)) return 'Слишком много попыток, подождите немного.';
+    if (/at least 6/i.test(m)) return 'Пароль должен быть не короче 6 символов.';
+    return m || 'Не удалось выполнить вход. Попробуйте ещё раз.';
+}
+
+async function authSubmit() {
+    if (!SB) { authMsg('Не загрузилась библиотека входа: проверьте интернет и обновите страницу.'); return; }
+    const btn = $('#authSubmit');
+    btn.disabled = true;
+    try {
+        if (authMode === 'nick') {
+            const nick = $('#authNick').value.trim();
+            if (!NICK_RE.test(nick)) { authMsg('Ник: 3–16 символов, буквы, цифры, пробел, _ и -.'); return; }
+            const { data, error } = await SB.auth.updateUser({ data: { nick } });
+            if (error) { authMsg(authError(error)); return; }
+            ACC.user = data.user; accRefresh();
+            $('#auth').classList.add('hidden');
+            return;
+        }
+        const email = $('#authEmail').value.trim(), pass = $('#authPass').value;
+        if (!email || !pass) { authMsg('Введите почту и пароль.'); return; }
+        if (authMode === 'signup') {
+            const nick = $('#authNick').value.trim();
+            if (!NICK_RE.test(nick)) { authMsg('Ник: 3–16 символов, буквы, цифры, пробел, _ и -.'); return; }
+            if (pass.length < 6) { authMsg('Пароль должен быть не короче 6 символов.'); return; }
+            const { data, error } = await SB.auth.signUp({ email, password: pass, options: { data: { nick }, emailRedirectTo: location.origin + location.pathname } });
+            if (error) { authMsg(authError(error)); return; }
+            if (data.session) { ACC.user = data.user; accRefresh(); $('#auth').classList.add('hidden'); }
+            else authMsg('Письмо отправлено. Подтвердите почту по ссылке в письме и затем войдите.');
+            return;
+        }
+        const { data, error } = await SB.auth.signInWithPassword({ email, password: pass });
+        if (error) { authMsg(authError(error)); return; }
+        ACC.user = data.user; accRefresh();
+        $('#auth').classList.add('hidden');
+    } catch (e) { authMsg('Не удалось выполнить вход. Попробуйте ещё раз.'); }
+    finally { btn.disabled = false; }
+}
+
+$('#accBtn').addEventListener('click', () => {
+    if (!SB) { uiAlert('Не загрузилась библиотека входа: проверьте интернет и обновите страницу.'); return; }
+    openAuth('login');
+});
+$('#accOut').addEventListener('click', async () => { if (SB) { try { await SB.auth.signOut(); } catch (e) { /* выйдем и так */ } } ACC.user = null; accRefresh(); });
+$('#authSubmit').addEventListener('click', authSubmit);
+$('#authSwitch').addEventListener('click', () => openAuth(authMode === 'login' ? 'signup' : 'login'));
+$('#authClose').addEventListener('click', () => $('#auth').classList.add('hidden'));
+['authEmail', 'authPass', 'authNick'].forEach(id => $('#' + id).addEventListener('keydown', e => { if (e.key === 'Enter') authSubmit(); }));
+$('#authGoogle').addEventListener('click', async () => {
+    if (!SB) { authMsg('Не загрузилась библиотека входа: проверьте интернет и обновите страницу.'); return; }
+    const { error } = await SB.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+    if (error) authMsg(authError(error));
+});
+
+if (SB) {
+    SB.auth.getSession().then(({ data }) => { ACC.user = data && data.session ? data.session.user : null; accRefresh(); }).catch(() => { });
+    SB.auth.onAuthStateChange((ev, session) => { ACC.user = session ? session.user : null; accRefresh(); });
+}
