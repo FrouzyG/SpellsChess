@@ -11,6 +11,7 @@
     <!-- Экран выбора героев -->
     <div id="setup" class="overlay">
         <div class="setup-card">
+            <button id="setupLeave" class="small-btn leave-top hidden" title="Выйти из партии">⟵ Выйти</button>
             <button id="langSetup" class="small-btn lang-top">🌐 English</button>
             <h1 class="logo"><span class="logo-sp">Spells</span><span class="logo-ch">Chess</span></h1>
             <p id="setupNet" class="sub hidden"></p>
@@ -29,7 +30,6 @@
             </div>
             <div class="theme-pick"><h3>Доска</h3><div id="themeRow"></div></div>
             <button id="startBtn" class="big-btn">Начать партию</button>
-            <button id="setupLeave" class="big-btn secondary hidden">Выйти из партии</button>
             <div class="foot">
                 <a id="donateSetup" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
                 <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a></div>
@@ -87,6 +87,10 @@
     <main id="app" class="game hidden">
         <div id="panel-w" class="panel"></div>
         <div class="board-col">
+            <div id="replayBar" class="replay-bar hidden">
+                <span id="rpTitle" data-notr></span>
+                <button id="rpExit" class="small-btn">✕ Выйти из повтора</button>
+            </div>
             <div id="board"></div>
             <div id="confirmBar" class="confirm-bar">
                 <button id="cfOk" class="small-btn cf-ok">✔ Подтвердить</button>
@@ -97,6 +101,7 @@
                 <button id="rwPrev" class="small-btn" title="Ход назад">◀</button>
                 <span id="rwLabel" class="rw-label">0 / 0</span>
                 <button id="rwNext" class="small-btn" title="Ход вперёд">▶</button>
+                <button id="rwPlay" class="small-btn hidden" title="Автоповтор">▶▶</button>
                 <button id="rwEnd" class="small-btn" title="К текущей позиции">⏭</button>
             </div>
         </div>

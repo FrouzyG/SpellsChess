@@ -3875,3 +3875,45 @@ button {
 .game-row .tag-friendly {
     color: #9ad7ff;
 }
+
+/* ===================== Выход из выбора героев, повтор партии ===================== */
+.leave-top {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 2;
+}
+
+.replay-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 8px;
+    padding: 8px 12px;
+    font-weight: 600;
+    color: var(--gold);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+}
+
+    .replay-bar.hidden {
+        display: none;
+    }
+
+#app.replaying .btn-row button:not(#btnSound):not(#btnLang):not(#btnTheme):not(#btnGhost):not(#btnTraps):not(#btnInvis),
+#app.replaying #mEnd,
+#app.replaying #confirmBar {
+    display: none !important;
+}
+
+.game-row .rp-btn {
+    margin-left: 8px;
+    padding: 2px 10px;
+}
+
+.ava-pick {
+    max-height: 190px;
+    overflow-y: auto;
+}

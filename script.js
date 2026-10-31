@@ -3201,6 +3201,7 @@ function onGrave(i, gcol) {
 
 // Любое действие игрока: выполняется у себя и (онлайн) отправляется сопернику
 function netDo(msg) {
+    if (REPLAY.on) return;
     if (NET.on && (NET.lost || !isActor())) return;
     lastPick = null;
     applyInput(msg);
@@ -3259,6 +3260,7 @@ function showPromo(mv, ctx) {
 
 /* Конец партии */
 function showGameOver() {
+    if (REPLAY.on) return;
     if (NET.on && RELAY && G && G.over && !G.repSent) { G.repSent = true; netSend({ t: 'result', res: G.over.winner || 'd', reason: G.over.title, moves: G.done ? G.done.w + G.done.b : 0 }); }   // итог для рейтинга
     setTimeout(() => {
         if (!G || !G.over) return;
@@ -4557,6 +4559,14 @@ const EN = {
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
     "возвращается": "returns",
+    "⟵ Выйти": "⟵ Leave",
+    "Выйти из партии?": "Leave the game?",
+    "▶ Повтор": "▶ Replay",
+    "✕ Выйти из повтора": "✕ Exit replay",
+    "Автоповтор": "Autoplay",
+    "Для этой партии записи ходов нет.": "This game has no recorded moves.",
+    "Сначала выйдите из онлайн-партии.": "Leave the online game first.",
+    "Не удалось загрузить повтор.": "Could not load the replay.",
     "Рейтинговая партия": "Rated game",
     "Выйти из партии": "Leave the game",
     "Оппонент отключился": "Opponent disconnected",
@@ -5461,7 +5471,7 @@ function findPlayers() { openTop($('#topSearch').value.trim().replace(/[%_,()*\\
 /* ---------- Профиль игрока: статистика, график рейтинга, история партий ---------- */
 const ACH = { beta: { name: 'Бета-тестер', desc: 'Участвовал в бета-тестировании SpellsChess', img: 'achievements/beta.png' } };
 const heroLabel = id => (HEROES[id] ? HEROES[id].icon + ' ' + HEROES[id].name : '—');
-const AVATARS = [...Object.values(HEROES).map(h => h.icon), '😎', '🦊', '🐉', '👑', '🎩', '🔥', '❄️', '⚡'];
+const AVATARS = [...new Set([...Object.values(HEROES).map(h => h.icon), '😎', '😀', '😈', '🤖', '👽', '👻', '💀', '🤡', '🦊', '🐺', '🦁', '🐯', '🐼', '🐸', '🐵', '🦉', '🦅', '🐙', '🦇', '🐉', '🐲', '🦄', '🧙', '🧛', '🧟', '🥷', '🧝', '🧞', '🎭', '🎩', '👑', '🎲', '♟️', '🏆', '💎', '🔮', '🪄', '🗡️', '🛡️', '🏹', '🔥', '❄️', '⚡', '🌙', '☀️', '🌈', '🍀', '🍕', '🍩', '🚀', '🛸', '🎯', '🧿'])];
 
 async function openProfile(uid) {
     if (!SB || !/^[0-9a-f-]{36}$/i.test(uid || '')) return;
@@ -5476,7 +5486,7 @@ async function openProfile(uid) {
         if (pr.error) throw pr.error;
         const p = pr.data;
         if (!p) { $('#profNick').textContent = ''; gl.textContent = 'Игрок не найден.'; return; }
-        const gm = await SB.from('games').select('id,white,black,result,created_at,white_hero,black_hero,white_delta,black_delta,reason,moves,rated')
+        const gm = await SB.from('games').select('id,white,black,result,created_at,white_hero,black_hero,white_delta,black_delta,reason,moves,rated,seed')
             .or(`white.eq.${uid},black.eq.${uid}`).order('created_at', { ascending: false }).limit(30);
         if (gm.error) throw gm.error;
         const games = gm.data || [];
@@ -5546,6 +5556,12 @@ async function openProfile(uid) {
             if (g.rated === false) sub.append(mkEl('span', 'tag-friendly', ' · Дружеская'));
             if (g.reason) sub.append(mkEl('span', '', ' · ' + g.reason));
             if (g.moves) sub.append(mkEl('span', '', ' · ' + g.moves + (LANG === 'en' ? ' moves' : ' ходов'), true));
+            if (g.seed != null) {
+                const wn = my ? p.nick : (opp ? opp.nick : '?'), bn = my ? (opp ? opp.nick : '?') : p.nick;
+                const rb = mkEl('button', 'small-btn rp-btn', '▶ Повтор');
+                rb.addEventListener('click', () => watchReplay(g.id, wn + ' ⚔ ' + bn));
+                sub.append(rb);
+            }
             row.appendChild(sub);
             gl.appendChild(row);
         });
@@ -5614,7 +5630,60 @@ function markOppLeft() {
     buildSetup();
 }
 $('#setupLeave').addEventListener('click', () => {
+    if (!uiConfirm('Выйти из партии?')) return;
     netSend({ t: 'leave' });
     $('#setupLeave').disabled = true;
     setTimeout(() => { try { if (NET.conn && NET.conn.close) NET.conn.close(); } catch (e) { /* всё равно перезагрузим */ } location.reload(); }, 500);
 });
+
+
+/* =====================================================================
+   ПОВТОР ПАРТИИ: берём записанные действия игроков и проигрываем их заново на том же «зерне».
+   Игра полностью детерминирована (так же работает онлайн), поэтому получается точная копия партии.
+   ===================================================================== */
+const REPLAY = { on: false, timer: null };
+
+async function watchReplay(gid, title) {
+    if (NET.on) { uiAlert('Сначала выйдите из онлайн-партии.'); return; }
+    if (!SB) return;
+    try {
+        const r = await SB.from('games').select('seed,white_hero,black_hero,log').eq('id', gid).maybeSingle();
+        const d = r.data;
+        if (r.error || !d || d.seed == null || !Array.isArray(d.log) || !HEROES[d.white_hero] || !HEROES[d.black_hero]) { uiAlert('Для этой партии записи ходов нет.'); return; }
+        startReplay(d, title);
+    } catch (e) { uiAlert('Не удалось загрузить повтор.'); }
+}
+
+function startReplay(d, title) {
+    ['prof', 'top', 'auth', 'lobby', 'setup', 'gameover', 'promo'].forEach(id => $('#' + id).classList.add('hidden'));
+    REPLAY.on = true;
+    showGhosts = true; showInvis = true; showTraps = true;
+    selectedHeroes = { w: d.white_hero, b: d.black_hero };
+    _seed = d.seed;
+    startGame();
+    CLOCK.on = false;
+    for (const m of d.log) {
+        if (!G || G.over) break;
+        try { applyInput(m); } catch (e) { break; }
+    }
+    $('#app').classList.add('replaying');
+    $('#replayBar').classList.remove('hidden');
+    $('#rpTitle').textContent = (LANG === 'en' ? 'Replay: ' : 'Повтор: ') + title;
+    $('#rwPlay').classList.remove('hidden');
+    render();
+    rewindTo(0);
+}
+
+function replayAuto() {
+    const btn = $('#rwPlay');
+    if (REPLAY.timer) { clearInterval(REPLAY.timer); REPLAY.timer = null; btn.textContent = '▶▶'; return; }
+    btn.textContent = '⏸';
+    REPLAY.timer = setInterval(() => {
+        const last = REW.snaps.length - 1, cur = REW.idx < 0 ? last : REW.idx;
+        if (cur >= last) { replayAuto(); return; }
+        rewindTo(cur + 1);
+    }, 800);
+}
+$('#rwPlay').addEventListener('click', replayAuto);
+$('#rpExit').addEventListener('click', () => location.reload());
+['btnDraw', 'btnResign', 'btnNew', 'btnEnd'].forEach(id => $('#' + id).addEventListener('click', e => { if (REPLAY.on) { e.stopImmediatePropagation(); e.preventDefault(); } }, true));
