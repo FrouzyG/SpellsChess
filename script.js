@@ -5365,7 +5365,8 @@ async function sendAuth() {
 function accRefresh() {
     const u = ACC.user, p = ACC.profile;
     const nm = $('#accName');
-    nm.textContent = u ? (p && p.avatar ? p.avatar : '👤') + ' ' + (p ? p.nick + ' · ⭐ ' + p.rating : (u.email || '').split('@')[0]) : '';
+    nm.textContent = '';
+    if (u) nm.append(avaNode(p && p.avatar), ' ' + (p ? p.nick + ' · ⭐ ' + p.rating : (u.email || '').split('@')[0]));
     nm.classList.toggle('hidden', !u);
     $('#accBtn').classList.toggle('hidden', !!u);
     $('#accOut').classList.toggle('hidden', !u);
@@ -5461,7 +5462,7 @@ function renderPlayers(box, data) {
     if (!data.length) { box.textContent = 'Никого не нашли.'; return; }
     data.forEach((p, i) => {
         const row = mkEl('div', 'top-row link' + (ACC.user && ACC.user.id === p.id ? ' me' : ''));
-        row.append(mkEl('span', '', i + 1, true), mkEl('span', '', (p.avatar || '👤') + ' ' + p.nick, true), mkEl('span', '', p.rating, true), mkEl('span', '', `${p.wins} / ${p.losses} / ${p.draws}`, true));
+        row.append(mkEl('span', '', i + 1, true), (() => { const n = mkEl('span', '', '', true); n.append(avaNode(p.avatar), ' ' + p.nick); return n; })(), mkEl('span', '', p.rating, true), mkEl('span', '', `${p.wins} / ${p.losses} / ${p.draws}`, true));
         row.addEventListener('click', () => openProfile(p.id));
         box.appendChild(row);
     });
@@ -5484,6 +5485,14 @@ async function openTop(query) {
 function findPlayers() { openTop($('#topSearch').value.trim().replace(/[%_,()*\\]/g, '')); }
 
 /* ---------- Профиль игрока: статистика, график рейтинга, история партий ---------- */
+// Аватар: либо смайлик, либо картинка-достижение вида «ach:beta» (картинка берётся из описания достижения)
+function avaNode(avatar) {
+    if (typeof avatar === 'string' && avatar.startsWith('ach:')) {
+        const d = ACH[avatar.slice(4)];
+        if (d && d.img) { const im = document.createElement('img'); im.src = d.img; im.alt = d.name; im.className = 'ava-img'; return im; }
+    }
+    return document.createTextNode(avatar && !String(avatar).startsWith('ach:') ? avatar : '👤');
+}
 const ACH = { beta: { name: 'Бета-тестер', desc: 'Участвовал в бета-тестировании SpellsChess', img: 'achievements/beta.png' } };
 const heroLabel = id => (HEROES[id] ? HEROES[id].icon + ' ' + HEROES[id].name : '—');
 const AVATARS = [...new Set([...Object.values(HEROES).map(h => h.icon), '😎', '😀', '😈', '🤖', '👽', '👻', '💀', '🤡', '🦊', '🐺', '🦁', '🐯', '🐼', '🐸', '🐵', '🦉', '🦅', '🐙', '🦇', '🐉', '🐲', '🦄', '🧙', '🧛', '🧟', '🥷', '🧝', '🧞', '🎭', '🎩', '👑', '🎲', '♟️', '🏆', '💎', '🔮', '🪄', '🗡️', '🛡️', '🏹', '🔥', '❄️', '⚡', '🌙', '☀️', '🌈', '🍀', '🍕', '🍩', '🚀', '🛸', '🎯', '🧿'])];
@@ -5510,7 +5519,8 @@ async function openProfile(uid) {
         if (oppIds.length) { const o = await SB.from('profiles').select('id,nick,avatar').in('id', oppIds); (o.data || []).forEach(x => { names[x.id] = x; }); }
 
         $('#profNick').textContent = p.nick;
-        $('#profAva').textContent = p.avatar || '👤';
+        $('#profAva').textContent = '';
+        $('#profAva').appendChild(avaNode(p.avatar));
         $('#profSub').textContent = `⭐ ${p.rating}` + (p.created_at ? (LANG === 'en' ? ' · joined ' : ' · на сайте с ') + new Date(p.created_at).toLocaleDateString() : '');
         const mine = ACC.user && ACC.user.id === uid;
         $('#profAvaBtn').classList.toggle('hidden', !mine);
@@ -5558,7 +5568,8 @@ async function openProfile(uid) {
             const res = g.result === 'd' ? 'd' : ((g.result === 'w') === my ? 'w' : 'l');
             const d = my ? g.white_delta : g.black_delta;
             const row = mkEl('div', 'game-row ' + res);
-            const oppEl = mkEl('span', 'opp-link', (opp ? (opp.avatar || '👤') + ' ' + opp.nick : '?'), true);
+            const oppEl = mkEl('span', 'opp-link', '', true);
+            if (opp) oppEl.append(avaNode(opp.avatar), ' ' + opp.nick); else oppEl.textContent = '?';
             oppEl.addEventListener('click', () => openProfile(oppId));
             row.append(
                 mkEl('span', '', new Date(g.created_at).toLocaleDateString(), true),
@@ -5583,11 +5594,21 @@ async function openProfile(uid) {
     } catch (e) { gl.textContent = 'Не удалось загрузить профиль.'; }
 }
 
-function openAvatarPick() {
+async function openAvatarPick() {
     const box = $('#profAvaPick');
+    if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
     box.textContent = '';
-    AVATARS.forEach(a => {
-        const b = mkEl('button', '', a, true);
+    // картинки-достижения, которые есть у игрока (любое достижение с картинкой подходит автоматически)
+    let owned = [];
+    try {
+        const r = await SB.from('user_achievements').select('ach').eq('user_id', ACC.user.id);
+        owned = (r.data || []).map(x => x.ach).filter(a => ACH[a] && ACH[a].img).map(a => 'ach:' + a);
+    } catch (e) { /* останутся только смайлики */ }
+    [...owned, ...AVATARS].forEach(a => {
+        const b = document.createElement('button');
+        b.setAttribute('data-notr', '');
+        b.appendChild(avaNode(a));
+        if (a.startsWith('ach:')) { b.classList.add('ava-ach'); b.title = ACH[a.slice(4)].name; }
         b.addEventListener('click', async () => {
             const { error } = await SB.rpc('set_avatar', { p_avatar: a });
             if (error) { uiAlert(authError(error)); return; }
@@ -5596,7 +5617,7 @@ function openAvatarPick() {
         });
         box.appendChild(b);
     });
-    box.classList.toggle('hidden');
+    box.classList.remove('hidden');
 }
 
 $('#accBtn').addEventListener('click', () => {

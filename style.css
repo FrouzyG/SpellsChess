@@ -3994,3 +3994,35 @@ button {
         margin-top: 52px;
     }
 }
+
+/* ===================== Картинки-аватарки (достижения) ===================== */
+.ava-img {
+    width: 1.3em;
+    height: 1.3em;
+    vertical-align: -0.25em;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.prof-ava {
+    overflow: hidden;
+}
+
+    .prof-ava .ava-img {
+        width: 100%;
+        height: 100%;
+        vertical-align: top;
+        border-radius: 0;
+    }
+
+.ava-pick button .ava-img {
+    width: 100%;
+    height: 100%;
+    vertical-align: top;
+    border-radius: 8px;
+}
+
+.ava-pick button.ava-ach {
+    padding: 0;
+    border-color: var(--gold);
+}
