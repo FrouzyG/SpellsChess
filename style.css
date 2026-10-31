@@ -3868,10 +3868,6 @@ button {
     border-radius: 10px;
 }
 
-#setupLeave {
-    margin-top: 10px;
-}
-
 .game-row .tag-friendly {
     color: #9ad7ff;
 }
@@ -3991,3 +3987,10 @@ button {
         .room-row .room-pw.hidden {
             display: none;
         }
+
+/* Телефон: логотип ниже, чтобы кнопки «Выйти» и «English» в углах его не перекрывали */
+@media (max-width: 700px) {
+    .setup-card .logo, .lobby-card .logo {
+        margin-top: 52px;
+    }
+}

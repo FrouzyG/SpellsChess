@@ -5676,10 +5676,14 @@ function startReplay(d, title) {
     _seed = d.seed;
     startGame();
     CLOCK.on = false;
-    for (const m of d.log) {
-        if (!G || G.over) break;
-        try { applyInput(m); } catch (e) { break; }
-    }
+    const soundWas = CONFIG.sound;
+    CONFIG.sound = false;           // партия проматывается мгновенно, звуки на этом этапе не нужны
+    try {
+        for (const m of d.log) {
+            if (!G || G.over) break;
+            try { applyInput(m); } catch (e) { break; }
+        }
+    } finally { CONFIG.sound = soundWas; }
     $('#app').classList.add('replaying');
     $('#replayBar').classList.remove('hidden');
     $('#rpTitle').textContent = (LANG === 'en' ? 'Replay: ' : 'Повтор: ') + title;
