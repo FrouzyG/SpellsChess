@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SpellsChess</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#3a1830">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="SpellsChess">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 </head>
 <body>
 
@@ -32,7 +39,7 @@
             <button id="startBtn" class="big-btn">Начать партию</button>
             <div class="foot">
                 <a id="donateSetup" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
-                <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a> · <a href="https://discord.gg/N4J6z9N6H" target="_blank" rel="noopener">Discord</a></div>
+                <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a> · <a href="https://discord.gg/N4J6z9N6H" target="_blank" rel="noopener">Discord</a> · <a href="privacy.html" target="_blank" rel="noopener">Конфиденциальность</a></div>
             </div>
         </div>
     </div>
@@ -49,7 +56,9 @@
                 <button id="accBtn" class="small-btn">👤 Войти / Регистрация</button>
                 <button id="accOut" class="small-btn hidden">Выйти</button>
                 <button id="accTop" class="small-btn">🏆 Рейтинг</button>
+                <button id="installBtn" class="small-btn hidden">📲 Установить приложение</button>
             </div>
+            <p id="iosHint" class="sub hidden">📲 Чтобы установить игру на iPhone: «Поделиться» → «На экран Домой».</p>
             <div id="tcBox" class="tc-box">
                 <div class="tc-title">Время партии</div>
                 <div class="tc-row">
@@ -79,7 +88,7 @@
             <div class="join-row"><input id="joinCode" maxlength="8" placeholder="КОД"><button id="lobbyJoin" class="big-btn">Войти</button></div>
             <p id="lobbyStatus" class="sub"></p>
             <a id="donateLobby" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
-            <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a> · <a href="https://discord.gg/N4J6z9N6H" target="_blank" rel="noopener">Discord</a></div>
+            <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a> · <a href="https://discord.gg/N4J6z9N6H" target="_blank" rel="noopener">Discord</a> · <a href="privacy.html" target="_blank" rel="noopener">Конфиденциальность</a></div>
         </div>
     </div>
 
@@ -139,11 +148,11 @@
 
             <div class="foot">
                 <a id="donateGame" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
-                <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a> · <a href="https://discord.gg/N4J6z9N6H" target="_blank" rel="noopener">Discord</a></div>
+                <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a> · <a href="https://discord.gg/N4J6z9N6H" target="_blank" rel="noopener">Discord</a> · <a href="privacy.html" target="_blank" rel="noopener">Конфиденциальность</a></div>
             </div>
 
             <div id="chat" class="chat hidden">
-                <h3>Чат <button id="chatMute" class="small-btn" title="Заглушить соперника">🔔</button></h3>
+                <h3>Чат <button id="chatMute" class="small-btn" title="Заглушить соперника">🔔</button> <button id="chatReport" class="small-btn" title="Пожаловаться на соперника">🚩</button> <button id="chatBlock" class="small-btn" title="Заблокировать соперника">🚫</button></h3>
                 <div id="chatLog" data-notr></div>
                 <div class="chat-row"><input id="chatInput" maxlength="300" placeholder="Сообщение..."><button id="chatSend" class="small-btn">➤</button></div>
             </div>
@@ -165,6 +174,24 @@
             </details>
         </aside>
     </main>
+
+    <!-- Жалоба на игрока -->
+    <div id="report" class="overlay hidden">
+        <div class="small-card report-card">
+            <h2>🚩 Жалоба на соперника</h2>
+            <select id="reportReason">
+                <option>Оскорбления в чате</option>
+                <option>Спам</option>
+                <option>Читерство</option>
+                <option>Неприемлемый ник или аватар</option>
+                <option>Другое</option>
+            </select>
+            <input id="reportText" maxlength="300" placeholder="Комментарий (необязательно)" autocomplete="off">
+            <p id="reportMsg" class="auth-msg"></p>
+            <button id="reportSend" class="big-btn">Отправить жалобу</button>
+            <button id="reportClose" class="small-btn">Отмена</button>
+        </div>
+    </div>
 
     <!-- Список комнат -->
     <div id="rooms" class="overlay hidden">
@@ -232,6 +259,10 @@
             <svg id="profGraph" class="prof-graph" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
             <h3 class="prof-h">История партий</h3>
             <div id="profGames" class="top-list"></div>
+            <div class="prof-actions">
+                <button id="profBlockBtn" class="small-btn hidden">🚫 Заблокировать</button>
+                <button id="profDelBtn" class="small-btn hidden">🗑 Удалить аккаунт</button>
+            </div>
             <button id="profClose" class="small-btn">Закрыть</button>
         </div>
     </div>

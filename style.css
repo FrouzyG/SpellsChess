@@ -4026,3 +4026,45 @@ button {
     padding: 0;
     border-color: var(--gold);
 }
+
+/* ===================== Жалоба, блокировка, удаление аккаунта ===================== */
+.report-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+    .report-card h2 {
+        margin: 0;
+    }
+
+    .report-card select, .report-card input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        font-size: 15px;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid var(--pink);
+        border-radius: 8px;
+    }
+
+        .report-card select option {
+            color: #222;
+        }
+
+    .report-card .big-btn {
+        width: 100%;
+        margin: 0;
+    }
+
+.prof-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#profDelBtn {
+    color: #ff9aa8;
+    border-color: #ff6b8a;
+}

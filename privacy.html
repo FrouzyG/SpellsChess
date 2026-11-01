@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpellsChess: политика конфиденциальности</title>
+<style>
+  body { margin: 0; padding: 24px 16px; font: 16px/1.55 system-ui, sans-serif; color: #f4e8f4; background: #1b0b1b; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { color: #ff6ec7; } h2 { margin-top: 28px; color: #f2c14e; }
+  a { color: #9ad7ff; } code { background: rgba(255,255,255,.1); padding: 1px 5px; border-radius: 4px; }
+  .en { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.2); }
+</style>
+</head>
+<body>
+<main>
+<h1>SpellsChess: политика конфиденциальности</h1>
+<p>Последнее обновление: 31 октября 2026. Автор проекта: FrouzyG, связь: <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a>.</p>
+
+<h2>Какие данные мы получаем</h2>
+<ul>
+  <li><b>Аккаунт.</b> Если вы регистрируетесь, мы получаем адрес электронной почты и пароль (пароль хранится только в зашифрованном виде) или данные входа через Google (почта и имя из вашего аккаунта Google). Эти данные хранит сервис Supabase.</li>
+  <li><b>Профиль.</b> Ник, аватар, рейтинг, число побед, поражений и ничьих, достижения. Профиль, ник, аватар, рейтинг и история партий <b>видны всем игрокам</b>.</li>
+  <li><b>Партии.</b> Для рейтинговых и дружеских партий между вошедшими в аккаунт игроками мы сохраняем результат, выбранных героев, причину окончания и запись ходов (для повтора партии). Запись партий тоже видна всем.</li>
+  <li><b>Чат.</b> Сообщения чата передаются сопернику через наш сервер и не сохраняются. Сервер временно держит в памяти последние сообщения комнаты, чтобы приложить их к жалобе, если игрок пожалуется. После закрытия комнаты они исчезают.</li>
+  <li><b>Жалобы.</b> Если вы жалуетесь на игрока, мы сохраняем причину, ваш комментарий, последние сообщения чата и идентификаторы аккаунтов, чтобы рассмотреть жалобу.</li>
+  <li><b>Технические данные.</b> Хостинг (Render) может хранить IP-адрес и технические журналы запросов. В браузере хранятся настройки игры (язык, звук, тема, время партии, список заблокированных игроков).</li>
+</ul>
+<p>Мы не продаём данные, не показываем рекламу и не используем сторонние сервисы аналитики.</p>
+
+<h2>Кто ещё обрабатывает данные</h2>
+<ul>
+  <li>Supabase: аккаунты и база данных.</li>
+  <li>Render: хостинг игрового сервера.</li>
+  <li>Google: вход через Google (если вы его выбрали).</li>
+  <li>jsDelivr и unpkg: загрузка библиотек для работы игры; PeerJS: запасное прямое соединение между игроками.</li>
+</ul>
+
+<h2>Как долго мы храним данные</h2>
+<p>Данные аккаунта хранятся, пока вы не удалите аккаунт. Жалобы хранятся, пока это нужно для защиты игроков. Журналы хостинга хранятся по правилам хостинг-провайдера.</p>
+
+<h2 id="delete">Удаление аккаунта</h2>
+<p>Удалить аккаунт можно в игре: войдите в аккаунт, откройте свой профиль (нажмите на свой ник в главном меню) и нажмите «Удалить аккаунт». Будут безвозвратно удалены ваш аккаунт, профиль, рейтинг и достижения. Уже сыгранные партии останутся в истории соперников без вашего ника.</p>
+<p>Если зайти в игру не получается, напишите на <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> с адреса, на который зарегистрирован аккаунт, и укажите ник. Мы удалим аккаунт вручную.</p>
+
+<h2>Дети</h2>
+<p>Игра не предназначена для детей младше 13 лет, и мы сознательно не собираем их данные. Если вы считаете, что ребёнок зарегистрировался, напишите нам, и мы удалим аккаунт.</p>
+
+<h2>Жалобы и блокировка</h2>
+<p>В онлайн-партии можно пожаловаться на соперника (кнопка 🚩 в чате) и заблокировать его (кнопка 🚫: его сообщения будут скрыты). Мы рассматриваем жалобы и можем ограничить доступ нарушителям.</p>
+
+<h2>Изменения</h2>
+<p>Мы можем обновлять эту политику. Актуальная версия всегда находится на этой странице.</p>
+
+<div class="en">
+<h2>English summary</h2>
+<p>SpellsChess collects your email and password (stored hashed) or Google sign-in details, a nickname, avatar, rating, game results and move records. Your profile, rating and match history are public. Chat messages are relayed to your opponent and are not stored, except that the server briefly keeps recent messages in memory to attach them to a report. We use Supabase (accounts, database), Render (hosting), Google (optional sign-in) and CDNs for libraries. We do not sell data, show ads or use analytics. You can delete your account in the game (open your profile, press "Delete account") or by email at <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a>. The game is not intended for children under 13.</p>
+</div>
+</main>
+</body>
+</html>

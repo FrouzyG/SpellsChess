@@ -3855,9 +3855,11 @@ const lobbyStatus = t => { $('#lobbyStatus').textContent = t; };
 const newCode = () => Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
 
 /* ---------- Запасной способ: через собственный сервер (server.js), по обычному TCP. Работает через Radmin VPN ---------- */
+// В обычном браузере сервер игры на том же адресе. В приложении (оболочка Capacitor) файлы лежат внутри, а сервер снаружи.
+const API = (/^https?:$/.test(location.protocol) && !window.Capacitor) ? '' : 'https://spellschess.onrender.com';
 let RELAY = false;
 let RELAY_CHECKED = false;
-fetch('/ping').then(r => r.text()).then(t => {
+fetch(API + '/ping').then(r => r.text()).then(t => {
     RELAY = t.trim() === 'spellschess';
     if (RELAY) lobbyStatus('Режим «через сервер» включён: создавайте комнату или входите по коду.');
 }).catch(() => { }).finally(() => { RELAY_CHECKED = true; });
@@ -3874,15 +3876,16 @@ function relayConn(code, role, ticket) {
     let queue = Promise.resolve();
     const sid = Math.random().toString(36).slice(2, 12);
     let mid = 0;
-    const es = new EventSource(`/events?room=${code}&role=${role}&sid=${sid}` + (ticket ? `&ticket=${ticket}` : ''));
+    const es = new EventSource(API + `/events?room=${code}&role=${role}&sid=${sid}` + (ticket ? `&ticket=${ticket}` : ''));
     const conn = {
         open: false,
+        info: { code, role, sid },
         on(ev, fn) { h[ev] = fn; },
         send(m) {
             const my = ++mid;
             queue = queue.then(async () => {      // до 4 попыток; сервер отбрасывает дубликаты по номеру
                 for (let i = 0; i < 4; i++) {
-                    try { const r = await fetch(`/send?room=${code}&role=${role}&sid=${sid}&mid=${my}`, { method: 'POST', body: JSON.stringify(m) }); if (r.ok) return; } catch (e) { /* повторим */ }
+                    try { const r = await fetch(API + `/send?room=${code}&role=${role}&sid=${sid}&mid=${my}`, { method: 'POST', body: JSON.stringify(m) }); if (r.ok) return; } catch (e) { /* повторим */ }
                     await new Promise(ok => setTimeout(ok, 700 * (i + 1)));
                 }
             });
@@ -3973,7 +3976,7 @@ function netRecv(m) {
             else { if (G) render(); uiAlert('Соперник покинул партию.'); }
             break;
         case 'peer':
-            NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0; NET.oppId = /^[0-9a-f-]{36}$/i.test(m.id || '') ? m.id : null;
+            NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0; NET.oppId = /^[0-9a-f-]{36}$/i.test(m.id || '') ? m.id : null; if (isBlocked(NET.oppId)) NET.muted = true;
             updatePeerLabel(); if (G) render();
             break;
         case 'ready':
@@ -4021,7 +4024,7 @@ $('#lobbyQuick').addEventListener('click', async () => {
     try {
         NET.pref = quickPref();
         NET.rated = TCSEL.rated;
-        const j = await (await fetch('/quick?tc=' + encodeURIComponent(NET.pref) + '&rated=' + (TCSEL.rated ? 1 : 0))).json();
+        const j = await (await fetch(API + '/quick?tc=' + encodeURIComponent(NET.pref) + '&rated=' + (TCSEL.rated ? 1 : 0))).json();
         if (!j.room) { lobbyStatus('Сервер занят, попробуйте позже.'); return; }
         NET.host = j.role === 'host';
         lobbyStatus(NET.host ? 'Ищем соперника... оставайтесь на этой странице.' : 'Соперник найден, подключаемся...');
@@ -4560,6 +4563,33 @@ const EN = {
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
     "возвращается": "returns",
+    "Конфиденциальность": "Privacy",
+    "📲 Установить приложение": "📲 Install the app",
+    "📲 Чтобы установить игру на iPhone: «Поделиться» → «На экран Домой».": "📲 To install on iPhone: Share → Add to Home Screen.",
+    "🚩 Жалоба на соперника": "🚩 Report your opponent",
+    "Оскорбления в чате": "Abuse in chat",
+    "Спам": "Spam",
+    "Читерство": "Cheating",
+    "Неприемлемый ник или аватар": "Inappropriate nickname or avatar",
+    "Другое": "Other",
+    "Комментарий (необязательно)": "Comment (optional)",
+    "Отправить жалобу": "Send report",
+    "Отмена": "Cancel",
+    "Пожаловаться на соперника": "Report your opponent",
+    "Заблокировать соперника": "Block your opponent",
+    "🚫 Заблокировать": "🚫 Block",
+    "✅ Разблокировать": "✅ Unblock",
+    "🗑 Удалить аккаунт": "🗑 Delete account",
+    "Жалобы работают в играх через сервер.": "Reports work in games through the server.",
+    "Жалобу можно отправлять не чаще раза в 30 секунд.": "You can send a report once every 30 seconds.",
+    "Не удалось отправить жалобу. Попробуйте ещё раз.": "Could not send the report. Please try again.",
+    "Жалоба отправлена, спасибо. Мы её рассмотрим.": "Report sent, thank you. We will review it.",
+    "Этот игрок без аккаунта, заблокировать можно только вошедших игроков. Сообщения можно заглушить кнопкой 🔔.": "This player has no account: only signed-in players can be blocked. You can mute messages with the 🔔 button.",
+    "Заблокировать этого игрока? Его сообщения будут скрыты. Разблокировать можно в его профиле.": "Block this player? Their messages will be hidden. You can unblock them on their profile.",
+    "Удалить аккаунт навсегда? Профиль, рейтинг и достижения будут стёрты, это нельзя отменить.": "Delete your account forever? Your profile, rating and achievements will be erased. This cannot be undone.",
+    "Точно удалить? Восстановить аккаунт будет невозможно.": "Really delete? The account cannot be restored.",
+    "Не удалось удалить аккаунт. Попробуйте ещё раз или напишите на eriksonfg510@gmail.com.": "Could not delete the account. Try again or write to eriksonfg510@gmail.com.",
+    "Аккаунт удалён.": "Account deleted.",
     "🚪 Список комнат": "🚪 Room list",
     "🚪 Комнаты": "🚪 Rooms",
     "Пароль комнаты (необязательно)": "Room password (optional)",
@@ -4771,7 +4801,7 @@ if (typeof MutationObserver !== 'undefined' && document.body) {
 
 ['donateLobby', 'donateSetup', 'donateGame'].forEach(id => {
     const a = $('#' + id);
-    if (DONATE_URL) { a.href = DONATE_URL; a.classList.remove('hidden'); }
+    if (DONATE_URL && !window.Capacitor) { a.href = DONATE_URL; a.classList.remove('hidden'); }
 });
 applyTheme(themeId);
 buildSetup();
@@ -5394,7 +5424,7 @@ function openAuth(mode) {
     authMode = mode;
     const nick = mode === 'nick', signup = mode === 'signup';
     $('#authTitle').textContent = nick ? 'Как вас называть?' : signup ? 'Регистрация' : 'Вход';
-    $('#authGoogleBox').classList.toggle('hidden', nick);
+    $('#authGoogleBox').classList.toggle('hidden', nick || !!window.Capacitor);   // в приложении вход через Google пока скрыт: Google не пускает во встроенный браузер
     $('#authEmail').classList.toggle('hidden', nick);
     $('#authPass').classList.toggle('hidden', nick);
     $('#authNick').classList.toggle('hidden', !(nick || signup));
@@ -5504,6 +5534,7 @@ async function openProfile(uid) {
     $('#profNick').textContent = '…'; $('#profAva').textContent = ''; $('#profSub').textContent = '';
     $('#profStats').textContent = ''; $('#profGraph').innerHTML = '';
     $('#profAvaPick').classList.add('hidden'); $('#profAvaBtn').classList.add('hidden');
+    $('#profDelBtn').classList.add('hidden'); $('#profBlockBtn').classList.add('hidden');
     gl.textContent = 'Загрузка...';
     try {
         const pr = await SB.from('profiles').select('id,nick,rating,wins,losses,draws,avatar,created_at').eq('id', uid).maybeSingle();
@@ -5524,6 +5555,10 @@ async function openProfile(uid) {
         $('#profSub').textContent = `⭐ ${p.rating}` + (p.created_at ? (LANG === 'en' ? ' · joined ' : ' · на сайте с ') + new Date(p.created_at).toLocaleDateString() : '');
         const mine = ACC.user && ACC.user.id === uid;
         $('#profAvaBtn').classList.toggle('hidden', !mine);
+        PROF.uid = uid;
+        $('#profDelBtn').classList.toggle('hidden', !mine);
+        $('#profBlockBtn').classList.toggle('hidden', !!mine);
+        $('#profBlockBtn').textContent = isBlocked(uid) ? '✅ Разблокировать' : '🚫 Заблокировать';
 
         // Достижения
         const achBox = $('#profAch'); achBox.textContent = ''; $('#profAchH').classList.add('hidden');
@@ -5679,49 +5714,49 @@ $('#setupLeave').addEventListener('click', () => {
 const REPLAY = { on: false, timer: null };
 
 async function watchReplay(gid, title) {
-    if (NET.on) { uiAlert('Сначала выйдите из онлайн-партии.'); return; }
-    if (!SB) return;
-    try {
-        const r = await SB.from('games').select('seed,white_hero,black_hero,log').eq('id', gid).maybeSingle();
-        const d = r.data;
-        if (r.error || !d || d.seed == null || !Array.isArray(d.log) || !HEROES[d.white_hero] || !HEROES[d.black_hero]) { uiAlert('Для этой партии записи ходов нет.'); return; }
-        startReplay(d, title);
-    } catch (e) { uiAlert('Не удалось загрузить повтор.'); }
+  if (NET.on) { uiAlert('Сначала выйдите из онлайн-партии.'); return; }
+  if (!SB) return;
+  try {
+    const r = await SB.from('games').select('seed,white_hero,black_hero,log').eq('id', gid).maybeSingle();
+    const d = r.data;
+    if (r.error || !d || d.seed == null || !Array.isArray(d.log) || !HEROES[d.white_hero] || !HEROES[d.black_hero]) { uiAlert('Для этой партии записи ходов нет.'); return; }
+    startReplay(d, title);
+  } catch (e) { uiAlert('Не удалось загрузить повтор.'); }
 }
 
 function startReplay(d, title) {
-    ['prof', 'top', 'auth', 'lobby', 'setup', 'gameover', 'promo'].forEach(id => $('#' + id).classList.add('hidden'));
-    REPLAY.on = true;
-    showGhosts = true; showInvis = true; showTraps = true;
-    selectedHeroes = { w: d.white_hero, b: d.black_hero };
-    _seed = d.seed;
-    startGame();
-    CLOCK.on = false;
-    const soundWas = CONFIG.sound;
-    CONFIG.sound = false;           // партия проматывается мгновенно, звуки на этом этапе не нужны
-    try {
-        for (const m of d.log) {
-            if (!G || G.over) break;
-            try { applyInput(m); } catch (e) { break; }
-        }
-    } finally { CONFIG.sound = soundWas; }
-    $('#app').classList.add('replaying');
-    $('#replayBar').classList.remove('hidden');
-    $('#rpTitle').textContent = (LANG === 'en' ? 'Replay: ' : 'Повтор: ') + title;
-    $('#rwPlay').classList.remove('hidden');
-    render();
-    rewindTo(0);
+  ['prof', 'top', 'auth', 'lobby', 'setup', 'gameover', 'promo'].forEach(id => $('#' + id).classList.add('hidden'));
+  REPLAY.on = true;
+  showGhosts = true; showInvis = true; showTraps = true;
+  selectedHeroes = { w: d.white_hero, b: d.black_hero };
+  _seed = d.seed;
+  startGame();
+  CLOCK.on = false;
+  const soundWas = CONFIG.sound;
+  CONFIG.sound = false;           // партия проматывается мгновенно, звуки на этом этапе не нужны
+  try {
+    for (const m of d.log) {
+      if (!G || G.over) break;
+      try { applyInput(m); } catch (e) { break; }
+    }
+  } finally { CONFIG.sound = soundWas; }
+  $('#app').classList.add('replaying');
+  $('#replayBar').classList.remove('hidden');
+  $('#rpTitle').textContent = (LANG === 'en' ? 'Replay: ' : 'Повтор: ') + title;
+  $('#rwPlay').classList.remove('hidden');
+  render();
+  rewindTo(0);
 }
 
 function replayAuto() {
-    const btn = $('#rwPlay');
-    if (REPLAY.timer) { clearInterval(REPLAY.timer); REPLAY.timer = null; btn.textContent = '▶▶'; return; }
-    btn.textContent = '⏸';
-    REPLAY.timer = setInterval(() => {
-        const last = REW.snaps.length - 1, cur = REW.idx < 0 ? last : REW.idx;
-        if (cur >= last) { replayAuto(); return; }
-        rewindTo(cur + 1);
-    }, 800);
+  const btn = $('#rwPlay');
+  if (REPLAY.timer) { clearInterval(REPLAY.timer); REPLAY.timer = null; btn.textContent = '▶▶'; return; }
+  btn.textContent = '⏸';
+  REPLAY.timer = setInterval(() => {
+    const last = REW.snaps.length - 1, cur = REW.idx < 0 ? last : REW.idx;
+    if (cur >= last) { replayAuto(); return; }
+    rewindTo(cur + 1);
+  }, 800);
 }
 $('#rwPlay').addEventListener('click', replayAuto);
 $('#rpExit').addEventListener('click', () => location.reload());
@@ -5741,7 +5776,7 @@ function roomsInfoText() {
 async function loadRooms() {
     const box = $('#roomsList');
     try {
-        const list = await (await fetch('/lobby/list')).json();
+        const list = await (await fetch(API + '/lobby/list')).json();
         box.textContent = '';
         if (!list.length) { box.textContent = 'Открытых комнат пока нет.'; return; }
         list.forEach(rm => {
@@ -5788,7 +5823,7 @@ async function makeListedRoom() {
         let token = '';
         try { if (SB) { const { data } = await SB.auth.getSession(); if (data && data.session) token = data.session.access_token; } } catch (e) { /* без входа тоже можно */ }
         const pref = roomPref();
-        const j = await (await fetch('/lobby/create', { method: 'POST', body: JSON.stringify({ tc: pref, rated: TCSEL.rated, pass: $('#roomPass').value, token }) })).json();
+        const j = await (await fetch(API + '/lobby/create', { method: 'POST', body: JSON.stringify({ tc: pref, rated: TCSEL.rated, pass: $('#roomPass').value, token }) })).json();
         if (!j.room) { roomsMsg('Сервер занят, попробуйте позже.'); return; }
         if (NET.conn && !NET.on) { try { NET.conn.close(); } catch (e) { /* старую комнату закрываем */ } NET.conn = null; }
         NET.pref = pref; NET.rated = TCSEL.rated; NET.host = true;
@@ -5803,7 +5838,7 @@ async function makeListedRoom() {
 
 async function joinListed(room, pw) {
     try {
-        const r = await fetch('/lobby/join', { method: 'POST', body: JSON.stringify({ room, pw }) });
+        const r = await fetch(API + '/lobby/join', { method: 'POST', body: JSON.stringify({ room, pw }) });
         const j = await r.json().catch(() => ({}));
         if (r.status === 403) { roomsMsg('Неверный пароль.'); return; }
         if (r.status === 429) { roomsMsg('Слишком много попыток, подождите минуту.'); return; }
@@ -5821,3 +5856,85 @@ $('#lobbyRooms').addEventListener('click', () => whenRelayChecked(() => { if (!R
 $('#roomMake').addEventListener('click', makeListedRoom);
 $('#roomsRefresh').addEventListener('click', () => { roomsMsg(''); loadRooms(); });
 $('#roomsClose').addEventListener('click', closeRooms);
+
+
+/* =====================================================================
+   БЕЗОПАСНОСТЬ ИГРОКОВ: блокировка, жалобы, удаление аккаунта (требования Google Play и App Store)
+   ===================================================================== */
+const PROF = { uid: null };
+const BLOCK = new Set();
+try { JSON.parse(localStorage.getItem('sc_blocked') || '[]').forEach(x => { if (/^[0-9a-f-]{36}$/i.test(x)) BLOCK.add(x); }); } catch (e) { }
+const saveBlock = () => { try { localStorage.setItem('sc_blocked', JSON.stringify([...BLOCK])); } catch (e) { /* не страшно */ } };
+function isBlocked(uid) { return !!uid && BLOCK.has(uid); }
+
+$('#profBlockBtn').addEventListener('click', () => {
+    if (!PROF.uid) return;
+    if (BLOCK.has(PROF.uid)) { BLOCK.delete(PROF.uid); }
+    else { BLOCK.add(PROF.uid); if (NET.on && NET.oppId === PROF.uid) { NET.muted = true; renderChat(); } }
+    saveBlock();
+    $('#profBlockBtn').textContent = isBlocked(PROF.uid) ? '✅ Разблокировать' : '🚫 Заблокировать';
+});
+
+$('#chatBlock').addEventListener('click', () => {
+    if (!NET.on) return;
+    if (!NET.oppId) { uiAlert('Этот игрок без аккаунта, заблокировать можно только вошедших игроков. Сообщения можно заглушить кнопкой 🔔.'); return; }
+    if (!uiConfirm('Заблокировать этого игрока? Его сообщения будут скрыты. Разблокировать можно в его профиле.')) return;
+    BLOCK.add(NET.oppId); saveBlock();
+    NET.muted = true; renderChat();
+});
+
+function openReport() {
+    if (!NET.on) return;
+    if (!(NET.conn && NET.conn.info)) { uiAlert('Жалобы работают в играх через сервер.'); return; }
+    $('#reportMsg').textContent = '';
+    $('#reportText').value = '';
+    $('#report').classList.remove('hidden');
+}
+$('#chatReport').addEventListener('click', openReport);
+$('#reportClose').addEventListener('click', () => $('#report').classList.add('hidden'));
+$('#reportSend').addEventListener('click', async () => {
+    const i = NET.conn && NET.conn.info;
+    if (!i) return;
+    const btn = $('#reportSend');
+    btn.disabled = true;
+    try {
+        const r = await fetch(API + `/report?room=${i.code}&role=${i.role}&sid=${i.sid}`, { method: 'POST', body: JSON.stringify({ reason: $('#reportReason').value, text: $('#reportText').value }) });
+        if (r.status === 429) { $('#reportMsg').textContent = 'Жалобу можно отправлять не чаще раза в 30 секунд.'; return; }
+        if (!r.ok) { $('#reportMsg').textContent = 'Не удалось отправить жалобу. Попробуйте ещё раз.'; return; }
+        $('#report').classList.add('hidden');
+        uiAlert('Жалоба отправлена, спасибо. Мы её рассмотрим.');
+    } catch (e) { $('#reportMsg').textContent = 'Не удалось связаться с сервером.'; }
+    finally { btn.disabled = false; }
+});
+
+$('#profDelBtn').addEventListener('click', async () => {
+    if (!SB || !ACC.user) return;
+    if (!uiConfirm('Удалить аккаунт навсегда? Профиль, рейтинг и достижения будут стёрты, это нельзя отменить.')) return;
+    if (!uiConfirm('Точно удалить? Восстановить аккаунт будет невозможно.')) return;
+    const { error } = await SB.rpc('delete_my_account');
+    if (error) { uiAlert('Не удалось удалить аккаунт. Попробуйте ещё раз или напишите на eriksonfg510@gmail.com.'); return; }
+    try { await SB.auth.signOut(); } catch (e) { /* аккаунта уже нет */ }
+    ACC.user = null; ACC.profile = null; ACC.needNick = false;
+    accRefresh();
+    $('#prof').classList.add('hidden');
+    uiAlert('Аккаунт удалён.');
+});
+
+/* =====================================================================
+   УСТАНОВКА КАК ПРИЛОЖЕНИЕ (PWA)
+   ===================================================================== */
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#installBtn').classList.remove('hidden'); });
+window.addEventListener('appinstalled', () => { installEvt = null; $('#installBtn').classList.add('hidden'); });
+$('#installBtn').addEventListener('click', async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch (e) { /* пользователь передумал */ }
+    installEvt = null;
+    $('#installBtn').classList.add('hidden');
+});
+{
+    const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone && !window.Capacitor) $('#iosHint').classList.remove('hidden');
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.Capacitor) navigator.serviceWorker.register('sw.js').catch(() => { });
+}

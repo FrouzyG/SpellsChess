@@ -8,7 +8,7 @@ const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml' };
 const rooms = {};   // код -> комната (см. makeRoom)
 const SUPA_URL = process.env.SUPABASE_URL || 'https://fuqopbjpxeugdvnlxanb.supabase.co';
 const SUPA_PUB = process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_xVvPSDswx_P2D-kguqgznQ_5cjBAcMN';
@@ -24,7 +24,7 @@ const open = r => { push(r.host, { t: '__open' }); push(r.guest, { t: '__open' }
 
 // Комната хранит журнал сообщений для каждого получателя: если связь на миг оборвалась,
 // после переподключения пропущенное доставится заново (браузер сам шлёт Last-Event-ID).
-const makeRoom = () => ({ pub: null, tickets: new Set(), failN: 0, lockUntil: 0, inlog: null, seed: null, tcv: null, rated: true, user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
+const makeRoom = () => ({ chatLog: [], lastReport: { host: 0, guest: 0 }, pub: null, tickets: new Set(), failN: 0, lockUntil: 0, inlog: null, seed: null, tcv: null, rated: true, user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
 const deliver = (r, to, data) => {
     const id = ++r.seq[to];
     r.log[to].push({ id, data });
@@ -107,6 +107,11 @@ const sendJson = (res, code, obj) => { res.statusCode = code; res.setHeader('Con
 
 const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
+    // Приложение (оболочка Capacitor) открывается с другого адреса, поэтому разрешаем запросы к серверу игры
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Last-Event-ID');
+    if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return; }
     const room = (url.searchParams.get('room') || '').toUpperCase().slice(0, 12);
     const role = url.searchParams.get('role');
 
@@ -134,6 +139,37 @@ const server = http.createServer((req, res) => {
             if (r && !r.host) { delete rooms[code]; unwait(code); }
         }, 60000);
         res.end(JSON.stringify({ room: code, role: 'host' }));
+        return;
+    }
+
+    // Жалоба на соперника (из чата онлайн-партии)
+    if (url.pathname === '/report' && req.method === 'POST') {
+        readJson(req, async j => {
+            const r = rooms[room];
+            const sid = (url.searchParams.get('sid') || '').slice(0, 24);
+            if (!r || (role !== 'host' && role !== 'guest') || !sid || r.sid[role] !== sid) { sendJson(res, 400, {}); return; }
+            if (Date.now() - r.lastReport[role] < 30000) { sendJson(res, 429, {}); return; }
+            r.lastReport[role] = Date.now();
+            const o = other(role);
+            const row = {
+                reporter: r.user[role] ? r.user[role].id : null,
+                offender: r.user[o] ? r.user[o].id : null,
+                offender_nick: r.peer[o] ? r.peer[o].nick : null,
+                reason: String(j.reason || 'Другое').slice(0, 40),
+                details: String(j.text || '').slice(0, 500),
+                game_id: r.gid,
+                chat: r.chatLog.slice(-30)
+            };
+            console.log('ЖАЛОБА:', room, row.reason, '| на', row.offender_nick || 'гостя');
+            if (SUPA_SECRET) {
+                const headers = { apikey: SUPA_SECRET, 'Content-Type': 'application/json', Prefer: 'return=minimal' };
+                if (!SUPA_SECRET.startsWith('sb_')) headers.Authorization = 'Bearer ' + SUPA_SECRET;
+                fetch(SUPA_URL + '/rest/v1/reports', { method: 'POST', headers, body: JSON.stringify(row), signal: sbSignal() })
+                    .then(x => { if (!x.ok) x.text().then(t => console.log('reports: ОШИБКА', x.status, t)); })
+                    .catch(e => console.log('reports: сбой', e.message));
+            }
+            sendJson(res, 200, { ok: true });
+        });
         return;
     }
 
@@ -249,6 +285,10 @@ const server = http.createServer((req, res) => {
                     if (msg && msg.t === 'in' && r.inlog) {          // все действия игроков по порядку: из них собирается повтор партии
                         if (r.inlog.length >= 5000 || !msg.m || JSON.stringify(msg.m).length > 300) r.inlog = null;
                         else r.inlog.push(msg.m);
+                    }
+                    if (msg && msg.t === 'chat' && typeof msg.text === 'string') {      // последние сообщения нужны только для жалоб
+                        r.chatLog.push({ from: role, text: msg.text.slice(0, 300) });
+                        if (r.chatLog.length > 40) r.chatLog.shift();
                     }
                     deliver(r, other(role), body.replace(/\n/g, ' '));
                 }
