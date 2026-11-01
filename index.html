@@ -59,33 +59,19 @@
                 <button id="installBtn" class="small-btn hidden">📲 Установить приложение</button>
             </div>
             <p id="iosHint" class="sub hidden">📲 Чтобы установить игру на iPhone: «Поделиться» → «На экран Домой».</p>
-            <div id="tcBox" class="tc-box">
-                <div class="tc-title">Время партии</div>
-                <div class="tc-row">
-                    <button id="tcM5" class="small-btn">−5</button>
-                    <button id="tcM1" class="small-btn">−1</button>
-                    <b id="tcVal" data-notr>30 мин</b>
-                    <button id="tcP1" class="small-btn">+1</button>
-                    <button id="tcP5" class="small-btn">+5</button>
-                </div>
-                <div id="tcSub" class="tc-sub" data-notr>15 мин на игрока</div>
-                <label class="tc-inf"><input type="checkbox" id="tcInf"> Без лимита времени</label>
-                <label class="tc-inf"><input type="checkbox" id="ratedChk" checked> Рейтинговая партия</label>
+            <div class="lobby-sep">⚡ Быстрый поиск: рейтинговая партия</div>
+            <div id="quickModes" class="mode-grid">
+                <button data-mode="bullet"><b>Пуля</b><span>1 мин</span></button>
+                <button data-mode="blitz"><b>Блиц</b><span>5 мин</span></button>
+                <button data-mode="rapid"><b>Рапид</b><span>15 мин</span></button>
+                <button data-mode="classic"><b>Классика</b><span>30 мин</span></button>
             </div>
+            <p class="quick-note">Время указано на каждого игрока. Нужен вход в аккаунт, у каждого режима свой рейтинг.</p>
+            <div id="searchBox" class="search-box hidden"><span id="searchText"></span> <button id="searchCancel" class="small-btn">Отмена</button></div>
+            <div class="lobby-sep">🚪 Комнаты: дружеская партия</div>
+            <button id="lobbyRooms" class="big-btn">Создать комнату или войти в комнату</button>
+            <div class="lobby-sep">на одном экране</div>
             <button id="lobbyLocal" class="big-btn">Вдвоём за одним экраном</button>
-            <div class="lobby-sep">онлайн</div>
-            <button id="lobbyRooms" class="big-btn">🚪 Список комнат</button>
-            <button id="lobbyQuick" class="big-btn">Быстрая игра: найти соперника</button>
-            <div class="quick-line">Искать партию:</div>
-            <div id="quickPick" class="seg">
-                <button data-q="any">Любая</button>
-                <button data-q="time">По времени: <span id="qTime" data-notr>30 мин</span></button>
-                <button data-q="inf">Без лимита</button>
-            </div>
-            <div class="lobby-sep">или с другом по коду</div>
-            <button id="lobbyHost" class="big-btn">Создать комнату</button>
-            <div id="hostBox" class="hidden">Код комнаты: <b id="roomCode"></b> <button id="copyCode" class="small-btn">Копировать</button><div class="host-note">Вам, как хозяину комнаты, вводить код не нужно: просто отправьте его другу.</div></div>
-            <div class="join-row"><input id="joinCode" maxlength="8" placeholder="КОД"><button id="lobbyJoin" class="big-btn">Войти</button></div>
             <p id="lobbyStatus" class="sub"></p>
             <a id="donateLobby" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
             <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/FrouzyGG" target="_blank" rel="noopener">Telegram-канал</a> · <a href="https://discord.gg/N4J6z9N6H" target="_blank" rel="noopener">Discord</a> · <a href="privacy.html" target="_blank" rel="noopener">Конфиденциальность</a></div>
@@ -193,14 +179,25 @@
         </div>
     </div>
 
+    <!-- Настройки времени для игры на одном экране -->
+    <div id="local" class="overlay hidden">
+        <div class="small-card rooms-card">
+            <h2>Игра на одном экране</h2>
+            <div id="localTimePick"></div>
+            <button id="localStart" class="big-btn">Начать</button>
+            <button id="localClose" class="small-btn">Отмена</button>
+        </div>
+    </div>
+
     <!-- Список комнат -->
     <div id="rooms" class="overlay hidden">
         <div class="small-card rooms-card">
             <h2>🚪 Комнаты</h2>
             <div class="rooms-create">
+                <b>Создать комнату</b>
+                <div id="roomTimePick"></div>
                 <input id="roomPass" maxlength="20" placeholder="Пароль комнаты (необязательно)" autocomplete="off">
                 <button id="roomMake" class="big-btn">Создать комнату</button>
-                <div id="roomMakeInfo" class="rooms-info" data-notr></div>
             </div>
             <div class="rooms-head"><b>Открытые комнаты</b><button id="roomsRefresh" class="small-btn">⟳ Обновить</button></div>
             <div id="roomsList" class="top-list"></div>
@@ -231,11 +228,17 @@
     <div id="top" class="overlay hidden">
         <div class="small-card top-card">
             <h2>🏆 Рейтинг</h2>
+            <div id="topTabs" class="seg">
+                <button data-mode="bullet">Пуля</button>
+                <button data-mode="blitz">Блиц</button>
+                <button data-mode="rapid">Рапид</button>
+                <button data-mode="classic">Классика</button>
+            </div>
             <div class="top-search">
                 <input id="topSearch" maxlength="16" placeholder="Найти игрока по нику">
                 <button id="topFind" class="small-btn">Найти</button>
             </div>
-            <div class="top-row top-head"><span>#</span><span>Ник</span><span>Рейтинг</span><span>В / П / Н</span></div>
+            <div class="top-row top-head"><span>#</span><span>Ник</span><span>Рейтинг</span><span>Партий</span></div>
             <div id="topList" class="top-list"></div>
             <button id="topClose" class="small-btn">Закрыть</button>
         </div>
@@ -285,7 +288,6 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
     <script src="script.js"></script>
 </body>

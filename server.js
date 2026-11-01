@@ -24,7 +24,7 @@ const open = r => { push(r.host, { t: '__open' }); push(r.guest, { t: '__open' }
 
 // Комната хранит журнал сообщений для каждого получателя: если связь на миг оборвалась,
 // после переподключения пропущенное доставится заново (браузер сам шлёт Last-Event-ID).
-const makeRoom = () => ({ chatLog: [], lastReport: { host: 0, guest: 0 }, pub: null, tickets: new Set(), failN: 0, lockUntil: 0, inlog: null, seed: null, tcv: null, rated: true, user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
+const makeRoom = () => ({ quickMode: null, incv: 0, chatLog: [], lastReport: { host: 0, guest: 0 }, pub: null, tickets: new Set(), failN: 0, lockUntil: 0, inlog: null, seed: null, tcv: null, rated: true, user: { host: null, guest: null }, peer: { host: null, guest: null }, rep: { host: null, guest: null }, heroes: null, meta: null, gid: null, recorded: null, repTimer: null, host: null, guest: null, sid: { host: null, guest: null }, log: { host: [], guest: [] }, seq: { host: 0, guest: 0 }, lastMid: { host: 0, guest: 0 }, timer: {}, opened: false });
 const deliver = (r, to, data) => {
     const id = ++r.seq[to];
     r.log[to].push({ id, data });
@@ -44,7 +44,7 @@ async function sbUser(token) {
 }
 async function sbProfile(uid) {
     try {
-        const r = await fetch(`${SUPA_URL}/rest/v1/profiles?id=eq.${uid}&select=nick,rating`, { headers: { apikey: SUPA_PUB }, signal: sbSignal() });
+        const r = await fetch(`${SUPA_URL}/rest/v1/profiles?id=eq.${uid}&select=nick,r_bullet,r_blitz,r_rapid,r_classic`, { headers: { apikey: SUPA_PUB }, signal: sbSignal() });
         const a = await r.json();
         return Array.isArray(a) && a[0] ? a[0] : null;
     } catch (e) { return null; }
@@ -56,7 +56,7 @@ async function handleAuth(room, r, role, token) {
     if (typeof token === 'string' && token.length > 20 && token.length < 4096) {
         const uid = await sbUser(token);
         const prof = uid ? await sbProfile(uid) : null;
-        if (uid && prof) { r.user[role] = { id: uid }; info = { nick: String(prof.nick || '').slice(0, 16), rating: prof.rating | 0, id: uid }; }
+        if (uid && prof) { r.user[role] = { id: uid }; info = { nick: String(prof.nick || '').slice(0, 16), rating: r.quickMode ? (prof['r_' + r.quickMode] | 0) : 0, id: uid }; }
     }
     if (rooms[room] !== r) return;
     r.peer[role] = info;
@@ -75,7 +75,7 @@ function recordGame(r) {
     if (!SUPA_SECRET.startsWith('sb_')) headers.Authorization = 'Bearer ' + SUPA_SECRET;
     fetch(SUPA_URL + '/rest/v1/rpc/record_result', {
         method: 'POST', headers, signal: sbSignal(),
-        body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null, p_rated: r.rated !== false, p_seed: r.inlog ? r.seed : null, p_tc: r.tcv, p_log: r.inlog })
+        body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null, p_rated: !!r.quickMode, p_mode: r.quickMode, p_inc: r.incv, p_seed: r.inlog ? r.seed : null, p_tc: r.tcv, p_log: r.inlog })
     }).then(x => { if (!x.ok) x.text().then(t => console.log('record_result: ОШИБКА', x.status, t)); else console.log('результат записан:', r.gid, res); })
         .catch(e => console.log('record_result: сбой', e.message));
 }
@@ -117,13 +117,12 @@ const server = http.createServer((req, res) => {
 
     if (url.pathname === '/ping') { res.end('spellschess'); return; }
 
-    // «Быстрая игра»: первый ждёт, второй автоматически подключается к нему
+    // «Быстрый поиск»: рейтинговая партия в одном из четырёх режимов. Первый ждёт, второй подключается к нему.
     if (url.pathname === '/quick') {
         res.setHeader('Content-Type', 'application/json');
-        const tc = (url.searchParams.get('tc') || 'any').slice(0, 6);
-        const rated = url.searchParams.get('rated') !== '0';     // дружеские и рейтинговые ищут друг друга отдельно
-        // ищем ожидающего, чьё время подходит: одинаковое, либо кто-то из двоих согласен на любое
-        const idx = waitList.findIndex(w => rooms[w.code] && !rooms[w.code].guest && w.rated === rated && (w.tc === tc || w.tc === 'any' || tc === 'any'));
+        const mode = url.searchParams.get('mode');
+        if (!['bullet', 'blitz', 'rapid', 'classic'].includes(mode)) { res.statusCode = 400; res.end('{}'); return; }
+        const idx = waitList.findIndex(w => rooms[w.code] && !rooms[w.code].guest && w.mode === mode);
         if (idx >= 0) {
             const code = waitList[idx].code;
             waitList.splice(idx, 1);
@@ -132,11 +131,12 @@ const server = http.createServer((req, res) => {
         }
         if (Object.keys(rooms).length > 500) { res.statusCode = 503; res.end('{}'); return; }
         const code = makeCode();
-        rooms[code] = makeRoom();
-        waitList.push({ code, tc, rated });
+        const r = rooms[code] = makeRoom();
+        r.quickMode = mode;
+        waitList.push({ code, mode });
         setTimeout(() => {                       // если создатель так и не подключился
-            const r = rooms[code];
-            if (r && !r.host) { delete rooms[code]; unwait(code); }
+            const x = rooms[code];
+            if (x && !x.host) { delete rooms[code]; unwait(code); }
         }, 60000);
         res.end(JSON.stringify({ room: code, role: 'host' }));
         return;
@@ -179,7 +179,7 @@ const server = http.createServer((req, res) => {
             .filter(([, r]) => r.pub && r.host && !r.guest)
             .sort((a, b) => b[1].pub.created - a[1].pub.created)
             .slice(0, 50)
-            .map(([code, r]) => ({ room: code, nick: r.pub.nick, rating: r.pub.rating, tc: r.pub.tc, rated: r.pub.rated, pass: !!r.pub.hash }));
+            .map(([code, r]) => ({ room: code, nick: r.pub.nick, rating: r.pub.rating, min: r.pub.min, inc: r.pub.inc, pass: !!r.pub.hash }));
         sendJson(res, 200, list);
         return;
     }
@@ -191,12 +191,12 @@ const server = http.createServer((req, res) => {
             if (typeof j.token === 'string' && j.token.length > 20 && j.token.length < 4096) {
                 const uid = await sbUser(j.token);
                 const prof = uid ? await sbProfile(uid) : null;
-                if (prof) { nick = String(prof.nick || '').slice(0, 16); rating = prof.rating | 0; }
+                if (prof) { nick = String(prof.nick || '').slice(0, 16); }
             }
             const code = makeCode();
             const r = rooms[code] = makeRoom();
             const salt = crypto.randomBytes(8).toString('hex');
-            r.pub = { nick, rating, tc: String(j.tc || 'inf').slice(0, 6), rated: j.rated !== false, created: Date.now(), salt, hash: pass ? hashPw(pass, salt) : null };
+            r.pub = { nick, rating, min: Math.max(0, Math.min(180, j.min | 0)), inc: Math.max(0, Math.min(60, j.inc | 0)), created: Date.now(), salt, hash: pass ? hashPw(pass, salt) : null };
             setTimeout(() => { const x = rooms[code]; if (x && !x.host) delete rooms[code]; }, 60000);   // хозяин так и не подключился
             sendJson(res, 200, { room: code });
         });
@@ -234,7 +234,7 @@ const server = http.createServer((req, res) => {
         let r = rooms[room];
         if (role === 'host') {
             if (r && r.sid.host && r.sid.host !== sid) { push(res, { t: '__taken' }); res.end(); return; }
-            if (!r) { if (Object.keys(rooms).length > 500) { res.end(); return; } r = rooms[room] = makeRoom(); }
+            if (!r) { push(res, { t: '__nohost' }); res.end(); return; }          // комнаты создаются только через список комнат или быстрый поиск
         } else {
             if (!r || (r.sid.guest && r.sid.guest !== sid)) { push(res, { t: '__nohost' }); res.end(); return; }
             if (r.pub && r.pub.hash && r.sid.guest !== sid) {           // комната с паролем: нужен билет, выданный после проверки пароля
@@ -281,7 +281,7 @@ const server = http.createServer((req, res) => {
                 if (msg && msg.t === 'auth') handleAuth(room, r, role, msg.token);
                 else if (msg && msg.t === 'result') handleResult(r, role, msg.res, msg);
                 else {
-                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; r.rated = msg.rated !== false; r.inlog = []; r.seed = msg.seed | 0; r.tcv = msg.tc | 0; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
+                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; r.rated = !!r.quickMode; r.incv = Math.max(0, Math.min(60, msg.inc | 0)); r.inlog = []; r.seed = msg.seed | 0; r.tcv = msg.tc | 0; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
                     if (msg && msg.t === 'in' && r.inlog) {          // все действия игроков по порядку: из них собирается повтор партии
                         if (r.inlog.length >= 5000 || !msg.m || JSON.stringify(msg.m).length > 300) r.inlog = null;
                         else r.inlog.push(msg.m);

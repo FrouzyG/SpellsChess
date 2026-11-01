@@ -4068,3 +4068,158 @@ button {
     color: #ff9aa8;
     border-color: #ff6b8a;
 }
+
+/* ===================== Новый стартовый экран: режимы, настройки времени ===================== */
+.mode-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin: 6px 0;
+}
+
+    .mode-grid button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 10px 4px;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid var(--gold);
+        border-radius: 12px;
+    }
+
+        .mode-grid button b {
+            font-size: 16px;
+        }
+
+        .mode-grid button span {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+
+        .mode-grid button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.16);
+        }
+
+        .mode-grid button:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+.quick-note {
+    margin: 0 0 6px;
+    font-size: 13px;
+    opacity: 0.7;
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 6px 0;
+    padding: 10px 12px;
+    font-weight: 600;
+    color: var(--gold);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+}
+
+    .search-box.hidden {
+        display: none;
+    }
+
+.time-pick {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+    .time-pick .tp-presets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+        .time-pick .tp-presets button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1 1 70px;
+            padding: 8px 6px;
+            font: inherit;
+            color: inherit;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+        }
+
+            .time-pick .tp-presets button span {
+                font-size: 12px;
+                opacity: 0.75;
+            }
+
+            .time-pick .tp-presets button.on {
+                border: 2px solid var(--gold);
+                background: rgba(255, 255, 255, 0.16);
+            }
+
+    .time-pick .tp-custom {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+        .time-pick .tp-custom label {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .time-pick .tp-custom input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px 10px;
+            font-size: 16px;
+            color: inherit;
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid var(--pink);
+            border-radius: 8px;
+        }
+
+    .time-pick .tp-sum {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--gold);
+        text-align: center;
+    }
+
+.stat-box.mode-box {
+    cursor: pointer;
+}
+
+    .stat-box.mode-box.sel {
+        outline: 2px solid var(--gold);
+    }
+
+#topTabs {
+    display: flex;
+    gap: 6px;
+}
+
+    #topTabs button {
+        flex: 1;
+    }
+
+@media (max-width: 560px) {
+    .mode-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

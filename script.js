@@ -3721,7 +3721,7 @@ function maybeStart() {
     if (!(NET.on && NET.host && NET.ready && NET.oppReady && NET.oppHero)) return;
     _seed = (Math.random() * 2147483647) | 0;
     const heroes = { w: selectedHeroes.w, b: NET.oppHero };
-    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0, rated: NET.rated !== false };
+    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0, inc: NET.inc || 0, mode: NET.mode || null, rated: !!NET.rated };
     netSend({ t: 'start', ...NET.lastStart });
     selectedHeroes = heroes;
     NET.ready = false; NET.oppReady = false;
@@ -3897,53 +3897,12 @@ function relayConn(code, role, ticket) {
         if (m.t === '__open') { if (!conn.open) { conn.open = true; if (h.open) h.open(); } }
         else if (m.t === '__close') { conn.open = false; if (h.close) h.close(); }
         else if (m.t === '__badpass') { lobbyStatus('Неверный пароль или комната уже занята.'); es.close(); }
-        else if (m.t === '__nohost') { lobbyStatus('Комнаты с таким кодом нет.'); es.close(); }
-        else if (m.t === '__taken') { lobbyStatus('Такой код уже занят, нажмите «Создать комнату» ещё раз.'); es.close(); $('#lobbyHost').disabled = false; }
+        else if (m.t === '__nohost') { lobbyStatus('Комната закрыта или не найдена.'); es.close(); }
+        else if (m.t === '__taken') { lobbyStatus('Комната уже занята.'); es.close(); }
         else if (h.data) h.data(m);
     };
     es.onerror = () => { if (es.readyState === 2) { conn.open = false; if (h.close) h.close(); } };
     return conn;
-}
-
-function hostRoom() {
-    if (RELAY) {
-        const code = newCode();
-        NET.host = true;
-        $('#roomCode').textContent = code;
-        $('#hostBox').classList.remove('hidden');
-        lobbyStatus('Комната создана. Отправьте код другу и ждите, пока он зайдёт.');
-        attachConn(relayConn(code, 'host'));
-        return;
-    }
-    if (typeof Peer === 'undefined') { lobbyStatus('Не загрузилась библиотека PeerJS: проверьте интернет и обновите страницу.'); return; }
-    const code = newCode();
-    NET.host = true;
-    const peer = NET.peer = new Peer(PEER_PREFIX + code, PEER_OPTS);
-    peer.on('open', () => {
-        $('#roomCode').textContent = code;
-        $('#hostBox').classList.remove('hidden');
-        lobbyStatus('Комната создана. Отправьте код другу и ждите, пока он зайдёт.');
-    });
-    peer.on('connection', c => { if (NET.conn) { c.close(); return; } attachConn(c); });
-    peer.on('error', err => {
-        if (err.type === 'unavailable-id') { peer.destroy(); hostRoom(); return; }
-        lobbyStatus('Ошибка соединения: ' + err.type);
-    });
-}
-
-function joinRoom() {
-    const code = $('#joinCode').value.trim().toUpperCase();
-    if (code.length < 4) { lobbyStatus('Введите код комнаты.'); return; }
-    if (!RELAY && typeof Peer === 'undefined') { lobbyStatus('Не загрузилась библиотека PeerJS: проверьте интернет и обновите страницу.'); return; }
-    NET.host = false;
-    lobbyStatus('Подключаемся...');
-    if (RELAY) { attachConn(relayConn(code, 'guest')); return; }
-    const peer = NET.peer = new Peer(PEER_OPTS);
-    peer.on('open', () => {
-        attachConn(peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' }));
-        setTimeout(() => { if (!NET.on) lobbyStatus('Не получилось подключиться. Проверьте код и попробуйте ещё раз.'); }, 20000);
-    });
-    peer.on('error', err => lobbyStatus(err.type === 'peer-unavailable' ? 'Комнаты с таким кодом нет.' : 'Ошибка соединения: ' + err.type));
 }
 
 function attachConn(c) {
@@ -3988,7 +3947,7 @@ function netRecv(m) {
             maybeStart();
             break;
         case 'start':
-            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; if (m.rated !== undefined) NET.rated = m.rated !== false; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
+            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; if (m.inc !== undefined) NET.inc = m.inc | 0; if (m.mode !== undefined) NET.mode = MODES[m.mode] ? m.mode : null; if (m.rated !== undefined) NET.rated = !!m.rated; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
             break;
         case 'chat':
             if (!NET.muted && typeof m.text === 'string') { chatMsgs.push({ me: false, text: m.text.slice(0, 300) }); renderChat(); }
@@ -4015,27 +3974,7 @@ $('#themeRow').addEventListener('click', e => {
     if (b) applyTheme(b.dataset.theme);
 });
 $('#btnTheme').addEventListener('click', () => applyTheme(THEMES[(THEMES.findIndex(t => t.id === themeId) + 1) % THEMES.length].id));
-$('#lobbyLocal').addEventListener('click', () => $('#lobby').classList.add('hidden'));
-$('#lobbyHost').addEventListener('click', () => { $('#lobbyHost').disabled = true; whenRelayChecked(hostRoom); });
-$('#lobbyJoin').addEventListener('click', () => whenRelayChecked(joinRoom));
-$('#lobbyQuick').addEventListener('click', async () => {
-    while (!RELAY_CHECKED) { lobbyStatus('Сервер просыпается, подождите немного...'); await new Promise(ok => setTimeout(ok, 1000)); }
-    if (!RELAY) { lobbyStatus('Быстрая игра работает только на сайте с сервером игры.'); return; }
-    try {
-        NET.pref = quickPref();
-        NET.rated = TCSEL.rated;
-        const j = await (await fetch(API + '/quick?tc=' + encodeURIComponent(NET.pref) + '&rated=' + (TCSEL.rated ? 1 : 0))).json();
-        if (!j.room) { lobbyStatus('Сервер занят, попробуйте позже.'); return; }
-        NET.host = j.role === 'host';
-        lobbyStatus(NET.host ? 'Ищем соперника... оставайтесь на этой странице.' : 'Соперник найден, подключаемся...');
-        attachConn(relayConn(j.room, j.role));
-    } catch (e) { lobbyStatus('Не удалось связаться с сервером.'); }
-});
-$('#copyCode').addEventListener('click', () => {
-    const t = $('#roomCode').textContent;
-    if (navigator.clipboard) navigator.clipboard.writeText(t);
-    lobbyStatus('Код скопирован: ' + t);
-});
+// (кнопки лобби подключены ниже, после настроек времени)
 
 
 /* =====================================================================
@@ -4563,6 +4502,31 @@ const EN = {
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
     "возвращается": "returns",
+    "⚡ Быстрый поиск: рейтинговая партия": "⚡ Quick search: rated game",
+    "🚪 Комнаты: дружеская партия": "🚪 Rooms: friendly game",
+    "на одном экране": "on one screen",
+    "Пуля": "Bullet",
+    "Блиц": "Blitz",
+    "Рапид": "Rapid",
+    "Классика": "Classical",
+    "Без времени": "No time limit",
+    "1 мин": "1 min",
+    "5 мин": "5 min",
+    "15 мин": "15 min",
+    "30 мин": "30 min",
+    "Время указано на каждого игрока. Нужен вход в аккаунт, у каждого режима свой рейтинг.": "Time is per player. Sign-in is required, and each mode has its own rating.",
+    "Создать комнату или войти в комнату": "Create a room or join a room",
+    "Игра на одном экране": "Game on one screen",
+    "Начать": "Start",
+    "Создать комнату": "Create a room",
+    "Минут на игрока": "Minutes per player",
+    "Добавка за ход, сек": "Increment per move, sec",
+    "Партий": "Games",
+    "Комната закрыта или не найдена.": "The room is closed or was not found.",
+    "Комната уже занята.": "The room is already taken.",
+    "Быстрый поиск работает только на сайте с сервером игры.": "Quick search works only on the site with the game server.",
+    "Рейтинговые партии доступны после входа в аккаунт.": "Rated games are available after signing in.",
+    "Сервер просыпается, подождите немного...": "The server is waking up, please wait...",
     "Конфиденциальность": "Privacy",
     "📲 Установить приложение": "📲 Install the app",
     "📲 Чтобы установить игру на iPhone: «Поделиться» → «На экран Домой».": "📲 To install on iPhone: Share → Add to Home Screen.",
@@ -5044,82 +5008,78 @@ updateConfirmUI();
 // =====================================================================
 //  ВРЕМЯ ПАРТИИ: выбор в лобби, шахматные часы, подбор соперника по времени
 // =====================================================================
-const TCSEL = { mins: 30, inf: false, quick: 'any', rated: true };     // mins — всего минут на партию (каждому поровну); quick: any | time | inf
-try { Object.assign(TCSEL, JSON.parse(localStorage.getItem('sc_tc') || '{}')); } catch (e) { }
-TCSEL.mins = Math.max(1, Math.min(180, +TCSEL.mins || 30));
-TCSEL.rated = TCSEL.rated !== false;
+const L = (ru, en) => (LANG === 'en' ? en : ru);
+const clampInt = (v, a, b) => Math.max(a, Math.min(b, parseInt(v, 10) || 0));
+const MODES = { bullet: { name: 'Пуля', en: 'Bullet', min: 1 }, blitz: { name: 'Блиц', en: 'Blitz', min: 5 }, rapid: { name: 'Рапид', en: 'Rapid', min: 15 }, classic: { name: 'Классика', en: 'Classical', min: 30 } };
+const modeName = k => (MODES[k] ? L(MODES[k].name, MODES[k].en) : '');
+const PRESETS = { bullet: { min: 1, inc: 0 }, blitz: { min: 5, inc: 0 }, rapid: { min: 15, inc: 0 }, classic: { min: 30, inc: 0 }, none: { min: 0, inc: 0 } };
+// Время всегда считается на каждого игрока: min — минут (0 = без лимита), inc — секунд добавки после каждого хода
+const ROOMSET = { min: 15, inc: 0 }, LOCALSET = { min: 15, inc: 0 };
+try { const s = JSON.parse(localStorage.getItem('sc_times') || '{}'); if (s.room) Object.assign(ROOMSET, s.room); if (s.local) Object.assign(LOCALSET, s.local); } catch (e) { }
+[ROOMSET, LOCALSET].forEach(o => { o.min = clampInt(o.min, 0, 180); o.inc = clampInt(o.inc, 0, 60); });
+const saveTimes = () => { try { localStorage.setItem('sc_times', JSON.stringify({ room: ROOMSET, local: LOCALSET })); } catch (e) { } };
+const fmtTime = (min, inc) => (min > 0
+    ? L(`${min} мин на игрока`, `${min} min per player`) + (inc > 0 ? L(` + ${inc} с за ход`, ` + ${inc} s per move`) : '')
+    : L('без лимита времени', 'no time limit'));
 
-const prefToTc = p => (p === 'inf' ? 0 : (+p || 30));                       // 0 = без лимита
-const roomPref = () => (TCSEL.inf ? 'inf' : String(TCSEL.mins));
-function quickPref() {
-    if (TCSEL.quick === 'inf') return 'inf';
-    if (TCSEL.quick === 'time') return roomPref();
-    return 'any';
+// Выбор времени: пять готовых вариантов или своё время и добавка за ход
+function timePicker(root, st, onChange) {
+    const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+    root.textContent = '';
+    root.classList.add('time-pick');
+    const seg = mk('div', 'tp-presets'), btns = {};
+    [['bullet', 'Пуля', '1 мин'], ['blitz', 'Блиц', '5 мин'], ['rapid', 'Рапид', '15 мин'], ['classic', 'Классика', '30 мин'], ['none', 'Без времени', '']].forEach(([k, n, sub]) => {
+        const b = mk('button'); b.dataset.p = k; b.append(mk('b', '', n)); if (sub) b.append(mk('span', '', sub));
+        seg.appendChild(b); btns[k] = b;
+    });
+    const row = mk('div', 'tp-custom');
+    const l1 = mk('label', '', 'Минут на игрока'), i1 = mk('input');
+    const l2 = mk('label', '', 'Добавка за ход, сек'), i2 = mk('input');
+    [[i1, 180], [i2, 60]].forEach(([inp, mx]) => { inp.type = 'number'; inp.min = 0; inp.max = mx; inp.inputMode = 'numeric'; });
+    l1.appendChild(i1); l2.appendChild(i2); row.append(l1, l2);
+    const sum = mk('div', 'tp-sum'); sum.setAttribute('data-notr', '');
+    root.append(seg, row, sum);
+    const paintLight = () => {
+        const p = Object.keys(PRESETS).find(k => PRESETS[k].min === st.min && PRESETS[k].inc === st.inc);
+        Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === p));
+        sum.textContent = fmtTime(st.min, st.inc);
+    };
+    const paint = () => { i1.value = st.min; i2.value = st.inc; paintLight(); };
+    seg.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        st.min = PRESETS[b.dataset.p].min; st.inc = PRESETS[b.dataset.p].inc;
+        paint(); onChange();
+    });
+    i1.addEventListener('input', () => { st.min = clampInt(i1.value, 0, 180); paintLight(); onChange(); });
+    i2.addEventListener('input', () => { st.inc = clampInt(i2.value, 0, 60); paintLight(); onChange(); });
+    paint();
 }
-const fmtNum = n => String(n).replace('.', ',');
-const fmtTc = tc => (tc > 0 ? `${fmtNum(tc)} мин (${fmtNum(tc / 2)} мин на игрока)` : 'без лимита');
 
-function saveTc() { try { localStorage.setItem('sc_tc', JSON.stringify(TCSEL)); } catch (e) { } }
-function renderTcBox() {
-    const g = id => document.getElementById(id);
-    g('tcVal').textContent = TCSEL.inf ? '∞' : `${TCSEL.mins} мин`;
-    g('tcSub').textContent = TCSEL.inf ? 'без ограничения времени' : `${fmtNum(TCSEL.mins / 2)} мин на игрока`;
-    g('tcInf').checked = TCSEL.inf;
-    g('ratedChk').checked = TCSEL.rated;
-    ['tcM5', 'tcM1', 'tcP1', 'tcP5'].forEach(id => { g(id).disabled = TCSEL.inf; });
-    g('tcBox').classList.toggle('inf', TCSEL.inf);
-    document.querySelectorAll('#quickPick button').forEach(b => b.classList.toggle('on', b.dataset.q === TCSEL.quick));
-    g('qTime').textContent = TCSEL.inf ? '∞' : `${TCSEL.mins} мин`;
-}
-function tcStep(d) {
-    TCSEL.mins = Math.max(1, Math.min(180, TCSEL.mins + d));
-    saveTc(); renderTcBox();
-}
-[['tcM5', -5], ['tcM1', -1], ['tcP1', 1], ['tcP5', 5]].forEach(([id, d]) => document.getElementById(id).addEventListener('click', () => tcStep(d)));
-document.getElementById('tcInf').addEventListener('change', e => { TCSEL.inf = e.target.checked; saveTc(); renderTcBox(); });
-document.getElementById('ratedChk').addEventListener('change', e => { TCSEL.rated = e.target.checked; saveTc(); });
-document.getElementById('quickPick').addEventListener('click', e => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    TCSEL.quick = b.dataset.q;
-    saveTc(); renderTcBox();
-});
-// выбор времени запоминаем до того, как сработают обработчики создания комнаты и входа
-document.getElementById('lobbyHost').addEventListener('click', () => { NET.pref = roomPref(); NET.rated = TCSEL.rated; }, true);
-document.getElementById('lobbyJoin').addEventListener('click', () => { NET.pref = 'any'; NET.rated = undefined; }, true);
-renderTcBox();
-
-// После соединения хозяин сообщает итоговое время. Если он искал «любое», берётся время гостя (оба «любое»: 30 минут)
+// После соединения хозяин сообщает гостю время, добавку и режим партии
 function tcOnOpen() {
-    const pref = NET.pref || 'any';
-    if (NET.host) {
-        netSend({ t: 'mode', rated: NET.rated !== false });
-        if (pref !== 'any') { NET.tc = prefToTc(pref); netSend({ t: 'tc', tc: NET.tc }); }
-        else NET.tc = undefined;
-    } else netSend({ t: 'tcpref', pref });
+    if (NET.host) netSend({ t: 'tc', min: NET.tc || 0, inc: NET.inc || 0, rated: !!NET.rated, mode: NET.mode || null });
     updateSetupTc();
 }
 const _netRecvTc = netRecv;
 netRecv = function (m) {
-    if (m && m.t === 'mode') { if (!NET.host) { NET.rated = m.rated !== false; updateSetupTc(); } return; }
-    if (m && m.t === 'tcpref') {
-        if (NET.host && (NET.pref || 'any') === 'any') { NET.tc = m.pref === 'any' ? 90 : prefToTc(m.pref); netSend({ t: 'tc', tc: NET.tc }); updateSetupTc(); }   /* оба «любое»: 90 минут, по 45 на игрока */
-        return;
-    }
-    if (m && m.t === 'tc') { if (!NET.host && typeof m.tc === 'number') { NET.tc = m.tc; updateSetupTc(); } return; }
+    if (m && m.t === 'tc') { if (!NET.host) { NET.tc = m.min | 0; NET.inc = m.inc | 0; NET.rated = !!m.rated; NET.mode = MODES[m.mode] ? m.mode : null; updateSetupTc(); } return; }
     if (m && m.t === 'flag') { if (m.side === other(NET.me)) flagSide(m.side); return; }
     _netRecvTc(m);
 };
 function curTc() {
     if (NET.on) return typeof NET.tc === 'number' ? NET.tc : null;     // null: ещё не определено
-    return TCSEL.inf ? 0 : TCSEL.mins;
+    return LOCALSET.min;
 }
+const curInc = () => (NET.on ? (NET.inc | 0) : LOCALSET.inc);
 function updateSetupTc() {
     const el = document.getElementById('setupTc');
     if (!el) return;
     const tc = curTc();
     el.classList.remove('hidden');
-    el.textContent = (tc === null ? 'Время партии: определится, когда подключится соперник.' : `Время партии: ${fmtTc(tc)}.`) + (NET.on && NET.rated !== undefined ? (NET.rated === false ? ' Дружеская партия: рейтинг не меняется.' : ' Партия рейтинговая.') : '');
+    let txt = tc === null ? L('Время партии: определится, когда подключится соперник.', 'Game time: will be set when your opponent connects.') : L('Время партии: ', 'Game time: ') + fmtTime(tc, curInc()) + '.';
+    if (NET.on && tc !== null) txt += NET.rated ? L(` Рейтинговая партия, режим «${modeName(NET.mode)}».`, ` Rated game, ${modeName(NET.mode)} mode.`) : L(' Дружеская партия: рейтинг не меняется.', ' Friendly game: rating does not change.');
+    el.textContent = txt;
 }
 const _openSetupTc = openSetup;
 openSetup = function () { _openSetupTc.apply(this, arguments); updateSetupTc(); };
@@ -5138,7 +5098,7 @@ function clockHTML(col) {
 }
 function initClock() {
     const tc = curTc() || 0;
-    CLOCK = { on: tc > 0, left: { w: tc * 30, b: tc * 30 }, last: performance.now(), grace: 0 };
+    CLOCK = { on: tc > 0, left: { w: tc * 60, b: tc * 60 }, inc: curInc(), prev: G ? G.turn : 'w', last: performance.now(), grace: 0 };
     if (G) render();
 }
 const _startGameTc = startGame;
@@ -5177,7 +5137,12 @@ setInterval(() => {
     }
 }, 200);
 const _renderClock = render;
-render = function () { _renderClock.call(this); paintClocks(); };
+render = function () {
+    // когда ход перешёл к другому, предыдущему игроку добавляется время за ход
+    if (CLOCK.on && G && !G.over && CLOCK.prev && G.turn !== CLOCK.prev) CLOCK.left[CLOCK.prev] += CLOCK.inc || 0;
+    if (G && CLOCK.on) CLOCK.prev = G.turn;
+    _renderClock.call(this); paintClocks();
+};
 
 
 // ===== Чат: на компьютере под правой рамкой героя, на телефоне внутри выезжающего меню =====
@@ -5396,7 +5361,7 @@ function accRefresh() {
     const u = ACC.user, p = ACC.profile;
     const nm = $('#accName');
     nm.textContent = '';
-    if (u) nm.append(avaNode(p && p.avatar), ' ' + (p ? p.nick + ' · ⭐ ' + p.rating : (u.email || '').split('@')[0]));
+    if (u) nm.append(avaNode(p && p.avatar), ' ' + (p ? p.nick : (u.email || '').split('@')[0]));
     nm.classList.toggle('hidden', !u);
     $('#accBtn').classList.toggle('hidden', !!u);
     $('#accOut').classList.toggle('hidden', !u);
@@ -5407,7 +5372,7 @@ async function loadProfile() {
     if (!SB || !ACC.user || ACC.loading) return;
     ACC.loading = true;
     const uid = ACC.user.id;
-    const get = () => SB.from('profiles').select('nick,rating,wins,losses,draws,avatar').eq('id', uid).maybeSingle();
+    const get = () => SB.from('profiles').select('nick,avatar').eq('id', uid).maybeSingle();
     try {
         let { data, error } = await get();
         if (error) throw error;
@@ -5485,14 +5450,17 @@ async function authSubmit() {
 }
 
 const mkEl = (tag, cls, text, notr) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; if (notr) e.setAttribute('data-notr', ''); return e; };
-const PLAYER_COLS = 'id,nick,rating,wins,losses,draws,avatar';
+const PLAYER_COLS = 'id,nick,avatar,wins,losses,draws,r_bullet,r_blitz,r_rapid,r_classic,g_bullet,g_blitz,g_rapid,g_classic';
+let TOPMODE = 'blitz';
 
 function renderPlayers(box, data) {
     box.textContent = '';
     if (!data.length) { box.textContent = 'Никого не нашли.'; return; }
     data.forEach((p, i) => {
         const row = mkEl('div', 'top-row link' + (ACC.user && ACC.user.id === p.id ? ' me' : ''));
-        row.append(mkEl('span', '', i + 1, true), (() => { const n = mkEl('span', '', '', true); n.append(avaNode(p.avatar), ' ' + p.nick); return n; })(), mkEl('span', '', p.rating, true), mkEl('span', '', `${p.wins} / ${p.losses} / ${p.draws}`, true));
+        const n = mkEl('span', '', '', true);
+        n.append(avaNode(p.avatar), ' ' + p.nick);
+        row.append(mkEl('span', '', i + 1, true), n, mkEl('span', '', p['r_' + TOPMODE], true), mkEl('span', '', p['g_' + TOPMODE], true));
         row.addEventListener('click', () => openProfile(p.id));
         box.appendChild(row);
     });
@@ -5500,12 +5468,13 @@ function renderPlayers(box, data) {
 
 async function openTop(query) {
     $('#top').classList.remove('hidden');
+    document.querySelectorAll('#topTabs button').forEach(b => b.classList.toggle('on', b.dataset.mode === TOPMODE));
     const box = $('#topList');
     box.textContent = 'Загрузка...';
     if (!SB) { box.textContent = 'Не удалось загрузить рейтинг.'; return; }
     try {
-        let q = SB.from('profiles').select(PLAYER_COLS).order('rating', { ascending: false }).limit(20);
-        if (query) q = q.ilike('nick', '%' + query + '%');
+        let q = SB.from('profiles').select(PLAYER_COLS).order('r_' + TOPMODE, { ascending: false }).limit(20);
+        if (query) q = q.ilike('nick', '%' + query + '%'); else q = q.gt('g_' + TOPMODE, 0);
         const { data, error } = await q;
         if (error) throw error;
         if (!data.length && !query) { box.textContent = 'Пока никого нет.'; return; }
@@ -5527,7 +5496,7 @@ const ACH = { beta: { name: 'Бета-тестер', desc: 'Участвовал
 const heroLabel = id => (HEROES[id] ? HEROES[id].icon + ' ' + HEROES[id].name : '—');
 const AVATARS = [...new Set([...Object.values(HEROES).map(h => h.icon), '😎', '😀', '😈', '🤖', '👽', '👻', '💀', '🤡', '🦊', '🐺', '🦁', '🐯', '🐼', '🐸', '🐵', '🦉', '🦅', '🐙', '🦇', '🐉', '🐲', '🦄', '🧙', '🧛', '🧟', '🥷', '🧝', '🧞', '🎭', '🎩', '👑', '🎲', '♟️', '🏆', '💎', '🔮', '🪄', '🗡️', '🛡️', '🏹', '🔥', '❄️', '⚡', '🌙', '☀️', '🌈', '🍀', '🍕', '🍩', '🚀', '🛸', '🎯', '🧿'])];
 
-async function openProfile(uid) {
+async function openProfile(uid, selMode) {
     if (!SB || !/^[0-9a-f-]{36}$/i.test(uid || '')) return;
     $('#prof').classList.remove('hidden');
     const gl = $('#profGames');
@@ -5537,11 +5506,11 @@ async function openProfile(uid) {
     $('#profDelBtn').classList.add('hidden'); $('#profBlockBtn').classList.add('hidden');
     gl.textContent = 'Загрузка...';
     try {
-        const pr = await SB.from('profiles').select('id,nick,rating,wins,losses,draws,avatar,created_at').eq('id', uid).maybeSingle();
+        const pr = await SB.from('profiles').select(PLAYER_COLS + ',created_at').eq('id', uid).maybeSingle();
         if (pr.error) throw pr.error;
         const p = pr.data;
         if (!p) { $('#profNick').textContent = ''; gl.textContent = 'Игрок не найден.'; return; }
-        const gm = await SB.from('games').select('id,white,black,result,created_at,white_hero,black_hero,white_delta,black_delta,reason,moves,rated,seed')
+        const gm = await SB.from('games').select('id,white,black,result,created_at,white_hero,black_hero,white_delta,black_delta,reason,moves,rated,seed,mode')
             .or(`white.eq.${uid},black.eq.${uid}`).order('created_at', { ascending: false }).limit(30);
         if (gm.error) throw gm.error;
         const games = gm.data || [];
@@ -5552,7 +5521,7 @@ async function openProfile(uid) {
         $('#profNick').textContent = p.nick;
         $('#profAva').textContent = '';
         $('#profAva').appendChild(avaNode(p.avatar));
-        $('#profSub').textContent = `⭐ ${p.rating}` + (p.created_at ? (LANG === 'en' ? ' · joined ' : ' · на сайте с ') + new Date(p.created_at).toLocaleDateString() : '');
+        $('#profSub').textContent = p.created_at ? (LANG === 'en' ? 'Joined ' : 'На сайте с ') + new Date(p.created_at).toLocaleDateString() : '';
         const mine = ACC.user && ACC.user.id === uid;
         $('#profAvaBtn').classList.toggle('hidden', !mine);
         PROF.uid = uid;
@@ -5577,18 +5546,27 @@ async function openProfile(uid) {
             });
         } catch (e) { /* достижения необязательны */ }
 
-        // Статистика
+        // Рейтинги: у каждого режима свой; нажатие на режим показывает его график
+        const keys = Object.keys(MODES);
+        const sel = (selMode && MODES[selMode]) ? selMode : keys.slice().sort((a, b) => p['g_' + b] - p['g_' + a])[0] && p['g_' + keys.slice().sort((a, b) => p['g_' + b] - p['g_' + a])[0]] > 0 ? keys.slice().sort((a, b) => p['g_' + b] - p['g_' + a])[0] : 'blitz';
+        const stats = $('#profStats');
+        keys.forEach(k => {
+            const d = mkEl('div', 'stat-box mode-box' + (k === sel ? ' sel' : ''));
+            d.append(mkEl('b', '', p['r_' + k], true), mkEl('span', '', modeName(k) + ' · ' + p['g_' + k], true));
+            d.addEventListener('click', () => openProfile(uid, k));
+            stats.appendChild(d);
+        });
         const total = p.wins + p.losses + p.draws;
         const heroCount = {};
         games.forEach(g => { const hid = g.white === uid ? g.white_hero : g.black_hero; if (hid) heroCount[hid] = (heroCount[hid] || 0) + 1; });
         const fav = Object.keys(heroCount).sort((a, b) => heroCount[b] - heroCount[a])[0];
         const box = (label, val, notr) => { const d = mkEl('div', 'stat-box'); d.append(mkEl('b', '', val, notr), mkEl('span', '', label)); return d; };
-        $('#profStats').append(box('Рейтинг', p.rating, true), box('Партий', total, true), box('Побед %', total ? Math.round(100 * p.wins / total) + '%' : '—', true), box('Любимый герой', fav ? heroLabel(fav) : '—'));
+        stats.append(box('Партий', total, true), box('Побед %', total ? Math.round(100 * p.wins / total) + '%' : '—', true), box('Любимый герой', fav ? heroLabel(fav) : '—'));
 
-        // График рейтинга: идём от текущего значения назад по изменениям
+        // График выбранного режима: идём от текущего значения назад по изменениям
         const deltaOf = g => (g.white === uid ? g.white_delta : g.black_delta) || 0;
-        const ratings = [p.rating];
-        games.forEach(g => { ratings.unshift(ratings[0] - deltaOf(g)); });
+        const ratings = [p['r_' + sel]];
+        games.filter(g => g.mode === sel).forEach(g => { ratings.unshift(ratings[0] - deltaOf(g)); });
         if (ratings.length > 1) {
             const lo = Math.min(...ratings), hi = Math.max(...ratings), span = Math.max(hi - lo, 10);
             const pts = ratings.map((v, i) => `${(i / (ratings.length - 1)) * 292 + 4},${62 - ((v - lo) / span) * 54 + 4}`).join(' ');
@@ -5614,7 +5592,8 @@ async function openProfile(uid) {
             );
             const sub = mkEl('span', 'game-sub');
             sub.append(mkEl('span', '', heroLabel(my ? g.white_hero : g.black_hero) + ' vs ' + heroLabel(my ? g.black_hero : g.white_hero)));
-            if (g.rated === false) sub.append(mkEl('span', 'tag-friendly', ' · Дружеская'));
+            if (g.mode) sub.append(mkEl('span', '', ' · ' + modeName(g.mode), true));
+            else if (g.rated === false) sub.append(mkEl('span', 'tag-friendly', ' · Дружеская'));
             if (g.reason) sub.append(mkEl('span', '', ' · ' + g.reason));
             if (g.moves) sub.append(mkEl('span', '', ' · ' + g.moves + (LANG === 'en' ? ' moves' : ' ходов'), true));
             if (g.seed != null) {
@@ -5663,6 +5642,7 @@ $('#accName').addEventListener('click', () => { if (!ACC.user) return; if (ACC.p
 $('#accOut').addEventListener('click', async () => { if (SB) { try { await SB.auth.signOut(); } catch (e) { /* выйдем и так */ } } ACC.user = null; ACC.profile = null; ACC.needNick = false; accRefresh(); });
 $('#accTop').addEventListener('click', () => { $('#topSearch').value = ''; openTop(); });
 $('#topFind').addEventListener('click', findPlayers);
+$('#topTabs').addEventListener('click', e => { const b = e.target.closest('button[data-mode]'); if (!b) return; TOPMODE = b.dataset.mode; findPlayers(); });
 $('#topSearch').addEventListener('keydown', e => { if (e.key === 'Enter') findPlayers(); });
 $('#profClose').addEventListener('click', () => $('#prof').classList.add('hidden'));
 $('#profAvaBtn').addEventListener('click', openAvatarPick);
@@ -5714,49 +5694,49 @@ $('#setupLeave').addEventListener('click', () => {
 const REPLAY = { on: false, timer: null };
 
 async function watchReplay(gid, title) {
-  if (NET.on) { uiAlert('Сначала выйдите из онлайн-партии.'); return; }
-  if (!SB) return;
-  try {
-    const r = await SB.from('games').select('seed,white_hero,black_hero,log').eq('id', gid).maybeSingle();
-    const d = r.data;
-    if (r.error || !d || d.seed == null || !Array.isArray(d.log) || !HEROES[d.white_hero] || !HEROES[d.black_hero]) { uiAlert('Для этой партии записи ходов нет.'); return; }
-    startReplay(d, title);
-  } catch (e) { uiAlert('Не удалось загрузить повтор.'); }
+    if (NET.on) { uiAlert('Сначала выйдите из онлайн-партии.'); return; }
+    if (!SB) return;
+    try {
+        const r = await SB.from('games').select('seed,white_hero,black_hero,log').eq('id', gid).maybeSingle();
+        const d = r.data;
+        if (r.error || !d || d.seed == null || !Array.isArray(d.log) || !HEROES[d.white_hero] || !HEROES[d.black_hero]) { uiAlert('Для этой партии записи ходов нет.'); return; }
+        startReplay(d, title);
+    } catch (e) { uiAlert('Не удалось загрузить повтор.'); }
 }
 
 function startReplay(d, title) {
-  ['prof', 'top', 'auth', 'lobby', 'setup', 'gameover', 'promo'].forEach(id => $('#' + id).classList.add('hidden'));
-  REPLAY.on = true;
-  showGhosts = true; showInvis = true; showTraps = true;
-  selectedHeroes = { w: d.white_hero, b: d.black_hero };
-  _seed = d.seed;
-  startGame();
-  CLOCK.on = false;
-  const soundWas = CONFIG.sound;
-  CONFIG.sound = false;           // партия проматывается мгновенно, звуки на этом этапе не нужны
-  try {
-    for (const m of d.log) {
-      if (!G || G.over) break;
-      try { applyInput(m); } catch (e) { break; }
-    }
-  } finally { CONFIG.sound = soundWas; }
-  $('#app').classList.add('replaying');
-  $('#replayBar').classList.remove('hidden');
-  $('#rpTitle').textContent = (LANG === 'en' ? 'Replay: ' : 'Повтор: ') + title;
-  $('#rwPlay').classList.remove('hidden');
-  render();
-  rewindTo(0);
+    ['prof', 'top', 'auth', 'lobby', 'setup', 'gameover', 'promo'].forEach(id => $('#' + id).classList.add('hidden'));
+    REPLAY.on = true;
+    showGhosts = true; showInvis = true; showTraps = true;
+    selectedHeroes = { w: d.white_hero, b: d.black_hero };
+    _seed = d.seed;
+    startGame();
+    CLOCK.on = false;
+    const soundWas = CONFIG.sound;
+    CONFIG.sound = false;           // партия проматывается мгновенно, звуки на этом этапе не нужны
+    try {
+        for (const m of d.log) {
+            if (!G || G.over) break;
+            try { applyInput(m); } catch (e) { break; }
+        }
+    } finally { CONFIG.sound = soundWas; }
+    $('#app').classList.add('replaying');
+    $('#replayBar').classList.remove('hidden');
+    $('#rpTitle').textContent = (LANG === 'en' ? 'Replay: ' : 'Повтор: ') + title;
+    $('#rwPlay').classList.remove('hidden');
+    render();
+    rewindTo(0);
 }
 
 function replayAuto() {
-  const btn = $('#rwPlay');
-  if (REPLAY.timer) { clearInterval(REPLAY.timer); REPLAY.timer = null; btn.textContent = '▶▶'; return; }
-  btn.textContent = '⏸';
-  REPLAY.timer = setInterval(() => {
-    const last = REW.snaps.length - 1, cur = REW.idx < 0 ? last : REW.idx;
-    if (cur >= last) { replayAuto(); return; }
-    rewindTo(cur + 1);
-  }, 800);
+    const btn = $('#rwPlay');
+    if (REPLAY.timer) { clearInterval(REPLAY.timer); REPLAY.timer = null; btn.textContent = '▶▶'; return; }
+    btn.textContent = '⏸';
+    REPLAY.timer = setInterval(() => {
+        const last = REW.snaps.length - 1, cur = REW.idx < 0 ? last : REW.idx;
+        if (cur >= last) { replayAuto(); return; }
+        rewindTo(cur + 1);
+    }, 800);
 }
 $('#rwPlay').addEventListener('click', replayAuto);
 $('#rpExit').addEventListener('click', () => location.reload());
@@ -5764,15 +5744,50 @@ $('#rpExit').addEventListener('click', () => location.reload());
 
 
 /* =====================================================================
-   СПИСОК КОМНАТ: открытые комнаты, вход с паролем или без
+   СТАРТ ПАРТИИ: быстрый поиск (рейтинг), комнаты (дружеские), игра на одном экране
    ===================================================================== */
 const ROOMS = { timer: null };
+const sleep = ms => new Promise(ok => setTimeout(ok, ms));
+const roomsMsg = t => { $('#roomsMsg').textContent = t || ''; };
 
-function roomsMsg(t) { $('#roomsMsg').textContent = t || ''; }
-function roomsInfoText() {
-    $('#roomMakeInfo').textContent = (TCSEL.inf ? '∞' : TCSEL.mins + (LANG === 'en' ? ' min' : ' мин')) + ' · ' + (TCSEL.rated ? (LANG === 'en' ? 'rated' : 'рейтинговая') : (LANG === 'en' ? 'friendly' : 'дружеская')) + (LANG === 'en' ? ' (change in the main menu)' : ' (меняется в главном меню)');
+function showWait(text) {
+    $('#searchText').textContent = text;
+    $('#searchBox').classList.remove('hidden');
+    document.querySelectorAll('#quickModes button').forEach(b => { b.disabled = true; });
+    $('#lobbyRooms').disabled = true;
 }
+$('#searchCancel').addEventListener('click', () => location.reload());
 
+// ----- быстрый поиск: рейтинговая партия, четыре режима -----
+async function startQuick(mode) {
+    while (!RELAY_CHECKED) { lobbyStatus('Сервер просыпается, подождите немного...'); await sleep(1000); }
+    if (!RELAY) { lobbyStatus('Быстрый поиск работает только на сайте с сервером игры.'); return; }
+    if (!ACC.user || !ACC.profile) {
+        lobbyStatus('Рейтинговые партии доступны после входа в аккаунт.');
+        if (SB && !ACC.user) openAuth('login');
+        return;
+    }
+    try {
+        const j = await (await fetch(API + '/quick?mode=' + mode)).json();
+        if (!j.room) { lobbyStatus('Сервер занят, попробуйте позже.'); return; }
+        NET.mode = mode; NET.rated = true; NET.tc = MODES[mode].min; NET.inc = 0;
+        NET.host = j.role === 'host';
+        lobbyStatus('');
+        showWait(NET.host ? L(`Ищем соперника: ${modeName(mode)}...`, `Looking for an opponent: ${modeName(mode)}...`) : L('Соперник найден, подключаемся...', 'Opponent found, connecting...'));
+        attachConn(relayConn(j.room, j.role));
+    } catch (e) { lobbyStatus('Не удалось связаться с сервером.'); }
+}
+$('#quickModes').addEventListener('click', e => {
+    const b = e.target.closest('button[data-mode]');
+    if (b && !b.disabled) startQuick(b.dataset.mode);
+});
+
+// ----- игра на одном экране -----
+$('#lobbyLocal').addEventListener('click', () => { timePicker($('#localTimePick'), LOCALSET, saveTimes); $('#local').classList.remove('hidden'); });
+$('#localClose').addEventListener('click', () => $('#local').classList.add('hidden'));
+$('#localStart').addEventListener('click', () => { saveTimes(); $('#local').classList.add('hidden'); $('#lobby').classList.add('hidden'); });
+
+// ----- комнаты: создать (время, добавка, пароль) или войти -----
 async function loadRooms() {
     const box = $('#roomsList');
     try {
@@ -5782,9 +5797,8 @@ async function loadRooms() {
         list.forEach(rm => {
             const row = mkEl('div', 'room-row');
             const left = mkEl('div');
-            left.append(mkEl('div', '', (rm.pass ? '🔒 ' : '') + (rm.nick ? rm.nick + (rm.rating ? ' (⭐ ' + rm.rating + ')' : '') : (LANG === 'en' ? 'Guest' : 'Гость')), true));
-            const tcv = prefToTc(rm.tc);
-            left.append(mkEl('div', 'room-sub', (tcv > 0 ? tcv + (LANG === 'en' ? ' min' : ' мин') : '∞') + ' · ' + (rm.rated ? (LANG === 'en' ? 'rated' : 'рейтинговая') : (LANG === 'en' ? 'friendly' : 'дружеская')), true));
+            left.append(mkEl('div', '', (rm.pass ? '🔒 ' : '') + (rm.nick || L('Гость', 'Guest')), true));
+            left.append(mkEl('div', 'room-sub', fmtTime(rm.min, rm.inc), true));
             const btn = mkEl('button', 'small-btn', 'Войти');
             row.append(left, btn);
             const pwBox = mkEl('div', 'room-pw hidden');
@@ -5806,7 +5820,7 @@ async function loadRooms() {
 function openRooms() {
     if (NET.on) return;
     roomsMsg('');
-    roomsInfoText();
+    timePicker($('#roomTimePick'), ROOMSET, saveTimes);
     $('#rooms').classList.remove('hidden');
     $('#roomsList').textContent = 'Загрузка...';
     loadRooms();
@@ -5822,15 +5836,13 @@ async function makeListedRoom() {
     try {
         let token = '';
         try { if (SB) { const { data } = await SB.auth.getSession(); if (data && data.session) token = data.session.access_token; } } catch (e) { /* без входа тоже можно */ }
-        const pref = roomPref();
-        const j = await (await fetch(API + '/lobby/create', { method: 'POST', body: JSON.stringify({ tc: pref, rated: TCSEL.rated, pass: $('#roomPass').value, token }) })).json();
+        saveTimes();
+        const pass = $('#roomPass').value;
+        const j = await (await fetch(API + '/lobby/create', { method: 'POST', body: JSON.stringify({ min: ROOMSET.min, inc: ROOMSET.inc, pass, token }) })).json();
         if (!j.room) { roomsMsg('Сервер занят, попробуйте позже.'); return; }
-        if (NET.conn && !NET.on) { try { NET.conn.close(); } catch (e) { /* старую комнату закрываем */ } NET.conn = null; }
-        NET.pref = pref; NET.rated = TCSEL.rated; NET.host = true;
-        $('#roomCode').textContent = j.room;
-        $('#hostBox').classList.remove('hidden');
-        lobbyStatus($('#roomPass').value ? 'Комната создана (с паролем) и видна в списке. Ждём соперника...' : 'Комната создана и видна в списке. Ждём соперника...');
+        NET.tc = ROOMSET.min; NET.inc = ROOMSET.inc; NET.rated = false; NET.mode = null; NET.host = true;
         closeRooms();
+        showWait(pass ? L('Комната создана (с паролем). Ждём соперника...', 'Room created (password-protected). Waiting for an opponent...') : L('Комната создана и видна в списке. Ждём соперника...', 'Room created and visible in the list. Waiting for an opponent...'));
         attachConn(relayConn(j.room, 'host'));
     } catch (e) { roomsMsg('Не удалось связаться с сервером.'); }
     finally { btn.disabled = false; }
@@ -5843,11 +5855,9 @@ async function joinListed(room, pw) {
         if (r.status === 403) { roomsMsg('Неверный пароль.'); return; }
         if (r.status === 429) { roomsMsg('Слишком много попыток, подождите минуту.'); return; }
         if (!r.ok || !j.ticket) { roomsMsg('Комната уже занята или закрыта.'); loadRooms(); return; }
-        if (NET.conn && !NET.on) { try { NET.conn.close(); } catch (e) { /* прежнее ожидание закрываем */ } NET.conn = null; }
-        NET.host = false; NET.pref = 'any'; NET.rated = undefined;
-        $('#hostBox').classList.add('hidden');
-        lobbyStatus('Подключаемся...');
+        NET.host = false; NET.tc = undefined; NET.inc = 0; NET.rated = false; NET.mode = null;
         closeRooms();
+        showWait(L('Подключаемся...', 'Connecting...'));
         attachConn(relayConn(room, 'guest', j.ticket));
     } catch (e) { roomsMsg('Не удалось связаться с сервером.'); }
 }
@@ -5856,7 +5866,6 @@ $('#lobbyRooms').addEventListener('click', () => whenRelayChecked(() => { if (!R
 $('#roomMake').addEventListener('click', makeListedRoom);
 $('#roomsRefresh').addEventListener('click', () => { roomsMsg(''); loadRooms(); });
 $('#roomsClose').addEventListener('click', closeRooms);
-
 
 /* =====================================================================
    БЕЗОПАСНОСТЬ ИГРОКОВ: блокировка, жалобы, удаление аккаунта (требования Google Play и App Store)
