@@ -3652,7 +3652,7 @@ async function tryUnlock(id, card) {
     if (UNL.busy) return;
     if (!SB || !ACC.user) { uiAlert(L('Нужен вход в аккаунт.', 'Please sign in first.')); return; }
     await loadUnlocks();
-    if (heroOpen(id)) { buildSetup(); return; }
+    if (heroOpen(id)) { refreshHeroViews(); return; }
     if (UNL.orbs < 1) { uiAlert(L('Чтобы открыть героя, нужен магический шар. Его дают после рейтинговой партии: за победу, поражение или ничью.', 'You need a magic orb to unlock a hero. You get one after a rated game: win, loss or draw.')); return; }
     if (!uiConfirm(L(`Открыть героя «${HEROES[id].name}» за 1 магический шар?`, `Unlock ${HEROES[id].name} for 1 magic orb?`))) return;
     UNL.busy = true;
@@ -3661,12 +3661,12 @@ async function tryUnlock(id, card) {
         UNL.busy = false;
         await loadUnlocks();
         uiAlert(L('Не получилось открыть героя. Попробуйте ещё раз.', 'Could not unlock the hero. Please try again.'));
-        buildSetup();
+        refreshHeroViews();
         return;
     }
     await loadUnlocks();
     const lock = card && card.querySelector('.hero-lock');
-    if (!lock) { UNL.busy = false; buildSetup(); return; }
+    if (!lock) { UNL.busy = false; refreshHeroViews(); return; }
     card.classList.add('unlocking');                                  // замок трясётся
     setTimeout(() => { lock.textContent = '🔓'; lock.classList.add('opened'); }, 700);       // открывается
     setTimeout(() => {                                                // маленький взрыв
@@ -3678,7 +3678,40 @@ async function tryUnlock(id, card) {
         card.classList.remove('locked');
         lock.classList.add('gone');
     }, 1050);
-    setTimeout(() => { UNL.busy = false; buildSetup(); }, 1900);
+    setTimeout(() => { UNL.busy = false; refreshHeroViews(); }, 1900);
+}
+
+// Обновить всё, где показаны герои: экран выбора и коллекцию
+function refreshHeroViews() {
+    buildSetup();
+    if (!$('#coll').classList.contains('hidden')) renderCollection();
+}
+
+/* ---------- Коллекция героев: читать про героев и открывать закрытых за шар ---------- */
+const collOpen = new Set();   // у каких героев в коллекции раскрыто «Подробнее»
+function renderCollection() {
+    const ids = Object.keys(HEROES);
+    const have = ids.filter(heroOpen).length;
+    let html = ACC.user
+        ? orbBarHTML()
+        : `<div class="orb-bar"><div class="orb-sub">${L('Войдите в аккаунт, чтобы получать магические шары и открывать героев. В дружеских партиях и на одном экране доступны все герои.', 'Sign in to earn magic orbs and unlock heroes. In friendly games and on one screen every hero is available.')}</div></div>`;
+    html += `<p class="sub">${L('Открыто для рейтинговых партий', 'Unlocked for rated games')}: <b>${have}/${ids.length}</b></p>`;
+    html += ids.map(id => {
+        const h = HEROES[id], ps = PASSIVES[h.passive], open = collOpen.has(id), locked = !heroOpen(id);
+        return `
+      <div class="hero-card ${open ? 'open' : ''} ${locked ? 'locked' : ''}" data-hero="${id}">${locked ? '<div class="hero-lock">🔒</div>' : ''}
+        <div class="hc-head"><span class="hc-icon">${h.icon}</span>
+          <div><div class="hc-name">${h.name}</div><div class="hc-tag">${h.tag}</div></div></div>
+        <div class="hc-abs"><span class="chip chip-ps">${ps.icon} ${ps.name}${psFreeDot(h.passive)}</span>${h.abilities.map(k => `<span class="chip">${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</span>`).join('')}</div>
+        <button class="hc-more" type="button">${open ? 'Скрыть ▴' : 'Подробнее ▾'}</button>
+        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span>${cdBadgeHTML(CONFIG.cooldown[h.passive])}</div>
+        <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</b><br><span>${abilityDesc(k)}</span>${cdBadgeHTML(CONFIG.cooldown[k])}</li>`).join('')}</ul></div>` : ''}
+        ${locked ? `<button class="hc-unlock" type="button">🔓 ${L('Открыть за 1 шар', 'Unlock for 1 orb')}</button>` : ''}
+      </div>`;
+    }).join('');
+    const ov = $('#coll'), top = ov.scrollTop;
+    $('#collBody').innerHTML = html;
+    ov.scrollTop = top;
 }
 
 function buildSetup() {
@@ -4078,6 +4111,10 @@ $('#btnTheme').addEventListener('click', () => applyTheme(THEMES[(THEMES.findInd
    ===================================================================== */
 const EN = {
     "До 10-го вашего хода радиус на 1 меньше.": "Until your 10th move the range is 1 smaller.",
+    "🎴 Коллекция": "🎴 Collection",
+    "🎴 Коллекция героев": "🎴 Hero collection",
+    "⟵ Назад": "⟵ Back",
+    "Пассивка:": "Passive:",
     "Воскрешение": "Resurrection",
     "Возвращает вашу фигуру из сброса на свободную клетку первой горизонтали (пешку на любую из первых четырёх).": "Returns your piece from the graveyard to a free square on your first rank (a pawn to any of the first four ranks).",
     "Око за око": "Eye for an Eye",
@@ -5759,6 +5796,19 @@ $('#profClose').addEventListener('click', () => $('#prof').classList.add('hidden
 $('#profAvaBtn').addEventListener('click', openAvatarPick);
 $('#setupPeer').addEventListener('click', () => { if (NET.oppId) openProfile(NET.oppId); });
 $('#topClose').addEventListener('click', () => $('#top').classList.add('hidden'));
+$('#accColl').addEventListener('click', () => {
+    $('#coll').classList.remove('hidden');
+    renderCollection();
+    loadUnlocks().then(() => { if (!$('#coll').classList.contains('hidden')) renderCollection(); });
+});
+$('#collClose').addEventListener('click', () => $('#coll').classList.add('hidden'));
+$('#collBody').addEventListener('click', e => {
+    const card = e.target.closest('.hero-card');
+    if (!card) return;
+    const id = card.dataset.hero;
+    if (e.target.closest('.hc-more')) { if (collOpen.has(id)) collOpen.delete(id); else collOpen.add(id); renderCollection(); return; }
+    if (e.target.closest('.hc-unlock')) tryUnlock(id, card);
+});
 $('#authSubmit').addEventListener('click', authSubmit);
 $('#authSwitch').addEventListener('click', () => openAuth(authMode === 'login' ? 'signup' : 'login'));
 $('#authClose').addEventListener('click', () => $('#auth').classList.add('hidden'));
@@ -5798,6 +5848,7 @@ $('#setupLeave').addEventListener('click', () => {
     $('#setupLeave').disabled = true;
     setTimeout(() => { try { if (NET.conn && NET.conn.close) NET.conn.close(); } catch (e) { /* всё равно перезагрузим */ } location.reload(); }, 500);
 });
+$('#setupLeave').classList.remove('hidden');      // кнопка «Выйти» видна и при игре за одним экраном (возвращает в главное меню)
 
 
 /* =====================================================================

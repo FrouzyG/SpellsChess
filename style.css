@@ -4429,3 +4429,44 @@ button {
     border: 1px solid rgba(190, 150, 255, .6);
     font-size: 14px;
 }
+
+/* ===== Коллекция героев ===== */
+.coll-card {
+    position: relative;
+    width: min(720px, 100%);
+    padding-top: 52px;
+}
+
+    .coll-card .hero-card {
+        text-align: left;
+        margin-bottom: 10px;
+    }
+
+        .coll-card .hero-card .hc-more {
+            margin-top: 6px;
+        }
+
+.hc-unlock {
+    display: block;
+    margin: 8px 0 0 auto;
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1px solid #ffd966;
+    background: rgba(255, 217, 102, .18);
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+    .hc-unlock:hover {
+        background: rgba(255, 217, 102, .32);
+    }
+
+.hero-card.locked > button.hc-unlock.hc-unlock {
+    filter: none;
+}
+
+.hero-card.unlocking > .hc-unlock {
+    display: none;
+}
