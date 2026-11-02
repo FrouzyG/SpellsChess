@@ -51,6 +51,14 @@ const CONFIG = {
     sound: true
 };
 
+// Настройки анимаций (кнопки 📢 и 🎬 рядом с подтверждением хода). banner: полоска с названием способности, board: полёты и эффекты на доске
+const ANIM = { banner: true, board: true };
+try { const sa = JSON.parse(localStorage.getItem('sc_anim') || '{}'); if (sa.banner === false) ANIM.banner = false; if (sa.board === false) ANIM.board = false; } catch (e) { }
+const ANIMQ = [];        // очередь анимаций, которую запускает renderBoard после перерисовки доски
+const ANIM_HIDE = [];    // клетки, где настоящая фигура временно скрыта, пока по экрану летит её копия
+const queueAnim = a => { if (ANIM.board) ANIMQ.push(a); };
+const sfxLater = (k, sec) => { if (sec > 0) setTimeout(() => sfx(k), sec * 1000); else sfx(k); };
+
 /* =====================================================================
    ДАННЫЕ
    ===================================================================== */
@@ -1952,8 +1960,9 @@ function startTurn() {
         const name = arrow ? '🏹 Стрела' : '💥 Взрыв';
         const sq = sqName(f.r, f.c);
         const p = G.board[f.r][f.c];
-        G.fx.push({ r: f.r, c: f.c, type: arrow ? 'arrowhit' : 'boom' });
-        sfx(arrow ? 'arrow' : 'boom');
+        const fd = queueFlight(f.owner, f, arrow ? 'arrow' : 'fire', p);      // сколько секунд летит снаряд (0 = мгновенно)
+        G.fx.push({ r: f.r, c: f.c, type: arrow ? 'arrowhit' : 'boom', delay: fd });
+        sfxLater(arrow ? 'arrow' : 'boom', fd);
         if (!p) addLog(c, `${name} на ${sq}: там никого нет`);
         else if (magicProof(G.board, f.r, f.c, c, !arrow)) addLog(c, `${name} на ${sq}: цель неуязвима для магии`);
         else if (p.ghost) {
@@ -2604,7 +2613,7 @@ function useAbility(key, r, c, ref) {
     } else if (key === 'fukashi') {
         target.invis = true;
         text = `${A.icon} ${A.name}: ${pieceSym(target)} на ${sqName(r, c)} стала невидимой`;
-        G.fx.push({ r, c, type: 'ghost' });
+        if (ANIM.board) G.fx.push({ r, c, type: 'smoke', only: col }); else G.fx.push({ r, c, type: 'ghost' });
         sfx('illusion');
     } else if (key === 'freeze' || key === 'hypnosis') {
         if (target.ghost) {
@@ -2677,8 +2686,10 @@ function doRescue(from, to) {
     b[from[0]][from[1]] = null;
     p.moved = true;
     b[to[0]][to[1]] = p;
-    G.fx.push({ r: to[0], c: to[1], type: 'revive' });
-    sfx('revive');
+    const rd = ANIM.board ? 0.7 : 0;      // сначала фигура возносится, потом появляется на новом месте
+    G.fx.push({ r: to[0], c: to[1], type: 'revive', delay: rd });
+    queueAnim({ k: 'rescue', from: [from[0], from[1]], to: [to[0], to[1]] });
+    sfxLater('revive', rd);
     G.last = { fr: from[0], fc: from[1], tr: to[0], tc: to[1] };
     finishAbility('rescue', `🪂 Спасение: ${sym} ${sqName(from[0], from[1])} → ${sqName(to[0], to[1])}`);
 }
@@ -2779,6 +2790,7 @@ function doTeleport(r, c) {
     kp.moved = true;
     G.board[r][c] = kp;
     G.fx.push({ r: k[0], c: k[1], type: 'poof' }, { r, c, type: 'ghost' });
+    abilityBanner('teleport');
     sfx('illusion');
     G.last = { fr: k[0], fc: k[1], tr: r, tc: c };
     G.cd[col].teleport = cdOf(col, 'teleport');
@@ -2794,6 +2806,7 @@ function placeAim(r, c) {
     G.fire.push({ r, c, owner: col, kind: 'arrow' });
     G.cd[col].aim = cdOf(col, 'aim');
     G.fx.push({ r, c, type: 'cast' });
+    abilityBanner('aim');
     sfx('arrow');
     addLog(col, `🎯 Меткий глаз: стрела нацелена на ${sqName(r, c)} (ход не потрачен)`);
     G.mode = null; G.sel = null; G.moves = [];
@@ -3386,6 +3399,7 @@ function renderBoard() {
                 if (auraProtected(G.board, r, c)) pc += ' aura';
                 if (must.has(r + ',' + c)) pc += ' must';
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'land')) pc += ' pop';
+                if (ANIM_HIDE.some(h => h.r === r && h.c === c && h.until > Date.now())) pc += ' anim-hide';
                 html += `<div class="${pc}">${GLYPH[p.t]}`;
                 if (p.x && p.x.length) html += `<span class="xs">${p.x.map(t => pImg(p.c, t)).join('')}</span>`;
                 if (p.shield) html += THORNS + `<span class="shn">${p.shield}</span>`;
@@ -3407,19 +3421,23 @@ function renderBoard() {
                 html += '</div>';
             }
 
-            G.fx.filter(x => x.r === r && x.c === c && x.type !== 'land')
-                .forEach(x => { html += `<div class="fx fx-${x.type}"></div>`; });
+            G.fx.filter(x => x.r === r && x.c === c && x.type !== 'land' && (!x.only || !NET.on || x.only === NET.me))
+                .forEach(x => {
+                    if (x.delay > 0) ANIMQ.push({ k: 'lateFx', r, c, type: x.type, delay: x.delay });      // эффект появится, когда долетит снаряд
+                    else html += `<div class="fx fx-${x.type}"></div>`;
+                });
             html += '</div>';
         }
     }
     el.innerHTML = html;
 
-    if (G.fx.some(x => x.type === 'boom')) {
+    if (G.fx.some(x => x.type === 'boom' && !(x.delay > 0))) {
         el.classList.remove('shake');
         void el.offsetWidth;
         el.classList.add('shake');
     }
     G.fx = [];
+    runAnimQueue();
 }
 
 function panelHTML(col) {
@@ -4812,6 +4830,10 @@ const EN = {
     "Не загрузилась библиотека входа: проверьте интернет и обновите страницу.": "The sign-in library did not load: check your internet and refresh the page.",
     "Не удалось выполнить вход. Попробуйте ещё раз.": "Sign-in failed. Please try again."
 };
+Object.assign(EN, {
+    "Всплывающие объявления способностей": "Ability announcements",
+    "Анимации на доске (полёты, эффекты)": "Board animations (flights, effects)"
+});
 
 let LANG = 'ru';
 try {
@@ -5424,6 +5446,7 @@ function placeBanana(from, to) {
     G.bananas.push({ r: from[0], c: from[1], owner: col, dir: [to[0] - from[0], to[1] - from[1]] });
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = 'banana';
+    abilityBanner('banana');
     sfx('trap');
     addLog(col, '🍌 Банановая кожура: ловушка установлена (место скрыто, ход не потрачен)');
     G.mode = null; G.sel = null; G.moves = [];
@@ -5448,6 +5471,7 @@ function sweepBananas() {
             G.board[bn.r][bn.c] = null;
             p.prev = [bn.r, bn.c];
             if (!p.invis) G.fx.push({ r: tr, c: tc, type: 'land' });
+            queueAnim({ k: 'slide', from: [bn.r, bn.c], to: [tr, tc] });
             addLog('n', p.invis ? '🍌 Невидимая фигура поскальзывается на банановой кожуре' : `🍌 ${pieceSym(p)} поскальзывается на кожуре на ${sq} и съезжает на ${sqName(tr, tc)}`);
         } else {
             addLog('n', p.invis ? '🍌 Невидимая фигура наступает на банановую кожуру' : `🍌 ${pieceSym(p)} наступает на кожуру на ${sq}, но съехать некуда`);
@@ -5463,7 +5487,7 @@ function sweepBananas() {
 const BANNER_SKIP = ['lie'];      // секретные способности не показываем, чтобы не выдавать их применение
 function abilityBanner(key) {
     try {
-        if (typeof document === 'undefined' || BANNER_SKIP.includes(key)) return;
+        if (typeof document === 'undefined' || !ANIM.banner || BANNER_SKIP.includes(key)) return;
         const A = ABILITIES[key] || PASSIVES[key], board = $('#board');
         if (!A || !board || !board.offsetWidth) return;
         document.querySelectorAll('.ab-banner-box').forEach(e => e.remove());
@@ -5490,6 +5514,7 @@ function abilityBanner(key) {
 // Помидор: вылетает из панели Шута, падает на кнопку способности врага и размазывается по ней
 function tomatoPrepare(col, en, k) {
     try {
+        if (!ANIM.board) return null;
         const pan = document.querySelector('#panel-' + col);
         const src = pan && (pan.querySelector('.hero-icon') || pan);
         const btn = document.querySelector(`#panel-${en} [data-tomato="${k}"]`);
@@ -5535,6 +5560,162 @@ function tomatoFly(f) {
     im.onload = () => { document.documentElement.style.setProperty('--img-tomato', 'url("pieces/tomato.png")'); if (document.body) document.body.classList.add('img-tomato'); };
     im.src = 'pieces/tomato.png';
 })();
+
+/* ---------- Анимации на доске: полёты, скольжение, дым, вознесение ---------- */
+const cellEl = (r, c) => document.querySelector(`#board .cell[data-r="${r}"][data-c="${c}"]`);
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// Поставить в очередь полёт снаряда к цели. Возвращает время полёта в секундах (0, если анимации выключены)
+function queueFlight(owner, f, kind, piece) {
+    if (!ANIM.board) return 0;
+    const kp = findKing(G.board, owner);
+    const dist = kp ? Math.hypot(kp[0] - f.r, kp[1] - f.c) : 6;
+    const dur = clampN(0.35 + dist * 0.06, 0.45, 0.9) * (kind === 'arrow' ? 0.8 : 1);
+    const pc = piece && !piece.invis && !piece.ghost ? { c: piece.c, t: piece.t } : null;
+    ANIMQ.push({ k: 'flight', kind, from: kp ? [kp[0], kp[1]] : null, to: [f.r, f.c], dur, piece: pc });
+    return dur;
+}
+
+// Свист при скольжении на банане: «фууить»
+function sfxWhistle() {
+    if (!CONFIG.sound) return;
+    try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(450, t);
+        o.frequency.exponentialRampToValueAtTime(2300, t + 0.28);
+        o.frequency.exponentialRampToValueAtTime(700, t + 0.66);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.07, t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+        o.connect(g); g.connect(actx.destination);
+        o.start(t); o.stop(t + 0.72);
+    } catch (e) { }
+}
+
+// Спрятать настоящую фигуру на клетке на ms миллисекунд (пока по экрану летит её копия)
+function hideCell(r, c, ms) {
+    const h = { r, c, until: Date.now() + ms };
+    ANIM_HIDE.push(h);
+    const e = cellEl(r, c), pe = e && e.querySelector('.piece:not(.doomed)');
+    if (pe) pe.classList.add('anim-hide');
+    setTimeout(() => {
+        const i = ANIM_HIDE.indexOf(h); if (i >= 0) ANIM_HIDE.splice(i, 1);
+        const e2 = cellEl(r, c), p2 = e2 && e2.querySelector('.piece.anim-hide');
+        if (p2) p2.classList.remove('anim-hide');
+    }, ms);
+}
+
+// Копия фигуры поверх экрана на месте клетки (fixed), чтобы перерисовка доски её не стирала
+function pieceClone(realPiece, cellRect) {
+    const cl = realPiece.cloneNode(true);
+    cl.classList.remove('pop', 'anim-hide', 'sel');
+    cl.classList.add('anim-clone');
+    cl.style.cssText = `position:fixed;left:${cellRect.left}px;top:${cellRect.top}px;width:${cellRect.width}px;height:${cellRect.height}px;z-index:90;margin:0;`;
+    document.body.appendChild(cl);
+    return cl;
+}
+
+function runAnimQueue() {
+    if (!ANIMQ.length) return;
+    const q = ANIMQ.splice(0);
+    if (!ANIM.board && !q.every(a => a.k === 'lateFx')) return;
+    q.slice(-12).forEach(a => {
+        try {
+            if (a.k === 'lateFx') {
+                setTimeout(() => {
+                    const e = cellEl(a.r, a.c);
+                    if (e) e.insertAdjacentHTML('beforeend', `<div class="fx fx-${a.type}"></div>`);
+                    if (a.type === 'boom') { const b = $('#board'); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); }
+                }, a.delay * 1000);
+            } else if (a.k === 'flight') {
+                const te = cellEl(a.to[0], a.to[1]);
+                if (!te) return;
+                const tr = te.getBoundingClientRect(), br = $('#board').getBoundingClientRect();
+                const x1 = tr.left + tr.width / 2, y1 = tr.top + tr.height / 2;
+                let x0, y0;
+                if (a.from) { const fe = cellEl(a.from[0], a.from[1]), fr = fe && fe.getBoundingClientRect(); x0 = fr ? fr.left + fr.width / 2 : x1; y0 = fr ? fr.top + fr.height / 2 : br.top - 40; }
+                else { x0 = x1; y0 = br.top - 40; }
+                if (Math.abs(x0 - x1) < 2 && Math.abs(y0 - y1) < 2) y0 = br.top - 40;
+                // убитая фигура остаётся на клетке, пока не долетит снаряд
+                if (a.piece && !te.querySelector('.piece')) {
+                    const gp = document.createElement('div');
+                    gp.className = `piece ${a.piece.c} t-${a.piece.t} doomed`;
+                    gp.innerHTML = GLYPH[a.piece.t];
+                    te.appendChild(gp);
+                    setTimeout(() => gp.remove(), a.dur * 1000);
+                }
+                const pr = document.createElement('div');
+                pr.className = 'proj proj-' + a.kind;
+                document.body.appendChild(pr);
+                const ang = Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI;
+                const at = (x, y, sc, rot) => `translate(${x}px,${y}px) translate(-50%,-50%) rotate(${rot}deg) scale(${sc})`;
+                let frames;
+                if (a.kind === 'arrow') {
+                    frames = [{ transform: at(x0, y0, 0.8, ang), offset: 0 }, { transform: at(x1, y1, 1, ang), offset: 1 }];
+                } else {
+                    const lift = Math.min(140, 40 + Math.hypot(x1 - x0, y1 - y0) * 0.25);
+                    frames = [
+                        { transform: at(x0, y0, 0.5, 0), offset: 0, easing: 'ease-out' },
+                        { transform: at((x0 + x1) / 2, (y0 + y1) / 2 - lift, 1.15, 180), offset: 0.5, easing: 'ease-in' },
+                        { transform: at(x1, y1, 1, 360), offset: 1 }
+                    ];
+                }
+                const an = pr.animate(frames, { duration: a.dur * 1000, easing: a.kind === 'arrow' ? 'cubic-bezier(.3,0,.8,.6)' : 'linear', fill: 'forwards' });
+                an.onfinish = () => pr.remove();
+                setTimeout(() => pr.remove(), a.dur * 1000 + 400);
+            } else if (a.k === 'slide') {
+                const se = cellEl(a.from[0], a.from[1]), de = cellEl(a.to[0], a.to[1]);
+                const real = de && de.querySelector('.piece');
+                if (!se || !real) return;
+                const sr = se.getBoundingClientRect(), dr = de.getBoundingClientRect();
+                const dx = dr.left - sr.left, dy = dr.top - sr.top;
+                const cl = pieceClone(real, sr);
+                hideCell(a.to[0], a.to[1], 720);
+                sfxWhistle();
+                const an = cl.animate([
+                    { transform: 'translate(0,0) rotate(0deg) scale(1)', offset: 0, easing: 'ease-out' },
+                    { transform: `translate(${dx / 2}px,${dy / 2 - sr.height * 0.55}px) rotate(180deg) scale(1.3)`, offset: 0.5, easing: 'ease-in' },
+                    { transform: `translate(${dx}px,${dy}px) rotate(360deg) scale(1)`, offset: 1 }
+                ], { duration: 700, fill: 'forwards' });
+                an.onfinish = () => cl.remove();
+                setTimeout(() => cl.remove(), 1100);
+            } else if (a.k === 'rescue') {
+                const se = cellEl(a.from[0], a.from[1]), de = cellEl(a.to[0], a.to[1]);
+                const real = de && de.querySelector('.piece');
+                if (!se || !real) return;
+                const sr = se.getBoundingClientRect();
+                const cl = pieceClone(real, sr);
+                hideCell(a.to[0], a.to[1], 700);
+                const an = cl.animate([
+                    { transform: 'translateY(0) scale(1)', opacity: 1, filter: 'brightness(1)', offset: 0 },
+                    { transform: `translateY(${-sr.height * 1.6}px) scale(1.15)`, opacity: 0, filter: 'brightness(2.4) drop-shadow(0 0 12px #fff)', offset: 1 }
+                ], { duration: 650, easing: 'ease-in', fill: 'forwards' });
+                an.onfinish = () => cl.remove();
+                setTimeout(() => cl.remove(), 1000);
+                setTimeout(() => {      // потом плавно появляется на новом месте
+                    const e2 = cellEl(a.to[0], a.to[1]), p2 = e2 && e2.querySelector('.piece');
+                    if (p2) p2.animate([
+                        { opacity: 0, transform: 'translateY(-40%) scale(0.7)', filter: 'brightness(2.4)' },
+                        { opacity: 1, transform: 'none', filter: 'none' }
+                    ], { duration: 550, easing: 'ease-out' });
+                }, 700);
+            }
+        } catch (e) { }
+    });
+}
+
+// Кнопки 📢 (объявления способностей) и 🎬 (анимации на доске)
+function updateAnimUI() {
+    const b1 = document.getElementById('btnBanner'), b2 = document.getElementById('btnAnim');
+    if (b1) b1.classList.toggle('off', !ANIM.banner);
+    if (b2) b2.classList.toggle('off', !ANIM.board);
+}
+const saveAnim = () => { try { localStorage.setItem('sc_anim', JSON.stringify(ANIM)); } catch (e) { } };
+document.getElementById('btnBanner').addEventListener('click', () => { ANIM.banner = !ANIM.banner; saveAnim(); updateAnimUI(); });
+document.getElementById('btnAnim').addEventListener('click', () => { ANIM.board = !ANIM.board; saveAnim(); updateAnimUI(); });
+updateAnimUI();
 
 // Красная обструкция: способность врага отключена на несколько его ходов
 function doTomato(k) {
