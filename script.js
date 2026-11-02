@@ -45,6 +45,8 @@ const CONFIG = {
     burnTurns: 3,     // сколько ходов Мага (считаются только его ходы) горит клетка после огненного шара
     shieldTurns: 3,   // сколько ходов Паладина (считаются только его ходы) держится щит
     arrowRange: 6,    // стрела: насколько далеко от короля можно целиться (6 = не дальше противоположного края)
+    shortRangeMoves: 10,   // стрела и огненный шар: у каждого игрока первые N ходов дальность на 1 меньше, потом снова обычная
+    freeHeroes: ['paladin', 'mage', 'necromancer'],   // герои, доступные в рейтинговых партиях без шара
     fireRange: 6,     // огненный шар Мага: то же ограничение дальности от короля
     // пассивка Охотника «Меткий глаз»: квадрат 3×3 вокруг короля + 4 клетки на расстоянии 2 по горизонтали и вертикали (крест)
     sound: true
@@ -75,7 +77,7 @@ const ABILITIES = {
     // --- Маг
     fireball: {
         icon: '🔥', name: 'Огненный шар',
-        desc: 'Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.'
+        desc: 'Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки. До 10-го вашего хода радиус на 1 меньше.'
     },
     freeze: {
         icon: '❄️', name: 'Заморозка',
@@ -159,7 +161,7 @@ const ABILITIES = {
     },
     arrow: {
         icon: '🏹', name: 'Стрела',
-        desc: 'Метка в радиусе 6 от короля: в начале вашего хода стрела убивает фигуру на ней.'
+        desc: 'Метка в радиусе 6 от короля: в начале вашего хода стрела убивает фигуру на ней. До 10-го вашего хода радиус на 1 меньше.'
     },
     // --- Новые способности
     guardian: {
@@ -289,6 +291,8 @@ PASSIVES.pretense = {
     icon: '🃏', name: 'Притворство',
     desc: 'В начале партии тайно выберите вражеского слона или коня. После ' + CONFIG.betrayAfter + '-го хода врага можно потратить ход и дважды нажать на неё: она навсегда перейдёт к вам.'
 };
+
+const UNL = { orbs: 0, heroes: [], busy: false };   // магические шары и открытые герои (из Supabase, таблица user_unlocks)
 
 const HEROES = {
     paladin: { icon: '⚜️', name: 'Паладин', tag: 'Защита и святость', passive: 'brotherhood', abilities: ['resurrect', 'shield', 'rescue', 'guardian'] },
@@ -1383,6 +1387,9 @@ function nearOwn(b, r, c, col) {
     return false;
 }
 
+// Дальность стрелы и огненного шара: на 1 меньше, пока игрок не сделал CONFIG.shortRangeMoves ходов
+const rangeFor = (col, base) => base - ((G.done && (G.done[col] || 0) < CONFIG.shortRangeMoves) ? 1 : 0);
+
 // Клетки, куда можно навести стрелу из короля в радиусе range
 function arrowCells(col, range, ignoreFrozen) {
     const b = G.board, k = findKing(b, col), cells = [];
@@ -1548,10 +1555,10 @@ function abilityCells(key, col, t, first) {
         });
     } else if (key === 'fireball') {
         if (!safeNow) return [];
-        return arrowCells(col, CONFIG.fireRange, true);
+        return arrowCells(col, rangeFor(col, CONFIG.fireRange), true);
     } else if (key === 'arrow') {
         if (!safeNow) return [];
-        return arrowCells(col, CONFIG.arrowRange);
+        return arrowCells(col, rangeFor(col, CONFIG.arrowRange));
     } else if (key === 'aim') {
         return aimCells(col);
     } else if (key === 'freeze') {
@@ -1809,6 +1816,7 @@ function toGrave(p) {
 }
 
 function startGame() {
+    const oldOrb = document.getElementById('goOrb'); if (oldOrb) oldOrb.remove();
     G = {
         board: initialBoard(), turn: 'w', hero: { ...selectedHeroes },
         grave: { w: [], b: [] }, cd: { w: {}, b: {} },
@@ -3611,7 +3619,70 @@ const FREE_DOT = '<i class="free-dot" title="Не тратит ход"></i>';
 const abFreeDot = k => (ABILITIES[k].free ? FREE_DOT : '');
 const psFreeDot = pk => ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? FREE_DOT : '');
 
+/* ---------- Замки героев и магические шары ---------- */
+// Замки работают только в рейтинговых онлайн-партиях. В дружеских комнатах и на одном экране открыты все герои.
+const lockActive = () => !!(NET.on && NET.rated);
+const heroOpen = id => CONFIG.freeHeroes.includes(id) || UNL.heroes.includes(id);
+
+async function loadUnlocks() {
+    if (!SB || !ACC.user) { UNL.orbs = 0; UNL.heroes = []; return; }
+    try {
+        const { data, error } = await SB.from('user_unlocks').select('orbs,heroes').eq('user_id', ACC.user.id).maybeSingle();
+        if (error) return;
+        UNL.orbs = data ? (data.orbs | 0) : 0;
+        UNL.heroes = data && Array.isArray(data.heroes) ? data.heroes : [];
+    } catch (e) { /* без сети оставляем как было */ }
+}
+
+function orbBarHTML() {
+    return `<div class="orb-bar"><div class="orb-line"><span class="orb-ball ${UNL.orbs ? 'full' : ''}">🔮</span> ${L('Магические шары', 'Magic orbs')}: <b>${UNL.orbs ? 1 : 0}/1</b></div>` +
+        `<div class="orb-sub">${L('Заблокированный герой стоит 1 шар. Шар дают после каждой рейтинговой партии (победа, поражение или ничья). В банке максимум один шар.', 'A locked hero costs 1 orb. You get one orb after every rated game (win, loss or draw). The bank holds at most one orb.')}</div></div>`;
+}
+
+function showOrbNote(gained) {
+    let el = document.getElementById('goOrb');
+    if (!el) { el = document.createElement('div'); el.id = 'goOrb'; el.className = 'go-orb'; $('#goText').insertAdjacentElement('afterend', el); }
+    el.textContent = gained
+        ? L('🔮 Вы получили магический шар! Потратьте его на героя при выборе в следующей рейтинговой партии.', '🔮 You got a magic orb! Spend it on a hero on the pick screen of your next rated game.')
+        : L('🔮 Шар не выдан: в банке уже лежит один. Потратьте его на героя.', '🔮 No orb this time: your bank already holds one. Spend it on a hero.');
+}
+
+// Открыть героя за шар: подтверждение, запрос в Supabase, анимация замка
+async function tryUnlock(id, card) {
+    if (UNL.busy) return;
+    if (!SB || !ACC.user) { uiAlert(L('Нужен вход в аккаунт.', 'Please sign in first.')); return; }
+    await loadUnlocks();
+    if (heroOpen(id)) { buildSetup(); return; }
+    if (UNL.orbs < 1) { uiAlert(L('Чтобы открыть героя, нужен магический шар. Его дают после рейтинговой партии: за победу, поражение или ничью.', 'You need a magic orb to unlock a hero. You get one after a rated game: win, loss or draw.')); return; }
+    if (!uiConfirm(L(`Открыть героя «${HEROES[id].name}» за 1 магический шар?`, `Unlock ${HEROES[id].name} for 1 magic orb?`))) return;
+    UNL.busy = true;
+    const { error } = await SB.rpc('unlock_hero', { p_hero: id });
+    if (error) {
+        UNL.busy = false;
+        await loadUnlocks();
+        uiAlert(L('Не получилось открыть героя. Попробуйте ещё раз.', 'Could not unlock the hero. Please try again.'));
+        buildSetup();
+        return;
+    }
+    await loadUnlocks();
+    const lock = card && card.querySelector('.hero-lock');
+    if (!lock) { UNL.busy = false; buildSetup(); return; }
+    card.classList.add('unlocking');                                  // замок трясётся
+    setTimeout(() => { lock.textContent = '🔓'; lock.classList.add('opened'); }, 700);       // открывается
+    setTimeout(() => {                                                // маленький взрыв
+        const burst = document.createElement('div');
+        burst.className = 'lock-burst';
+        burst.innerHTML = Array.from({ length: 14 }, (_, i) => `<i style="--a:${i * (360 / 14)}deg"></i>`).join('');
+        card.appendChild(burst);
+        card.classList.add('flash');
+        card.classList.remove('locked');
+        lock.classList.add('gone');
+    }, 1050);
+    setTimeout(() => { UNL.busy = false; buildSetup(); }, 1900);
+}
+
 function buildSetup() {
+    if (lockActive() && NET.me && !heroOpen(selectedHeroes[NET.me])) selectedHeroes[NET.me] = 'paladin';   // заблокированного героя в рейтинге выбрать нельзя
     const sb = $('#startBtn');
     if (NET.on) sb.textContent = NET.ready ? 'Отменить готовность' : 'Готов';
     else sb.textContent = 'Начать партию';
@@ -3622,10 +3693,10 @@ function buildSetup() {
                 `<div class="opp-wait">${NET.oppReady ? '✅ Соперник готов' : '⏳ Соперник выбирает героя...'}</div>`;
             return;
         }
-        $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML = '<button class="rand-hero" type="button">🎲 Случайный герой</button>' + Object.entries(HEROES).map(([id, h]) => {
-            const ps = PASSIVES[h.passive], open = openHeroes.has(id);
+        $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML = (lockActive() ? orbBarHTML() : '') + '<button class="rand-hero" type="button">🎲 Случайный герой</button>' + Object.entries(HEROES).map(([id, h]) => {
+            const ps = PASSIVES[h.passive], open = openHeroes.has(id), locked = lockActive() && !heroOpen(id);
             return `
-      <div class="hero-card ${selectedHeroes[side] === id ? 'chosen' : ''} ${open ? 'open' : ''}" data-hero="${id}">
+      <div class="hero-card ${selectedHeroes[side] === id ? 'chosen' : ''} ${open ? 'open' : ''} ${locked ? 'locked' : ''}" data-hero="${id}">${locked ? '<div class="hero-lock">🔒</div>' : ''}
         <div class="hc-head"><span class="hc-icon">${h.icon}</span>
           <div><div class="hc-name">${h.name}</div><div class="hc-tag">${h.tag}</div></div></div>
         <div class="hc-abs"><span class="chip chip-ps">${ps.icon} ${ps.name}${psFreeDot(h.passive)}</span>${h.abilities.map(k => `<span class="chip">${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</span>`).join('')}</div>
@@ -3697,6 +3768,7 @@ function openSetup() {
     $('#setup').classList.remove('hidden');
     updatePeerLabel();
     $('#setupLeave').classList.remove('hidden');
+    if (lockActive()) loadUnlocks().then(() => { if (!$('#setup').classList.contains('hidden')) buildSetup(); });
     if (NET.on && NET.oppLeft) markOppLeft();
 }
 
@@ -3712,7 +3784,7 @@ $('#setup').addEventListener('click', e => {
     if (rb) {
         const sd = rb.closest('.side-pick').dataset.side;
         if (NET.on && (sd !== NET.me || NET.ready)) return;
-        const ids = Object.keys(HEROES);
+        const ids = Object.keys(HEROES).filter(hid => !lockActive() || heroOpen(hid));
         selectedHeroes[sd] = ids[Math.floor(Math.random() * ids.length)];
         buildSetup();
         setTimeout(() => { const ch = document.querySelector(`.side-pick[data-side="${sd}"] .hero-card.chosen`); if (ch) ch.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 50);
@@ -3722,11 +3794,13 @@ $('#setup').addEventListener('click', e => {
     if (!card) return;
     const side = card.closest('.side-pick').dataset.side;
     if (NET.on && (side !== NET.me || NET.ready)) return;   // онлайн: героя выбираете только за себя и до нажатия «Готов»
+    if (lockActive() && !heroOpen(card.dataset.hero)) { tryUnlock(card.dataset.hero, card); return; }   // замок: предложить открыть за шар
     selectedHeroes[side] = card.dataset.hero;
     buildSetup();
 });
 function toggleReady() {
     if (NET.oppLeft) return;
+    if (lockActive() && !heroOpen(selectedHeroes[NET.me])) { buildSetup(); return; }
     NET.ready = !NET.ready;
     netSend({ t: 'ready', ready: NET.ready, hero: selectedHeroes[NET.me] });
     buildSetup();
@@ -3966,6 +4040,10 @@ function netRecv(m) {
         case 'start':
             if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; if (m.inc !== undefined) NET.inc = m.inc | 0; if (m.mode !== undefined) NET.mode = MODES[m.mode] ? m.mode : null; if (m.rated !== undefined) NET.rated = !!m.rated; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
             break;
+        case 'orb':
+            showOrbNote(!!m.gained);
+            loadUnlocks();
+            break;
         case 'chat':
             if (!NET.muted && typeof m.text === 'string') { chatMsgs.push({ me: false, text: m.text.slice(0, 300) }); renderChat(); }
             break;
@@ -3999,6 +4077,7 @@ $('#btnTheme').addEventListener('click', () => applyTheme(THEMES[(THEMES.findInd
    весь видимый текст переводится по словарю ниже (в тексте экрана, подсказках и окнах).
    ===================================================================== */
 const EN = {
+    "До 10-го вашего хода радиус на 1 меньше.": "Until your 10th move the range is 1 smaller.",
     "Воскрешение": "Resurrection",
     "Возвращает вашу фигуру из сброса на свободную клетку первой горизонтали (пешку на любую из первых четырёх).": "Returns your piece from the graveyard to a free square on your first rank (a pawn to any of the first four ranks).",
     "Око за око": "Eye for an Eye",
@@ -5694,10 +5773,11 @@ if (SB) {
     SB.auth.onAuthStateChange((ev, session) => {
         const prev = ACC.user && ACC.user.id;
         ACC.user = session ? session.user : null;
-        if (!ACC.user) { ACC.profile = null; ACC.needNick = false; accRefresh(); return; }
+        if (!ACC.user) { ACC.profile = null; ACC.needNick = false; UNL.orbs = 0; UNL.heroes = []; accRefresh(); return; }
         if (ACC.user.id !== prev) ACC.profile = null;
         accRefresh();
         if (!ACC.profile) setTimeout(loadProfile, 0);
+        setTimeout(loadUnlocks, 0);
     });
 }
 

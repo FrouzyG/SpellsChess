@@ -65,19 +65,57 @@ async function handleAuth(room, r, role, token) {
     if (r.peer[o]) deliver(r, role, JSON.stringify({ t: 'peer', nick: r.peer[o].nick, rating: r.peer[o].rating, id: r.peer[o].id }));
 }
 // Результат партии: оба игрока сообщают итог, записываем, если оба вошли в аккаунт и их сообщения совпали.
-function recordGame(r) {
+const FREE_HEROES = ['paladin', 'mage', 'necromancer'];   // герои, доступные в рейтинге без магического шара
+const secretHeaders = (extra) => {
+    const h = Object.assign({ apikey: SUPA_SECRET, 'Content-Type': 'application/json' }, extra || {});
+    if (!SUPA_SECRET.startsWith('sb_')) h.Authorization = 'Bearer ' + SUPA_SECRET;
+    return h;
+};
+// Проверка: открыты ли у игроков выбранные ими герои. При сбое базы не наказываем игроков (возвращаем true).
+async function heroesAllowed(ids, heroes) {
+    const need = ['w', 'b'].filter(s => !FREE_HEROES.includes(heroes[s]));
+    if (!need.length) return true;
+    try {
+        const list = need.map(s => ids[s]).join(',');
+        const r = await fetch(`${SUPA_URL}/rest/v1/user_unlocks?user_id=in.(${list})&select=user_id,heroes`, { headers: secretHeaders(), signal: sbSignal() });
+        if (!r.ok) { console.log('user_unlocks: не удалось проверить героев', r.status); return true; }
+        const rows = await r.json();
+        return need.every(s => {
+            const row = Array.isArray(rows) ? rows.find(x => x.user_id === ids[s]) : null;
+            return !!(row && Array.isArray(row.heroes) && row.heroes.includes(heroes[s]));
+        });
+    } catch (e) { console.log('user_unlocks: сбой проверки', e.message); return true; }
+}
+// После записанной рейтинговой партии каждому игроку даём по одному шару (если в банке пусто) и сообщаем об этом
+async function grantOrbs(r, gid, users) {
+    for (const role of ['host', 'guest']) {
+        let gained = false;
+        try {
+            const x = await fetch(SUPA_URL + '/rest/v1/rpc/grant_orb', { method: 'POST', headers: secretHeaders(), signal: sbSignal(), body: JSON.stringify({ p_game: gid, p_user: users[role] }) });
+            if (x.ok) gained = (await x.json()) === true; else console.log('grant_orb: ОШИБКА', x.status, await x.text());
+        } catch (e) { console.log('grant_orb: сбой', e.message); }
+        deliver(r, role, JSON.stringify({ t: 'orb', gained }));
+    }
+}
+async function recordGame(r) {
     if (!r.gid || r.recorded === r.gid) return;
     if (!SUPA_SECRET) { console.log('результат НЕ записан: в Render не задана переменная SUPABASE_SECRET_KEY'); return; }
     if (!r.user.host || !r.user.guest) return;
     const res = r.rep.host || r.rep.guest;
     r.recorded = r.gid;
-    const headers = { apikey: SUPA_SECRET, 'Content-Type': 'application/json' };
-    if (!SUPA_SECRET.startsWith('sb_')) headers.Authorization = 'Bearer ' + SUPA_SECRET;
-    fetch(SUPA_URL + '/rest/v1/rpc/record_result', {
-        method: 'POST', headers, signal: sbSignal(),
-        body: JSON.stringify({ p_game: r.gid, p_white: r.user.host.id, p_black: r.user.guest.id, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null, p_rated: !!r.quickMode, p_mode: r.quickMode, p_inc: r.incv, p_seed: r.inlog ? r.seed : null, p_tc: r.tcv, p_log: r.inlog })
-    }).then(x => { if (!x.ok) x.text().then(t => console.log('record_result: ОШИБКА', x.status, t)); else console.log('результат записан:', r.gid, res); })
-        .catch(e => console.log('record_result: сбой', e.message));
+    const gid = r.gid, rated = !!r.quickMode;
+    const users = { host: r.user.host.id, guest: r.user.guest.id };
+    const body = JSON.stringify({ p_game: gid, p_white: users.host, p_black: users.guest, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null, p_rated: rated, p_mode: r.quickMode, p_inc: r.incv, p_seed: r.inlog ? r.seed : null, p_tc: r.tcv, p_log: r.inlog });
+    if (rated && r.heroes && !(await heroesAllowed({ w: users.host, b: users.guest }, r.heroes))) {
+        console.log('результат НЕ записан: в рейтинговой партии выбран закрытый герой', gid, r.heroes.w, r.heroes.b);
+        return;
+    }
+    try {
+        const x = await fetch(SUPA_URL + '/rest/v1/rpc/record_result', { method: 'POST', headers: secretHeaders(), signal: sbSignal(), body });
+        if (!x.ok) { console.log('record_result: ОШИБКА', x.status, await x.text()); return; }
+        console.log('результат записан:', gid, res);
+        if (rated) await grantOrbs(r, gid, users);
+    } catch (e) { console.log('record_result: сбой', e.message); }
 }
 function handleResult(r, role, res, msg) {
     console.log('итог партии от', role + ':', res, '| игра', r.gid || 'нет', '| оба вошли в аккаунт:', !!(r.user.host && r.user.guest));

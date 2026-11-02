@@ -4223,3 +4223,209 @@ button {
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+/* ===== Замки героев и магические шары (рейтинговые партии) ===== */
+.orb-bar {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(155, 123, 224, .18);
+    border: 1px solid rgba(190, 150, 255, .55);
+}
+
+.orb-line {
+    font-size: 15px;
+}
+
+.orb-sub {
+    margin-top: 4px;
+    font-size: 12px;
+    opacity: .8;
+    line-height: 1.35;
+}
+
+.orb-ball {
+    display: inline-block;
+    filter: grayscale(1) opacity(.55);
+}
+
+    .orb-ball.full {
+        filter: none;
+        animation: orbPulse 1.8s ease-in-out infinite;
+    }
+
+@keyframes orbPulse {
+    0%, 100% {
+        transform: scale(1);
+        text-shadow: 0 0 6px #c9a7ff;
+    }
+
+    50% {
+        transform: scale(1.22);
+        text-shadow: 0 0 16px #e5d0ff;
+    }
+}
+
+.hero-card.locked {
+    position: relative;
+    cursor: pointer;
+}
+
+    .hero-card.locked > *:not(.hero-lock):not(.lock-burst) {
+        filter: grayscale(.9) brightness(.62);
+        transition: filter .5s;
+    }
+
+.hero-card.unlocking {
+    position: relative;
+}
+
+    .hero-card.unlocking > *:not(.hero-lock):not(.lock-burst) {
+        filter: none;
+    }
+
+.hero-lock {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    z-index: 3;
+    font-size: 30px;
+    line-height: 1;
+    pointer-events: none;
+    filter: drop-shadow(0 0 6px rgba(0, 0, 0, .6));
+}
+
+.hero-card.unlocking .hero-lock {
+    animation: lockShake .7s ease-in-out;
+}
+
+.hero-lock.opened {
+    animation: lockPop .35s ease-out forwards !important;
+}
+
+.hero-lock.gone {
+    animation: lockGone .6s ease-out forwards !important;
+}
+
+@keyframes lockShake {
+    0%, 100% {
+        transform: rotate(0);
+    }
+
+    15% {
+        transform: rotate(-20deg);
+    }
+
+    30% {
+        transform: rotate(18deg);
+    }
+
+    45% {
+        transform: rotate(-14deg);
+    }
+
+    60% {
+        transform: rotate(10deg);
+    }
+
+    75% {
+        transform: rotate(-5deg);
+    }
+}
+
+@keyframes lockPop {
+    0% {
+        transform: scale(1) rotate(0);
+    }
+
+    45% {
+        transform: scale(1.8) rotate(-14deg);
+    }
+
+    100% {
+        transform: scale(1.4) rotate(0);
+    }
+}
+
+@keyframes lockGone {
+    0% {
+        transform: scale(1.4);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(2.6) translateY(-10px);
+        opacity: 0;
+    }
+}
+
+.lock-burst {
+    position: absolute;
+    top: 21px;
+    right: 25px;
+    width: 0;
+    height: 0;
+    z-index: 4;
+    pointer-events: none;
+}
+
+    .lock-burst i {
+        position: absolute;
+        left: -4px;
+        top: -4px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ffd966;
+        box-shadow: 0 0 10px #ff9f1c;
+        animation: burstFly .75s ease-out forwards;
+    }
+
+        .lock-burst i:nth-child(3n) {
+            background: #ff6ec7;
+            box-shadow: 0 0 10px #ff3fa4;
+        }
+
+        .lock-burst i:nth-child(3n+1) {
+            background: #c9a7ff;
+            box-shadow: 0 0 10px #9b7be0;
+        }
+
+@keyframes burstFly {
+    from {
+        transform: rotate(var(--a)) translateY(0) scale(1);
+        opacity: 1;
+    }
+
+    to {
+        transform: rotate(var(--a)) translateY(-54px) scale(.2);
+        opacity: 0;
+    }
+}
+
+.hero-card.flash {
+    animation: cardFlash .9s ease-out;
+}
+
+@keyframes cardFlash {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 225, 120, 0);
+    }
+
+    30% {
+        box-shadow: 0 0 30px 10px rgba(255, 225, 120, .9);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 225, 120, 0);
+    }
+}
+
+.go-orb {
+    margin: 10px 0;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(155, 123, 224, .22);
+    border: 1px solid rgba(190, 150, 255, .6);
+    font-size: 14px;
+}
