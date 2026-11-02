@@ -45,7 +45,6 @@ const CONFIG = {
     burnTurns: 3,     // сколько ходов Мага (считаются только его ходы) горит клетка после огненного шара
     shieldTurns: 3,   // сколько ходов Паладина (считаются только его ходы) держится щит
     arrowRange: 6,    // стрела: насколько далеко от короля можно целиться (6 = не дальше противоположного края)
-    shortRangeMoves: 10,   // стрела и огненный шар: у каждого игрока первые N ходов дальность на 1 меньше, потом снова обычная
     freeHeroes: ['paladin', 'mage', 'necromancer'],   // герои, доступные в рейтинговых партиях без шара
     fireRange: 6,     // огненный шар Мага: то же ограничение дальности от короля
     // пассивка Охотника «Меткий глаз»: квадрат 3×3 вокруг короля + 4 клетки на расстоянии 2 по горизонтали и вертикали (крест)
@@ -77,7 +76,7 @@ const ABILITIES = {
     // --- Маг
     fireball: {
         icon: '🔥', name: 'Огненный шар',
-        desc: 'Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки. До 10-го вашего хода радиус на 1 меньше.'
+        desc: 'Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.'
     },
     freeze: {
         icon: '❄️', name: 'Заморозка',
@@ -161,7 +160,7 @@ const ABILITIES = {
     },
     arrow: {
         icon: '🏹', name: 'Стрела',
-        desc: 'Метка в радиусе 6 от короля: в начале вашего хода стрела убивает фигуру на ней. До 10-го вашего хода радиус на 1 меньше.'
+        desc: 'Метка в радиусе 6 от короля: в начале вашего хода стрела убивает фигуру на ней.'
     },
     // --- Новые способности
     guardian: {
@@ -1387,8 +1386,8 @@ function nearOwn(b, r, c, col) {
     return false;
 }
 
-// Дальность стрелы и огненного шара: на 1 меньше, пока игрок не сделал CONFIG.shortRangeMoves ходов
-const rangeFor = (col, base) => base - ((G.done && (G.done[col] || 0) < CONFIG.shortRangeMoves) ? 1 : 0);
+// Дальность стрелы и огненного шара всегда полная (как в начале партии)
+const rangeFor = (col, base) => base;
 
 // Клетки, куда можно навести стрелу из короля в радиусе range
 function arrowCells(col, range, ignoreFrozen) {
@@ -2472,6 +2471,7 @@ function zombieMoves(r, c, col) {
 }
 
 function finishAbility(key, text) {
+    abilityBanner(key);
     const col = G.turn;
     const cdKey = G.mode && G.mode.via ? G.mode.via : key;
     G.cd[col][cdKey] = cdOf(col, cdKey);
@@ -2808,6 +2808,7 @@ function instantAbility(k, via) {
         G.cd[col][cdKey] = cdOf(col, cdKey);
         G.lastAb[col] = k;
         G.bonus = { kind: 'zw', step: 1 };
+        abilityBanner('zawarudo');
         sfx('rewind');
         addLog(col, `${ABILITIES.zawarudo.icon} ZA WARUDO! Время остановлено: два хода подряд, первым нельзя ни шаховать, ни рубить`);
         continueTurn();
@@ -2821,6 +2822,7 @@ function instantAbility(k, via) {
         ['w', 'b'].forEach(sd => { if (keepCd[sd].misclick !== undefined) G.cd[sd].misclick = keepCd[sd].misclick; if (keepCd[sd].copy !== undefined) G.cd[sd].copy = keepCd[sd].copy; });
         G.cd[col][cdKey] = cdOf(col, cdKey);
         G.lastAb[col] = 'misclick';
+        abilityBanner('misclick');
         sfx('rewind');
         addLog(col, `${ABILITIES.misclick.icon} Мисклик! Время отмотано: отменены ход противника и ваш предыдущий ход`);
         computeState(col);
@@ -2843,6 +2845,7 @@ function doGroundhog(r, c) {
     }
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = 'groundhog';
+    abilityBanner('groundhog');
     addLog(col, `${ABILITIES.groundhog.icon} ${ABILITIES.groundhog.name}: временная ловушка установлена (место скрыто)`);
     G.mode = null; G.sel = null; G.moves = [];
     sfx('rewind');
@@ -2860,6 +2863,7 @@ function doTimeSlow(k) {
         else if (G.cd[en][a] > 0) { G.cd[en][a] += 1; parts.push(`${ABILITIES[a].name} +1`); }
     });
     G.cd[col].timeslow = cdOf(col, 'timeslow');
+    abilityBanner('timeslow');
     sfx('rewind');
     addLog(col, `${PASSIVES.timeslow.icon} Замедление времени: перезарядка врага ${parts.join(', ')}`);
     G.mode = null; G.sel = null; G.moves = [];
@@ -3463,7 +3467,7 @@ function panelHTML(col) {
         else if (k === 'copy' && can) sub = '→ ' + ABILITIES[G.lastAb[other(col)]].name;
         if (offT) sub = '🍅 отключена';
         if (hideCd) sub = 'скрыто';      // применение не должно быть видно по перезарядке
-        h += `<button class="ab ${on ? 'on' : ''}" data-ab="${k}" ${can || on ? '' : 'disabled'} title="${abilityDesc(k)}">
+        h += `<button class="ab ${on ? 'on' : ''}${offT ? ' tomatoed' : ''}" data-ab="${k}" ${can || on ? '' : 'disabled'} title="${abilityDesc(k)}">
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}${offT ? `<span class="tm-badge">🍅${offT}</span>` : ''}</button>`;
     });
 
@@ -5452,6 +5456,86 @@ function sweepBananas() {
     });
 }
 
+/* =====================================================================
+   АНИМАЦИИ СПОСОБНОСТЕЙ
+   ===================================================================== */
+// Полоска с названием способности: быстро влетает слева в центр доски, медленно плывёт, быстро улетает вправо
+const BANNER_SKIP = ['lie'];      // секретные способности не показываем, чтобы не выдавать их применение
+function abilityBanner(key) {
+    try {
+        if (typeof document === 'undefined' || BANNER_SKIP.includes(key)) return;
+        const A = ABILITIES[key] || PASSIVES[key], board = $('#board');
+        if (!A || !board || !board.offsetWidth) return;
+        document.querySelectorAll('.ab-banner-box').forEach(e => e.remove());
+        const rect = board.getBoundingClientRect();
+        const box = document.createElement('div');
+        box.className = 'ab-banner-box';
+        box.style.cssText = `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
+        const strip = document.createElement('div');
+        strip.className = 'ab-banner';
+        strip.innerHTML = `<span class="abb-icon">${A.icon}</span><span class="abb-name">${A.name}</span>`;
+        box.appendChild(strip);
+        document.body.appendChild(box);
+        const anim = strip.animate([
+            { transform: 'translateX(-105%)', offset: 0, easing: 'cubic-bezier(.15,.85,.25,1)' },     // быстро влетает
+            { transform: 'translateX(-3%)', offset: 0.14, easing: 'linear' },
+            { transform: 'translateX(3%)', offset: 0.78, easing: 'cubic-bezier(.6,0,1,.7)' },         // медленно плывёт около секунды
+            { transform: 'translateX(105%)', offset: 1 }                                                // быстро улетает вправо
+        ], { duration: 1700, fill: 'both' });
+        anim.onfinish = () => box.remove();
+        setTimeout(() => box.remove(), 2600);
+    } catch (e) { }
+}
+
+// Помидор: вылетает из панели Шута, падает на кнопку способности врага и размазывается по ней
+function tomatoPrepare(col, en, k) {
+    try {
+        const pan = document.querySelector('#panel-' + col);
+        const src = pan && (pan.querySelector('.hero-icon') || pan);
+        const btn = document.querySelector(`#panel-${en} [data-tomato="${k}"]`);
+        if (!src || !btn) return null;
+        const a = src.getBoundingClientRect(), b = btn.getBoundingClientRect();
+        if (!a.width || !b.width) return null;
+        return { x0: a.left + a.width / 2, y0: a.top + a.height / 2, x1: b.left + b.width / 2, y1: b.top + b.height / 2, b, en, k };
+    } catch (e) { return null; }
+}
+function tomatoFly(f) {
+    if (!f) return;
+    try {
+        const hold = document.querySelector(`#panel-${f.en} [data-ab="${f.k}"]`);
+        if (hold) hold.classList.add('tomato-pending');       // пятно на кнопке появится, когда помидор долетит
+        const t = document.createElement('div');
+        t.className = 'tomato-fly';
+        t.textContent = '🍅';
+        document.body.appendChild(t);
+        const at = (x, y, sc, rot) => `translate(${x}px,${y}px) translate(-50%,-50%) scale(${sc}) rotate(${rot}deg)`;
+        const mx = (f.x0 + f.x1) / 2, my = Math.min(f.y0, f.y1) - 110;
+        const anim = t.animate([
+            { transform: at(f.x0, f.y0, 0.5, 0), offset: 0, easing: 'ease-out' },
+            { transform: at(mx, my, 1.4, 300), offset: 0.5, easing: 'ease-in' },
+            { transform: at(f.x1, f.y1, 1, 640), offset: 1 }
+        ], { duration: 700, fill: 'forwards' });
+        const land = () => {
+            t.remove();
+            if (hold && hold.isConnected) hold.classList.remove('tomato-pending');
+            const sp = document.createElement('div');
+            sp.className = 'tomato-splat';
+            sp.style.cssText = `left:${f.b.left}px;top:${f.b.top}px;width:${f.b.width}px;height:${f.b.height}px`;
+            document.body.appendChild(sp);
+            setTimeout(() => sp.remove(), 2800);
+        };
+        anim.onfinish = land;
+        setTimeout(() => { if (t.isConnected) land(); }, 1200);
+    } catch (e) { }
+}
+// Своя картинка помидора (необязательно): pieces/tomato.png
+(function () {
+    if (typeof Image === 'undefined') return;
+    const im = new Image();
+    im.onload = () => { document.documentElement.style.setProperty('--img-tomato', 'url("pieces/tomato.png")'); if (document.body) document.body.classList.add('img-tomato'); };
+    im.src = 'pieces/tomato.png';
+})();
+
 // Красная обструкция: способность врага отключена на несколько его ходов
 function doTomato(k) {
     if (!G.mode || G.mode.type !== 'tomato') return;
@@ -5459,13 +5543,16 @@ function doTomato(k) {
     if (!HEROES[G.hero[en]].abilities.includes(k)) return;
     if (G.disabled[en][k] > 0) return;      // в уже отключённую способность помидор не бросить
     const cdKey = G.mode.via || 'tomato';
+    const flight = tomatoPrepare(col, en, k);      // откуда и куда лететь (до перерисовки панелей)
     G.disabled[en][k] = CONFIG.tomatoTurns;
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = 'tomato';
     sfx('cast');
+    abilityBanner('tomato');
     addLog(col, `🍅 Красная обструкция: способность «${ABILITIES[k].name}» врага отключена на ${CONFIG.tomatoTurns} ${plural(CONFIG.tomatoTurns)} (ход не потрачен)`);
     G.mode = null; G.sel = null; G.moves = [];
     render();      // ход не тратится
+    tomatoFly(flight);
 }
 
 // Своя модель челюстей: pieces/jaws.png

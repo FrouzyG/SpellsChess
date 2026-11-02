@@ -4470,3 +4470,109 @@ button {
 .hero-card.unlocking > .hc-unlock {
     display: none;
 }
+
+
+/* ---------- Анимации способностей ---------- */
+.ab-banner-box {
+    position: fixed;
+    z-index: 60;
+    overflow: hidden;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+}
+
+.ab-banner {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 16px 10px;
+    color: #fff;
+    font-weight: 800;
+    font-size: clamp(18px, calc(var(--cell) * 0.5), 34px);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    text-shadow: 0 0 12px #ff6ec7, 0 2px 0 #000;
+    background: linear-gradient(90deg, transparent, #ff6ec7 14%, #ff6ec7 86%, transparent) top / 100% 3px no-repeat, linear-gradient(90deg, transparent, #ff6ec7 14%, #ff6ec7 86%, transparent) bottom / 100% 3px no-repeat, linear-gradient(90deg, rgba(20, 4, 24, 0), rgba(20, 4, 24, 0.9) 14%, rgba(20, 4, 24, 0.9) 86%, rgba(20, 4, 24, 0));
+    filter: drop-shadow(0 0 14px rgba(255, 110, 199, 0.7));
+}
+
+.abb-icon {
+    font-size: 1.25em;
+}
+
+.tomato-fly {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 80;
+    pointer-events: none;
+    font-size: 34px;
+    line-height: 1;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.5));
+}
+
+.img-tomato .tomato-fly {
+    background: var(--img-tomato) center / contain no-repeat;
+    font-size: 0;
+    width: 56px;
+    height: 56px;
+}
+
+.tomato-splat {
+    position: fixed;
+    z-index: 80;
+    pointer-events: none;
+    border-radius: 10px;
+    background: radial-gradient(ellipse 28% 55% at 22% 45%, rgba(214, 24, 36, 0.9) 0 70%, transparent 72%), radial-gradient(ellipse 30% 60% at 52% 55%, rgba(190, 14, 28, 0.92) 0 70%, transparent 72%), radial-gradient(ellipse 24% 50% at 80% 42%, rgba(222, 36, 44, 0.9) 0 70%, transparent 72%), radial-gradient(circle at 38% 18%, rgba(214, 24, 36, 0.85) 0 7%, transparent 8%), radial-gradient(circle at 70% 85%, rgba(190, 14, 28, 0.85) 0 8%, transparent 9%);
+    animation: tomatoSplat 2.8s ease-out forwards;
+}
+
+@keyframes tomatoSplat {
+    0% {
+        transform: scale(0.3);
+        opacity: 1;
+    }
+
+    12% {
+        transform: scale(1.12);
+    }
+
+    22% {
+        transform: scale(1);
+    }
+
+    75% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 0;
+    }
+}
+
+/* пятно помидора остаётся на отключённой способности */
+.ab.tomatoed {
+    position: relative;
+}
+
+    .ab.tomatoed::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        background: radial-gradient(ellipse 18% 40% at 16% 40%, rgba(214, 24, 36, 0.7) 0 70%, transparent 72%), radial-gradient(ellipse 20% 46% at 46% 58%, rgba(190, 14, 28, 0.7) 0 70%, transparent 72%), radial-gradient(circle at 78% 30%, rgba(222, 36, 44, 0.7) 0 9%, transparent 10%);
+    }
+
+    .ab.tomatoed.tomato-pending::after {
+        opacity: 0;
+    }
