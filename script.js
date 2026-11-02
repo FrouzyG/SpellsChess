@@ -3591,6 +3591,8 @@ function renderLog() {
         const g = groups[groups.length - 1];
         if (e.n && g && g.n === e.n) g.items.push(e); else groups.push({ n: e.n, items: [e] });
     });
+    // внутри номера: сначала ходы и способности игрока, затем события хода (щит рассеялся, иллюзия исчезла и т. д.)
+    groups.forEach(g => { g.items = g.items.filter(e => e.c !== 'n').concat(g.items.filter(e => e.c === 'n')); });
     ol.innerHTML = groups.map(g => {
         const who = (g.items.find(e => e.c === 'w' || e.c === 'b') || g.items[0]).c;
         if (!g.n) return `<li class="${who}" style="list-style:none">${g.items.map(e => e.text).join('<br>')}</li>`;
@@ -3642,7 +3644,22 @@ const THEMES = [
     { id: 'green', name: 'Зелёная', light: '#eeeed2', dark: '#769656', frame: '#3b5323' },
     { id: 'blue', name: 'Голубая', light: '#dee3e6', dark: '#8ca2ad', frame: '#4a6572' },
     { id: 'night', name: 'Ночная', light: '#8f9bbd', dark: '#2f3b57', frame: '#1c2438' },
-    { id: 'violet', name: 'Фиолетовая', light: '#efe6ff', dark: '#9b7be0', frame: '#6a45c2' }
+    { id: 'violet', name: 'Фиолетовая', light: '#efe6ff', dark: '#9b7be0', frame: '#6a45c2' },
+    { id: 'coral', name: 'Коралловая', light: '#ffe9e0', dark: '#e8806a', frame: '#a8402e' },
+    { id: 'sunset', name: 'Закат', light: '#ffe8c2', dark: '#ef8a4c', frame: '#a1481b' },
+    { id: 'gold', name: 'Золотая', light: '#fff4cf', dark: '#d4a43a', frame: '#8a6516' },
+    { id: 'sand', name: 'Песочная', light: '#f4e7c8', dark: '#c9a66b', frame: '#7a5a2b' },
+    { id: 'wood', name: 'Дерево', light: '#ead2a8', dark: '#9a6b3f', frame: '#4a2f17' },
+    { id: 'cherry', name: 'Вишнёвая', light: '#fde6ea', dark: '#c2385a', frame: '#7a1d36' },
+    { id: 'rose', name: 'Чайная роза', light: '#fff1f0', dark: '#d99a9a', frame: '#8c4b4b' },
+    { id: 'lavender', name: 'Лаванда', light: '#ece6f7', dark: '#a595c9', frame: '#6b5a96' },
+    { id: 'mint', name: 'Мятная', light: '#e6fff4', dark: '#5cc9a0', frame: '#2c7a5b' },
+    { id: 'forest', name: 'Лесная', light: '#dfe8d0', dark: '#4f7a45', frame: '#254a24' },
+    { id: 'sky', name: 'Небесная', light: '#e6f4ff', dark: '#7bb7f0', frame: '#2d6aa6' },
+    { id: 'ocean', name: 'Океан', light: '#d8f1ff', dark: '#3d8fd1', frame: '#1d4f7e' },
+    { id: 'ice', name: 'Ледяная', light: '#f0fbff', dark: '#8fd3e8', frame: '#3f8fa8' },
+    { id: 'graphite', name: 'Графит', light: '#cfd2d8', dark: '#5a5f69', frame: '#2a2d33' },
+    { id: 'candy', name: 'Конфетная', light: '#fff0fa', dark: '#7fd6ff', frame: '#ff8cc6' }
 ];
 let themeId = 'pink';
 try { const saved = localStorage.getItem('spellschess-theme'); if (THEMES.some(t => t.id === saved)) themeId = saved; } catch (e) { /* без сохранения */ }
@@ -3679,7 +3696,7 @@ function openSetup() {
     $('#promo').classList.add('hidden');
     $('#setup').classList.remove('hidden');
     updatePeerLabel();
-    $('#setupLeave').classList.toggle('hidden', !NET.on);
+    $('#setupLeave').classList.remove('hidden');
     if (NET.on && NET.oppLeft) markOppLeft();
 }
 
@@ -4502,6 +4519,21 @@ const EN = {
     "Не тратит ход": "Costs no turn",
     "встаёт зомби": "rises as a zombie",
     "возвращается": "returns",
+    "Коралловая": "Coral",
+    "Закат": "Sunset",
+    "Золотая": "Gold",
+    "Песочная": "Sand",
+    "Дерево": "Wood",
+    "Вишнёвая": "Cherry",
+    "Чайная роза": "Tea rose",
+    "Лаванда": "Lavender",
+    "Мятная": "Mint",
+    "Лесная": "Forest",
+    "Небесная": "Sky",
+    "Океан": "Ocean",
+    "Ледяная": "Ice",
+    "Графит": "Graphite",
+    "Конфетная": "Candy",
     "⚡ Быстрый поиск: рейтинговая партия": "⚡ Quick search: rated game",
     "🚪 Комнаты: дружеская партия": "🚪 Rooms: friendly game",
     "на одном экране": "on one screen",
@@ -5680,6 +5712,7 @@ function markOppLeft() {
     buildSetup();
 }
 $('#setupLeave').addEventListener('click', () => {
+    if (!NET.on) { $('#lobby').classList.remove('hidden'); return; }      // игра на одном экране: просто назад в главное меню
     if (!uiConfirm('Выйти из партии?')) return;
     netSend({ t: 'leave' });
     $('#setupLeave').disabled = true;
