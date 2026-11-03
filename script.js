@@ -2286,7 +2286,7 @@ function executeMove(mv, promo, ctx) {
 
     // Король ушёл из-под шаха: куда можно поставить его иллюзию
     let kgBs = [];
-    if (kgAlt && !res.thorn && !res.burned) {
+    if (kgAlt && !res.thorn && !res.burned && !cap && !own) {      // король срубил фигуру: по рубке видно настоящего, иллюзия не нужна
         const seen = new Set();
         kgBs = kgAlt.filter(m => {
             const k = m.tr * 8 + m.tc;
