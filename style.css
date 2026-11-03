@@ -4684,3 +4684,9 @@ button {
 .btn-row #btnBanner, .btn-row #btnAnim {
     order: 100;
 }
+
+/* особое время на первый ход */
+.clock.opening {
+    color: #ffd166;
+    box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.6);
+}

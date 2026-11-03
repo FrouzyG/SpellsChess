@@ -44,11 +44,12 @@ const CONFIG = {
     hypnoTurns: 2,    // сколько ходов экстрасенса фигура ему подчиняется
     burnTurns: 3,     // сколько ходов Мага (считаются только его ходы) горит клетка после огненного шара
     shieldTurns: 3,   // сколько ходов Паладина (считаются только его ходы) держится щит
-    arrowRange: 6,    // стрела: насколько далеко от короля можно целиться (6 = не дальше противоположного края)
+    arrowRange: 5,    // стрела: насколько далеко от короля можно целиться (5: с начальной позиции последние 2 линии соперника не простреливаются)
     freeHeroes: ['paladin', 'mage', 'necromancer'],   // герои, доступные в рейтинговых партиях без шара
-    fireRange: 6,     // огненный шар Мага: то же ограничение дальности от короля
+    fireRange: 5,     // огненный шар Мага: то же ограничение дальности от короля
     // пассивка Охотника «Меткий глаз»: квадрат 3×3 вокруг короля + 4 клетки на расстоянии 2 по горизонтали и вертикали (крест)
-    sound: true
+    sound: true,
+    openingSeconds: 90    // особое время на первый ход каждого игрока: пока оно идёт, основные часы стоят; не уложился: проигрыш
 };
 
 // Настройки анимаций (кнопки 📢 и 🎬 рядом с подтверждением хода). banner: полоска с названием способности, board: полёты и эффекты на доске
@@ -84,7 +85,7 @@ const ABILITIES = {
     // --- Маг
     fireball: {
         icon: '🔥', name: 'Огненный шар',
-        desc: 'Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.'
+        desc: 'Метка в радиусе 5 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.'
     },
     freeze: {
         icon: '❄️', name: 'Заморозка',
@@ -168,7 +169,7 @@ const ABILITIES = {
     },
     arrow: {
         icon: '🏹', name: 'Стрела',
-        desc: 'Метка в радиусе 6 от короля: в начале вашего хода стрела убивает фигуру на ней.'
+        desc: 'Метка в радиусе 5 от короля: в начале вашего хода стрела убивает фигуру на ней.'
     },
     // --- Новые способности
     guardian: {
@@ -4145,7 +4146,7 @@ const EN = {
     "Спасение": "Rescue",
     "Переносит вашу фигуру с вражеской половины на свободную клетку первой горизонтали (пешку на 2–4).": "Moves your piece from the enemy half to a free square on your first rank (a pawn to ranks 2–4).",
     "Огненный шар": "Fireball",
-    "Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем клетка горит 3 хода: вставшие на неё и прошедшие сквозь фигуры сгорают (конь перепрыгивает). Уничтожает плитки.": "A mark within 6 squares of your king. It explodes at the start of your turn, then the square burns for 3 turns: pieces that stop on it or pass through it burn up (knights jump over). Destroys tiles.",
+    "Метка в радиусе 5 от короля. В начале вашего хода взрыв, затем клетка горит 3 хода: вставшие на неё и прошедшие сквозь фигуры сгорают (конь перепрыгивает). Уничтожает плитки.": "A mark within 5 squares of your king. It explodes at the start of your turn, then the square burns for 3 turns: pieces that stop on it or pass through it burn up (knights jump over). Destroys tiles.",
     "Заморозка": "Freeze",
     "Любая фигура (кроме короля) на ": "Any piece (except a king) for ",
     " хода не ходит, её нельзя срубить, и магия на неё не действует. Исключение: огненный шар.": " turns cannot move or be captured, and magic does not affect it. Exception: Fireball.",
@@ -4186,7 +4187,7 @@ const EN = {
     "Капкан": "Trap",
     "Невидимый капкан: вставшая на него фигура (не король) пропускает следующий ход.": "An invisible trap: a piece (not a king) that steps on it skips its next turn.",
     "Стрела": "Arrow",
-    "Метка в радиусе 6 от короля: в начале вашего хода стрела убивает фигуру на ней.": "A mark within 6 squares of your king: at the start of your turn the arrow kills the piece on it.",
+    "Метка в радиусе 5 от короля: в начале вашего хода стрела убивает фигуру на ней.": "A mark within 5 squares of your king: at the start of your turn the arrow kills the piece on it.",
     "Ангел-хранитель": "Guardian Angel",
     " ходов союзная фигура самоотверженна: если рядом (3×3) другую союзную фигуру убивают (рубкой, огненным шаром, стрелой, взрывом и т. п.), она меняется с ней местами и гибнет вместо неё.": " turns an allied piece is selfless: if another allied piece next to it (3×3) is killed (by capture, fireball, arrow, explosion, etc.), it swaps places with it and dies instead.",
     "Очищение": "Purification",
@@ -4606,6 +4607,7 @@ const EN = {
     "Без лимита": "No limit",
     "Искать партию:": "Find a game:",
     "Время вышло": "Time is up",
+    "Нет первого хода": "No first move",
     " побеждают по времени.": " win on time.",
     "✔ Подтвердить": "✔ Confirm",
     "✖ Отмена": "✖ Cancel",
@@ -4764,7 +4766,7 @@ const EN = {
     "Достижения": "Achievements",
     "Бета-тестер": "Beta tester",
     "Участвовал в бета-тестировании SpellsChess": "Took part in the SpellsChess beta test",
-    "Метка в радиусе 6 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.": "A mark within 6 squares of your king. It explodes at the start of your turn, then burns for 3 turns: pieces on it burn up. Destroys tiles.",
+    "Метка в радиусе 5 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.": "A mark within 5 squares of your king. It explodes at the start of your turn, then burns for 3 turns: pieces on it burn up. Destroys tiles.",
     "Вражеская фигура (не король) ходит только на 1 клетку: конь как слон, пешка вперёд без рубки. Страх спадает после её хода, у пешки через ": "An enemy piece (not a king) moves only 1 square: a knight like a bishop, a pawn forward without capturing. The fear wears off after its move, for a pawn after ",
     " ходов фигура прикрывает союзников в 3×3: если любую из них убивают (рубкой или магией), она меняется с ней местами и гибнет вместо неё.": " turns the piece covers allies in 3×3: if one of them is killed (by capture or magic), it swaps places with that ally and dies instead.",
     "Выберите клетку, куда встанет невидимая фигура, и клетку её иллюзии (оба хода обычные). После хода врага правда раскрывается.": "Choose the square for the invisible piece and the square for its illusion (both are normal moves). After the enemy's move the truth is revealed.",
@@ -5238,7 +5240,7 @@ function tcOnOpen() {
 const _netRecvTc = netRecv;
 netRecv = function (m) {
     if (m && m.t === 'tc') { if (!NET.host) { NET.tc = m.min | 0; NET.inc = m.inc | 0; NET.rated = !!m.rated; NET.mode = MODES[m.mode] ? m.mode : null; updateSetupTc(); } return; }
-    if (m && m.t === 'flag') { if (m.side === other(NET.me)) flagSide(m.side); return; }
+    if (m && m.t === 'flag') { if (m.side === other(NET.me)) flagSide(m.side, !!m.opening); return; }
     _netRecvTc(m);
 };
 function curTc() {
@@ -5266,30 +5268,42 @@ function fmtClock(sec) {
     const p = n => String(n).padStart(2, '0');
     return h ? `${h}:${p(m)}:${p(x)}` : `${p(m)}:${p(x)}`;
 }
+// Пока игрок не сделал свой первый ход, идёт особое время на первый ход, а основные часы стоят
+function inOpening(side) {
+    return !!(CLOCK.on && CLOCK.open && G && !G.over && !((G.done && G.done[side]) > 0));
+}
+const clockText = side => (inOpening(side) ? '♟ ' + fmtClock(CLOCK.open[side]) : fmtClock(CLOCK.left[side]));
 function clockHTML(col) {
     if (!CLOCK.on) return '';
-    return `<span class="clock" data-clock="${col}" data-notr>${fmtClock(CLOCK.left[col])}</span>`;
+    return `<span class="clock${inOpening(col) ? ' opening' : ''}" data-clock="${col}" data-notr>${clockText(col)}</span>`;
 }
 function initClock() {
     const tc = curTc() || 0;
-    CLOCK = { on: tc > 0, left: { w: tc * 60, b: tc * 60 }, inc: curInc(), prev: G ? G.turn : 'w', last: performance.now(), grace: 0 };
+    CLOCK = { on: tc > 0, left: { w: tc * 60, b: tc * 60 }, open: { w: CONFIG.openingSeconds, b: CONFIG.openingSeconds }, inc: curInc(), prev: G ? G.turn : 'w', last: performance.now(), grace: 0 };
     if (G) render();
 }
 const _startGameTc = startGame;
 startGame = function () { _startGameTc.apply(this, arguments); initClock(); };
 
-function flagSide(side) {
+function flagSide(side, opening) {
     if (!G || G.over) return;
+    if (opening) {      // не успел сделать первый ход за особое время
+        CLOCK.open[side] = 0;
+        G.over = { winner: other(side), title: 'Нет первого хода', text: L(`${colorName(side)} не сделали первый ход за ${Math.round(CONFIG.openingSeconds / 60 * 10) / 10} мин. ${colorName(other(side))} побеждают.`, `${colorName(side)} did not make the first move in time. ${colorName(other(side))} win.`) };
+        render(); showGameOver();
+        return;
+    }
     CLOCK.left[side] = 0;
     G.over = { winner: other(side), title: 'Время вышло', text: `${colorName(other(side))} побеждают по времени.` };
     render(); showGameOver();
 }
 function paintClocks() {
     document.querySelectorAll('.clock[data-clock]').forEach(el => {
-        const side = el.dataset.clock, t = CLOCK.left[side];
-        const txt = fmtClock(t);
+        const side = el.dataset.clock, op = inOpening(side), t = op ? CLOCK.open[side] : CLOCK.left[side];
+        const txt = clockText(side);
         if (el.textContent !== txt) el.textContent = txt;
         el.classList.toggle('running', !!G && !G.over && G.turn === side);
+        el.classList.toggle('opening', op);
         el.classList.toggle('low', t < 30);
     });
 }
@@ -5299,21 +5313,23 @@ setInterval(() => {
     CLOCK.last = now;
     if (!CLOCK.on || !G || G.over || document.getElementById('app').classList.contains('hidden')) return;
     const side = G.turn;
-    CLOCK.left[side] = Math.max(0, CLOCK.left[side] - dt);
+    const opening = inOpening(side);                      // до первого хода идёт особое время, основное стоит
+    const pool = opening ? CLOCK.open : CLOCK.left;
+    pool[side] = Math.max(0, pool[side] - dt);
     paintClocks();
-    if (CLOCK.left[side] > 0) { CLOCK.grace = 0; return; }
+    if (pool[side] > 0) { CLOCK.grace = 0; return; }
     if (!NET.on || side === NET.me) {                     // своё время вышло: сообщаем сопернику
-        if (NET.on) netSend({ t: 'flag', side });
-        flagSide(side);
+        if (NET.on) netSend({ t: 'flag', side, opening });
+        flagSide(side, opening);
     } else {                                              // время соперника: ждём его сообщения, иначе засчитываем сами
         if (!CLOCK.grace) CLOCK.grace = now + 5000;
-        else if (now > CLOCK.grace) flagSide(side);
+        else if (now > CLOCK.grace) flagSide(side, opening);
     }
 }, 200);
 const _renderClock = render;
 render = function () {
     // когда ход перешёл к другому, предыдущему игроку добавляется время за ход
-    if (CLOCK.on && G && !G.over && CLOCK.prev && G.turn !== CLOCK.prev) CLOCK.left[CLOCK.prev] += CLOCK.inc || 0;
+    if (CLOCK.on && G && !G.over && CLOCK.prev && G.turn !== CLOCK.prev && G.done && G.done[CLOCK.prev] > 1) CLOCK.left[CLOCK.prev] += CLOCK.inc || 0;      // за первый ход добавки нет: он шёл на особом времени
     if (G && CLOCK.on) CLOCK.prev = G.turn;
     _renderClock.call(this); paintClocks();
 };
