@@ -26,15 +26,18 @@ const CONFIG = {
         timeslow: 4,                                 // пассивка Повелителя времени
         guardian: 5, purify: 10, lie: 10, virus: 3,  // новые способности
         vine: 7, ritual: 5, bumpuku: 3, generator: 7,
-        blunder: 7, banana: 7, jaws: 8, tomato: 4        // Шут
+        blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
+        fog: 5, hatch: 3, hocus: 7, assistant: 6         // Фокусник
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
     timePassiveCostsTurn: false,   // true: пассивка Повелителя времени тратит ход
     guardianTurns: 5,        // Ангел-хранитель: сколько ходов держится самоотверженность
     wardTurns: 3,            // Очищение: сколько ходов держится защита от магии
-    capTurns: 3,             // Шут: сколько ходов ВРАГА держится шутовской колпак
+    capTurns: 4,             // Шут: сколько ходов ВРАГА держится шутовской колпак (колпак держится на 1 меньше)
     jawsTurns: 3,            // Шут: сколько своих ходов живут заводные челюсти
+    fogTurns: 4,             // Фокусник: сколько ходов владельца держится дым
+    hareTurns: 3,            // Фокусник: на сколько своих ходов фигура становится зайцем
     tomatoTurns: 5,          // Шут: сколько ходов ВРАГА способность остаётся отключённой
     betrayAfter: 10,         // Шут: после какого по счёту хода ВРАГА можно ходить предательской фигурой
     bumpukuTurns: 2,         // Бумпуку: на каком своём ходу взрывается бомба
@@ -66,7 +69,8 @@ const sfxLater = (k, sec) => { if (sec > 0) setTimeout(() => sfx(k), sec * 1000)
 const GLYPH = { k: '♚\uFE0E', q: '♛\uFE0E', r: '♜\uFE0E', b: '♝\uFE0E', n: '♞\uFE0E', p: '♟\uFE0E' };
 const pImg = (c, t) => `<i class="pi ${c} t-${t}">${GLYPH[t]}</i>`;   // мини-фигура (картинка, а без папки pieces обычный символ)
 const SYM = { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' };
-GLYPH.j = '🦷'; SYM.j = '🦷';      // заводные челюсти Шута
+GLYPH.j = '🦷'; SYM.j = '🦷';
+GLYPH.h = '🐇'; SYM.h = '🐇';      // заяц Фокусника (Ассистент)      // заводные челюсти Шута
 
 const ABILITIES = {
     // --- Паладин
@@ -236,7 +240,7 @@ const ABILITIES = {
 Object.assign(ABILITIES, {
     blunder: {
         icon: '🤡', name: 'Бриллиантовый зевок',
-        desc: 'Тайный колпак на вашей фигуре: ' + (CONFIG.capTurns - 1) + ' хода врага она не рубит и не даёт шах. Срубивший её погибает. Перед третьим ходом врага колпак слетает.'
+        desc: 'Тайный колпак на вашей фигуре: ' + (CONFIG.capTurns - 1) + ' хода врага она не рубит и не даёт шах. Срубивший её погибает. Перед четвёртым ходом врага колпак слетает.'
     },
     banana: {
         free: true,
@@ -316,10 +320,36 @@ const HEROES = {
 
 HEROES.jester = { icon: '🤡', name: 'Шут', tag: 'Трюки и сюрпризы', passive: 'pretense', abilities: ['blunder', 'banana', 'jaws', 'tomato'] };
 
+// Фокусник
+PASSIVES.sawing = {
+    icon: '🪚', name: 'Распиливание доски',
+    desc: 'Для ваших фигур левый и правый край доски соединены: слон, ладья, ферзь и король проходят сквозь край, пешки рубят через него, конь перепрыгивает на другую сторону. Верх и низ не соединены.'
+};
+Object.assign(ABILITIES, {
+    fog: {
+        free: true,
+        icon: '🌫️', name: 'Сценический туман',
+        desc: 'Дым накрывает выбранную клетку и все клетки в двух шагах от неё (по вертикали и горизонтали) на ' + CONFIG.fogTurns + ' ваших хода. Фигуры (не короли) в дыму невидимы для противника, а где именно в тумане фигура встала, в журнале не видно. Ход не тратится.'
+    },
+    hatch: {
+        icon: '🪵', name: 'Потайной люк',
+        desc: 'Создаёт плитку-люк на свободной клетке. Фигура (не король), вставшая на неё, проваливается и вылезает из другой свободной плитки на выбор того, кто ходит. Если других плиток нет или все заняты, ничего не происходит.'
+    },
+    hocus: {
+        icon: '🎩', name: 'Фокус-Покус',
+        desc: 'Меняет местами две любые фигуры (кроме королей) в квадрате 5×5 вокруг первой. Ваш король не должен остаться под шахом.'
+    },
+    assistant: {
+        icon: '🐇', name: 'Ассистент',
+        desc: 'Превращает любую фигуру (кроме короля) в зайца на ' + CONFIG.hareTurns + ' ваших хода. Заяц не рубит и ходит как ферзь, потом фигура возвращается.'
+    }
+});
+HEROES.magician = { icon: '🎩', name: 'Фокусник', tag: 'Фокусы и пропажи', passive: 'sawing', abilities: ['fog', 'hatch', 'hocus', 'assistant'] };
+
 // Способности, у которых выбор идёт в два шага: сначала фигура, потом клетка
 const ACTIVE_PASSIVES = ['aim', 'teleport', 'timeslow'];
 const NO_TARGET = ['zawarudo', 'misclick'];   // способности без выбора цели: срабатывают сразу по кнопке   // пассивки, у которых есть кнопка и перезарядка
-const STAGED = ['lie', 'generator', 'illusion', 'frankenstein', 'rescue', 'confusion', 'apocalypse', 'conveyor', 'portals', 'relocate', 'soulmates', 'banana'];
+const STAGED = ['hocus', 'lie', 'generator', 'illusion', 'frankenstein', 'rescue', 'confusion', 'apocalypse', 'conveyor', 'portals', 'relocate', 'soulmates', 'banana'];
 
 const other = c => (c === 'w' ? 'b' : 'w');
 const inb = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
@@ -434,6 +464,10 @@ const passThru = (t, col, r, c) => !!t && !t.ghost && ((t.c === col && isPhase(t
 const supOpen = (b, t) => !!t && !!t.sup && !t.ghost && !!t.prev && !b[t.prev[0]][t.prev[1]];
 const scaredDirs = tp => ((tp === 'r' || tp === 'j') ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
 
+// Распиливание доски (Фокусник): левый и правый край доски соединены для его фигур
+const wrapsOf = p => !!p && !!G && !!G.hero && G.hero[p.c] === 'magician';
+const wcol = (p, c) => (c >= 0 && c < 8 ? c : (wrapsOf(p) ? ((c % 8) + 8) % 8 : -1));
+
 // Выход из портала: если на клетке портал, возвращает клетку его пары
 function portalExit(r, c) {
     const pt = G.portals.find(x => x.r === r && x.c === c);
@@ -444,9 +478,12 @@ function portalExit(r, c) {
 
 // Идёт по лучу, проходя через порталы. cb(r, c, фигура, пройденные клетки) возвращает true, чтобы остановиться.
 function rayWalk(b, r, c, dr, dc, cb) {
-    let rr = r + dr, cc = c + dc, hops = 0;
+    const wrap = wrapsOf(b[r][c]);
+    let rr = r + dr, cc = c + dc, hops = 0, guard = 0;
+    if (wrap) cc = ((cc % 8) + 8) % 8;
     const path = [];
     while (inb(rr, cc)) {
+        if (wrap && (++guard > 30 || (rr === r && cc === c))) return;      // луч сквозь край не должен ходить по кругу
         const t = b[rr][cc];
         if (cb(rr, cc, t, path)) return;
         path.push([rr, cc]);
@@ -459,10 +496,12 @@ function rayWalk(b, r, c, dr, dc, cb) {
                 if (cb(ex[0], ex[1], te, path)) return;
                 path.push([ex[0], ex[1]]);
                 rr = ex[0] + dr; cc = ex[1] + dc;
+                if (wrap) cc = ((cc % 8) + 8) % 8;
                 continue;
             }
         }
         rr += dr; cc += dc;
+        if (wrap) cc = ((cc % 8) + 8) % 8;
     }
 }
 
@@ -471,7 +510,8 @@ function rayWalk(b, r, c, dr, dc, cb) {
 function lineSquares(b, r, c, tp) {
     const out = [];
     if (tp === 'n') {
-        KN.forEach(([dr, dc]) => { if (inb(r + dr, c + dc)) out.push([r + dr, c + dc]); });
+        const wp = b[r][c];
+        KN.forEach(([dr, dc]) => { const tc = wcol(wp, c + dc); if (r + dr >= 0 && r + dr < 8 && tc >= 0) out.push([r + dr, tc]); });
         return out;
     }
     const dirs = tp === 'b' ? DIAG : tp === 'r' ? ORTH : [...DIAG, ...ORTH];
@@ -488,17 +528,19 @@ function attackSquares(b, r, c) {
     const p = b[r][c], out = [];
     if (p.scared) {                               // напуганная фигура бьёт только на 1 клетку по своим направлениям
         if (p.t === 'p') return out;
-        moveTypes(p).forEach(tp => scaredDirs(tp).forEach(([dr, dc]) => { if (inb(r + dr, c + dc)) out.push([r + dr, c + dc]); }));
+        moveTypes(p).forEach(tp => scaredDirs(tp).forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < 8 && tc >= 0) out.push([r + dr, tc]); }));
         return out;
     }
     moveTypes(p).forEach(tp => {
         if (tp === 'p') {
             const d = p.c === 'w' ? -1 : 1;
-            [-1, 1].forEach(dc => { if (inb(r + d, c + dc)) out.push([r + d, c + dc]); });
+            [-1, 1].forEach(dc => { const tc = wcol(p, c + dc); if (r + d >= 0 && r + d < 8 && tc >= 0) out.push([r + d, tc]); });
         } else if (tp === 'k') {
-            KG.forEach(([dr, dc]) => { if (inb(r + dr, c + dc)) out.push([r + dr, c + dc]); });
+            KG.forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < 8 && tc >= 0) out.push([r + dr, tc]); });
         } else if (tp === 'j') {
-            ORTH.forEach(([dr, dc]) => { if (inb(r + dr, c + dc)) out.push([r + dr, c + dc]); });
+            ORTH.forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < 8 && tc >= 0) out.push([r + dr, tc]); });
+        } else if (tp === 'h') {
+            /* заяц никого не бьёт */
         } else {
             out.push(...lineSquares(b, r, c, tp));
         }
@@ -626,7 +668,7 @@ function pseudoMoves(b, r, c) {
     // король не рубит фигуру под щитом; Некромант рубит свои пешки
     const passable = t => !t || (t.ghost && t.c === p.c) || (!ghost && supOpen(b, t));   // своя иллюзия и фигура в суперпозиции не мешают
     const canTake = (t, tr, tc) => {
-        if (ghost || !t || t.ghost || t.t === 'k' || t.frozen) return false;
+        if (ghost || p.t === 'h' || !t || t.ghost || t.t === 'k' || t.frozen) return false;      // заяц не рубит
         if (p.t === 'k' && t.shield) return false;
         if (t.c === p.c) return harvest && t.t === 'p' && !t.orig;
         return !brotherImmune(b, tr, tc);
@@ -639,10 +681,10 @@ function pseudoMoves(b, r, c) {
             return mv;
         }
         moveTypes(p).forEach(tp => scaredDirs(tp).forEach(([dr, dc]) => {
-            const tr = r + dr, tc = c + dc;
-            if (!inb(tr, tc)) return;
+            const tr = r + dr, tc = wcol(p, c + dc);
+            if (tr < 0 || tr > 7 || tc < 0) return;
             const t = b[tr][tc];
-            if (passable(t) || canTake(t, tr, tc)) add(tr, tc);
+            if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
         }));
         return mv;
     }
@@ -655,15 +697,15 @@ function pseudoMoves(b, r, c) {
         // двойной ход: первая клетка свободна ИЛИ на ней прозрачная для нас фигура (призрачная, на Ритуале)
         if ((open1 || (f1 && passThru(f1, p.c, r + d, c))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c)) add(r + 2 * d, c, { double: true });
         [-1, 1].forEach(dc => {
-            const tr = r + d, tc = c + dc;
-            if (!inb(tr, tc)) return;
+            const tr = r + d, tc = wcol(p, c + dc), wr = tc !== c + dc ? { path: [] } : {};
+            if (tr < 0 || tr > 7 || tc < 0) return;
             const t = b[tr][tc];
             if (t && supOpen(b, t)) return;      // фигуру в суперпозиции пешка рубить не может
-            if (canTake(t, tr, tc)) add(tr, tc, { promo: tr === last });
+            if (canTake(t, tr, tc)) add(tr, tc, { promo: tr === last, ...wr });
             else if (!t && !ghost && G.ep && G.ep.r === tr && G.ep.c === tc) {
                 const v = b[G.ep.pr][G.ep.pc];
                 if (v && v.t === 'p' && v.c !== p.c && !v.frozen && !v.ghost && !brotherImmune(b, G.ep.pr, G.ep.pc)) {
-                    add(tr, tc, { ep: true, pr: G.ep.pr, pc: G.ep.pc });
+                    add(tr, tc, { ep: true, pr: G.ep.pr, pc: G.ep.pc, ...wr });
                 }
             }
         });
@@ -673,24 +715,24 @@ function pseudoMoves(b, r, c) {
     moveTypes(p).forEach(tp => {
         if (tp === 'n') {
             KN.forEach(([dr, dc]) => {
-                const tr = r + dr, tc = c + dc;
-                if (!inb(tr, tc)) return;
+                const tr = r + dr, tc = wcol(p, c + dc);
+                if (tr < 0 || tr > 7 || tc < 0) return;
                 const t = b[tr][tc];
-                if (passable(t) || canTake(t, tr, tc)) add(tr, tc);
+                if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
             });
         } else if (tp === 'j') {                       // заводные челюсти: на 1 клетку по вертикали и горизонтали, ходят и рубят
             ORTH.forEach(([dr, dc]) => {
-                const tr = r + dr, tc = c + dc;
-                if (!inb(tr, tc)) return;
+                const tr = r + dr, tc = wcol(p, c + dc);
+                if (tr < 0 || tr > 7 || tc < 0) return;
                 const t = b[tr][tc];
-                if (passable(t) || canTake(t, tr, tc)) add(tr, tc);
+                if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
             });
         } else if (tp === 'k') {
             KG.forEach(([dr, dc]) => {
-                const tr = r + dr, tc = c + dc;
-                if (!inb(tr, tc)) return;
+                const tr = r + dr, tc = wcol(p, c + dc);
+                if (tr < 0 || tr > 7 || tc < 0) return;
                 const t = b[tr][tc];
-                if (passable(t) || canTake(t, tr, tc)) add(tr, tc);
+                if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
             });
             // Паранормальщина Призрака: король вселяется в цепочку своих фигур
             if (p.t === 'k' && !ghost && G.hero[p.c] === 'phantom') {
@@ -774,7 +816,7 @@ const moveCells = mv => (mv.path ? [...mv.path, [mv.tr, mv.tc]] : pathCells(mv))
 
 // Применяет ход к доске (меняет её). Возвращает список погибших фигур.
 // Ценность фигур для выбора ангела-хранителя (у Франкенштейна считается исходная фигура, пришитые ходы не в счёт)
-const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, j: 1 };
+const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, j: 1, h: 1 };
 
 // Ангел-хранитель: если рядом с жертвой несколько ангелов, собой жертвует наименее ценный (при равенстве «случайный», одинаковый у обоих игроков онлайн).
 // Какую из погибающих фигур спасать, решает orderVictims: самую ценную (при равенстве слон раньше коня).
@@ -1096,6 +1138,7 @@ function revealPiece(r, c, why) {
     const p = G.board[r][c];
     if (p.lie) { revealLie(r, c); return; }
     delete p.invis;
+    if (p.fog) p.fogSeen = true;       // фигура в дыму раскрыта и остаётся видимой, пока не сходит
     if (p.uid) G.log.forEach(e => { if (e.hid === p.uid) { e.text = e.real + ' 🥷'; delete e.hid; delete e.real; } });
     G.fx.push({ r, c, type: 'ghost' });
     sfx('poof');
@@ -1417,7 +1460,7 @@ let VIEWER = null;
 const isEmptyCell = (r, c) => !G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER));
 const isFreeCell = (r, c) => (!G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
     !G.gens.some(x => x.r === r && x.c === c) && !G.virus.some(x => x.r === r && x.c === c) && !G.vines.some(x => x.r === r && x.c === c) &&
-    !G.rituals.some(x => x.r === r && x.c === c);
+    !G.rituals.some(x => x.r === r && x.c === c) && !(G.hatches || []).some(x => x.r === r && x.c === c);
 
 // Порталы: одновременно две пары, при создании третьей самая старая исчезает
 function portalsWith(col, a, b2, id) {
@@ -1752,7 +1795,7 @@ function abilityPossible(col, k) {
             return abilityCells(k, col, d).length > 0;
         }));
     }
-    if (k === 'illusion') return abilityCells(k, col, null, true).length > 0;
+    if (k === 'illusion' || k === 'hocus' || k === 'assistant') return abilityCells(k, col, null, true).length > 0;
     return abilityCells(k, col).length > 0;
 }
 
@@ -1772,7 +1815,7 @@ function abilityAvailable(col, k) {
 }
 
 // Способности Шута, не тратящие ход и не спасающие короля (кожура, помидор): для мата и пата не считаются «действием»
-const NOT_AN_ESCAPE = ['banana', 'tomato'];
+const NOT_AN_ESCAPE = ['banana', 'tomato', 'fog'];
 function hasAnyAction(col) {
     if (col === G.turn && G.forced && G.forced.length) return true;
     if (anyLegalMove(G.board, col)) return true;
@@ -1820,7 +1863,7 @@ function toGrave(p) {
     if (p.t === 'j') return;      // заводные челюсти не уходят в сброс
     if (p.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(p)}: фигура погибла`);
     G.deaths = (G.deaths || 0) + 1;
-    G.grave[p.orig || p.c].push({ t: p.t, x: [...(p.x || [])] });
+    G.grave[p.orig || p.c].push(p.hare ? { t: p.hare.t, x: [...(p.hare.x || [])] } : { t: p.t, x: [...(p.x || [])] });      // заяц в сброс идёт как исходная фигура
 }
 
 function startGame() {
@@ -1834,7 +1877,7 @@ function startGame() {
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
         cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
-        bananas: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }
+        bananas: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: []
     };
     HIST = [];
     ['w', 'b'].forEach(c => {
@@ -1863,7 +1906,8 @@ function logHidden(c, p, real) {
 // Плитки (сейчас только конвейеры) уничтожаются огненным шаром. Ловушки (капкан) плитками не считаются.
 // Новые виды плиток добавлять сюда.
 function destroyTiles(r, c) {
-    [['conv', 'конвейер'], ['gens', 'плитку генератора'], ['virus', 'заражённую плитку'], ['vines', 'лозу'], ['rituals', 'призрачную плитку']].forEach(([k, name]) => {
+    [['conv', 'конвейер'], ['gens', 'плитку генератора'], ['virus', 'заражённую плитку'], ['vines', 'лозу'], ['rituals', 'призрачную плитку'], ['hatches', 'потайной люк']].forEach(([k, name]) => {
+        if (!G[k]) return;
         const n = G[k].length;
         G[k] = G[k].filter(x => !(x.r === r && x.c === c));
         if (G[k].length < n) {
@@ -2163,6 +2207,11 @@ function endTurn() {
             if (p.capBy !== c) p.cap--;
             if (p.capBy === c ? p.cap <= 1 : p.cap <= 0) { delete p.cap; delete p.capBy; addLog('n', `🤡 Колпак слетел с ${pieceSym(p)} на ${sqName(r, cc)}: время вышло`); }
         }
+        // Заяц Фокусника возвращается в прежний вид после своих ходов владельца
+        if (p.hare && p.hare.by === c) {
+            p.hare.left--;
+            if (p.hare.left <= 0) revertHare(r, cc, p);
+        }
         // Заморозка и капкан спадают в конце хода владельца фигуры
         if (p.c === c && p.frozen > 0) p.frozen--;
         if (p.c === c && p.snared > 0) p.snared--;
@@ -2207,7 +2256,14 @@ function endTurn() {
     soulSync();
     G.burn.forEach(t => { if (t.owner === c) t.life--; });      // горит столько ходов, сколько ходов у мага
     G.burn = G.burn.filter(t => t.life > 0);
+    if (G.fogs && G.fogs.length) {      // дым держится ограниченное число ходов владельца
+        G.fogs.forEach(f => { if (f.owner === c) f.left--; });
+        const nf = G.fogs.length;
+        G.fogs = G.fogs.filter(f => f.left > 0);
+        if (G.fogs.length < nf && !G.fogs.some(f => f.owner === c)) addLog('n', '🌫️ Дым рассеялся');
+    }
     revealLies(c);
+    syncFog();
     checkInvis();
     checkIllusions();
     G.turn = other(c);
@@ -2246,6 +2302,7 @@ function executeMove(mv, promo, ctx) {
     const b = G.board, p = b[mv.fr][mv.fc], col = p.c;
     const sym = pieceSym(p), note = p.t === 'p' ? '' : sym;
     const from = sqName(mv.fr, mv.fc), to = sqName(mv.tr, mv.tc);
+    delete p.fogSeen;
     const wasGhost = !!p.ghost, pair = p.pair;
     const extra = !!(ctx.bonus || ctx.apo || ctx.pairSecond);
     let skipMate = false;                       // иллюзия короля при рождении не делает хода
@@ -2325,7 +2382,7 @@ function executeMove(mv, promo, ctx) {
     if (harvest) text += ' 🌾';
 
     G.ep = (mv.double && !wasGhost) ? { r: (mv.fr + mv.tr) / 2, c: mv.fc, pr: mv.tr, pc: mv.tc } : null;
-    const hideMove = !!p.invis && !res.thorn && !res.burned;      // ход невидимой фигуры не выдаём
+    const hideMove = (!!p.invis || (p.t !== 'k' && !p.ghost && fogAt(mv.tr, mv.tc))) && !res.thorn && !res.burned;      // ход невидимой фигуры и ход в дым не выдаём
     G.last = (kgBs.length || hideMove) ? null : { fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc };
     if (!kgBs.length) { if (hideMove) logHidden(col, p, text); else addLog(col, text); }
     if (res.released) addLog('n', `🌀 ${sym} срубила фигуру и вырывается из-под гипноза`);
@@ -2339,7 +2396,7 @@ function executeMove(mv, promo, ctx) {
         sfx('illusion');
         addLog('n', `⚛ Суперпозиция: ${pieceSym(q)} с ${sqName(f0[0], f0[1])} возвращается на ${sqName(t0[0], t0[1])}`);
     });
-    if (p.invis && cap && !res.thorn && !res.burned) revealPiece(mv.tr, mv.tc, 'она срубила фигуру');
+    if (p.invis && !p.fog && cap && !res.thorn && !res.burned) revealPiece(mv.tr, mv.tc, 'она срубила фигуру');
 
     // Король ушёл из-под шаха: оставляет иллюзию
     if (kgBs.length === 1) {
@@ -2353,7 +2410,7 @@ function executeMove(mv, promo, ctx) {
         return;                                     // ход закончится после выбора клетки
     }
 
-    const tail = () => {
+    const tail0 = () => {
         // Апокалипсис: зомби сходил вне очереди, обычный ход ещё впереди
         if (ctx.apo) {
             G.cd[col][ctx.cdKey] = cdOf(col, ctx.cdKey);
@@ -2389,6 +2446,7 @@ function executeMove(mv, promo, ctx) {
 
         endTurn();
     };
+    const tail = () => { if (hatchTrigger(p, mv, tail0)) return; tail0(); };      // потайной люк: фигура может провалиться
 
     // Иллюзия: оригинал и двойник ходят вместе, вторая фигура пары обязана сходить следом
     if (ctx.pairSecond) { ctx.tail(); return; }
@@ -2487,7 +2545,7 @@ function finishAbility(key, text) {
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = key;
     addLog(col, text);
-    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku') { continueTurn(); return; }   // свободное действие: после него обычный ход
+    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog') { continueTurn(); return; }   // свободное действие: после него обычный ход
     G.ep = null;
     if (G.hero[col] === 'architect') {      // пассивка «Мастер на все руки»: способности не заканчивают ход
         G.archUsed = true;
@@ -2906,13 +2964,33 @@ function startMode(k, via) {
 }
 
 // Способности, зависящие от свободной клетки: попытка применить их на клетку с невидимой вражеской фигурой раскрывает её, ход не тратится
-const FREE_CELL_KEYS = ['ritual', 'vine', 'virus', 'trap', 'lure', 'generator', 'conveyor', 'portals', 'relocate'];
+const FREE_CELL_KEYS = ['hatch', 'ritual', 'vine', 'virus', 'trap', 'lure', 'generator', 'conveyor', 'portals', 'relocate'];
 
 function onModeCell(r, c) {
     const m = G.mode, t = m.type;
     if (FREE_CELL_KEYS.includes(t) && hiddenFor(G.board[r][c], G.turn)) {
         revealPiece(r, c, 'на её клетку попытались поставить плитку или ловушку');
         cancelAbilityMode();
+        return;
+    }
+    if (t === 'fog') { doFog(r, c); return; }
+    if (t === 'hatch') { doHatch(r, c); return; }
+    if (t === 'assistant') { doAssistant(r, c); return; }
+    if (t === 'hocus') {
+        if (m.stage === 'piece') {
+            m.a = [r, c];
+            m.stage = 'second';
+            m.cells = hocusCells(G.turn, m.a);
+            G.sel = { r, c };
+            render();
+        } else doHocus(m.a, [r, c]);
+        return;
+    }
+    if (t === 'hatchexit') {                 // Потайной люк: выбор, откуда вылезет фигура
+        hatchFall(m.from, [r, c]);
+        const tailFn = HATCH_TAIL; HATCH_TAIL = null;
+        G.mode = null; G.sel = null; G.moves = [];
+        if (tailFn) tailFn(); else endTurn();
         return;
     }
     if (t === 'pretense') {                  // Притворство: тайный выбор предателя
@@ -3381,6 +3459,8 @@ function renderBoard() {
             }
             const gm = G.gens.find(x => x.r === r && x.c === c);
             if (gm) html += `<div class="tile-mark gen-mark ${gm.sign === '+' ? 'plus' : 'minus'} ${G.hero[gm.owner] === 'architect' ? '' : 'alt'}">${gm.sign === '+' ? '＋' : '－'}</div>`;
+            const htm = (G.hatches || []).find(x => x.r === r && x.c === c);
+            if (htm) html += '<div class="tile-mark hatch-mark"><span></span></div>';
             const hg = G.hogs.find(x => x.r === r && x.c === c);
             if (hg && (hg.visible || (showTraps && (NET.on ? hg.owner === NET.me : hg.owner === G.turn)))) html += `<div class="tile-mark hog-mark ${hg.visible ? '' : 'hidden-hog'}">⏳</div>`;
 
@@ -3414,6 +3494,7 @@ function renderBoard() {
                 if (p.sup) html += '<span class="sp">⚛</span>';
                 if (p.altruist > 0) html += `<span class="al">👼${p.altruist}</span>`;
                 if (p.t === 'j') html += `<span class="jl">⏳${p.life}</span>`;
+                if (p.hare) html += `<span class="jl">🐇${p.hare.left}</span>`;
                 if (p.cap > 0 && jesterSees(p.capBy)) html += `<span class="cp">🤡${p.cap}</span>`;
                 if (p.betray && jesterSees(p.betray)) html += '<span class="bt">🃏</span>';
                 if (p.warded > 0) html += `<span class="wd">✴${p.warded}</span>`;
@@ -3422,6 +3503,7 @@ function renderBoard() {
                 html += '</div>';
             }
 
+            if (G.fogs && G.fogs.some(x => x.r === r && x.c === c)) html += '<div class="fog-mark"></div>';
             G.fx.filter(x => x.r === r && x.c === c && x.type !== 'land' && (!x.only || !NET.on || x.only === NET.me))
                 .forEach(x => {
                     if (x.delay > 0) ANIMQ.push({ k: 'lateFx', r, c, type: x.type, delay: x.delay });      // эффект появится, когда долетит снаряд
@@ -3431,6 +3513,7 @@ function renderBoard() {
         }
     }
     el.innerHTML = html;
+    el.classList.toggle('wrapped', G.hero.w === 'magician' || G.hero.b === 'magician');      // края доски соединены у Фокусника
 
     if (G.fx.some(x => x.type === 'boom' && !(x.delay > 0))) {
         el.classList.remove('shake');
@@ -3590,6 +3673,11 @@ function renderStatus() {
         else if (t === 'jaws') h = 'Выберите свободную клетку на первых трёх горизонталях вашей стороны: там появятся заводные челюсти.';
         else if (t === 'tomato') h = '🍅 Нажмите на способность врага в его панели: она отключится на ' + CONFIG.tomatoTurns + ' ходов. Ход не тратится.';
         else if (t === 'kghost') h = 'Король ушёл из-под шаха: выберите клетку, где останется его иллюзия.';
+        else if (t === 'fog') h = '🌫️ Выберите клетку: дым накроет её и клетки в двух шагах вокруг. Ход не тратится.';
+        else if (t === 'hatch') h = 'Выберите свободную клетку для потайного люка.';
+        else if (t === 'hocus') h = m.stage === 'piece' ? 'Выберите первую фигуру (не короля) для обмена.' : 'Выберите вторую фигуру в квадрате 5×5 вокруг первой: они поменяются местами.';
+        else if (t === 'assistant') h = 'Выберите фигуру (не короля): она станет зайцем на ' + CONFIG.hareTurns + ' ваших хода.';
+        else if (t === 'hatchexit') h = '🪵 Фигура провалилась в люк: выберите свободный люк, из которого она вылезет.';
         if (m.via) h = '🪞 Зеркало: ' + h;
     } else if (G.sel && G.board[G.sel.r][G.sel.c] && G.board[G.sel.r][G.sel.c].betray === G.turn && G.board[G.sel.r][G.sel.c].c !== G.turn) {
         h = '🃏 Нажмите на фигуру ещё раз: она навсегда перейдёт на вашу сторону. Это тратит ход.';
@@ -4552,7 +4640,7 @@ const EN = {
     "Заводные челюсти": "Windup Jaws",
     "Красная обструкция": "Red Obstruction",
     "В начале партии тайно выберите вражеского слона или коня: Предательство. Враг ходит ею как обычно. После 10-го хода врага можно потратить ход и дважды нажать на неё: она навсегда сменит цвет и будет подчиняться только вам (в этот ход сама не ходит).": "At the start of the game, secretly pick an enemy bishop or knight: Betrayal. The enemy moves it as usual. After the enemy's 10th move you can spend your turn and click it twice: it changes color for good and obeys only you (it does not move on that turn).",
-    "Шутовской колпак на вашу фигуру (враг не видит, на какую): 2 хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает. Перед третьим ходом врага колпак слетает сам: фигура снова создаёт угрозу, и её можно срубить.": "A jester's hat on your piece (the enemy cannot see which): for 2 enemy turns it cannot capture or give check. Whoever captures it dies, and the hat falls off. Before the enemy's third turn the hat falls off by itself: the piece threatens again and can be captured.",
+    "Шутовской колпак на вашу фигуру (враг не видит, на какую): 3 хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает. Перед четвёртым ходом врага колпак слетает сам: фигура снова создаёт угрозу, и её можно срубить.": "A jester's hat on your piece (the enemy cannot see which): for 3 enemy turns it cannot capture or give check. Whoever captures it dies, and the hat falls off. Before the enemy's fourth turn the hat falls off by itself: the piece threatens again and can be captured.",
     "Невидимая для врага кожура на свободной клетке с направлением (вверх, вниз, влево, вправо): вставшая на неё фигура (не король) поскальзывается и съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.": "A peel invisible to the enemy on a free square with a direction (up, down, left, right): a piece (not a king) that steps on it slips onto the neighbouring square in that direction and the peel vanishes. Costs no turn.",
     "Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт 3 ваших хода. Её можно срубить.": "A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for 3 of your turns. It can be captured.",
     "Помидор в одну из способностей врага: она отключается на 5 ходов врага (перезарядка идёт как обычно). Нельзя бросить в уже отключённую способность. Ход не тратится.": "A tomato at one of the enemy's abilities: it is disabled for 5 enemy turns (its cooldown keeps running as usual). Cannot be thrown at an ability that is already disabled. Costs no turn.",
@@ -4775,7 +4863,7 @@ const EN = {
     "Все клетки одного цвета острые на ваш ход и ход врага: вставшая на них фигура погибает. Занятые клетки острыми не становятся.": "All squares of one color are sharp on your turn and the enemy's: a piece that stops on them dies. Occupied squares do not become sharp.",
     "Одноразовая ловушка (королю не страшна): вставшая на неё фигура возвращается, откуда пришла. На пустой клетке скрыта и ход не тратит; на фигуре видна и тратит ход.": "A one-time trap (kings are immune): a piece that steps on it goes back where it came from. On an empty square it is hidden and costs no turn; on a piece it is visible and costs a turn.",
     "Тайный колпак на вашей фигуре: ": "A secret cap on your piece: ",
-    " хода врага она не рубит и не даёт шах. Срубивший её погибает. Перед третьим ходом врага колпак слетает.": " enemy turns it can't capture or give check. Whoever captures it dies. Before the enemy's third turn the cap falls off.",
+    " хода врага она не рубит и не даёт шах. Срубивший её погибает. Перед четвёртым ходом врага колпак слетает.": " enemy turns it can't capture or give check. Whoever captures it dies. Before the enemy's fourth turn the cap falls off.",
     "Скрытая кожура на свободной клетке с направлением: вставшая на неё фигура (не король) съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.": "A hidden peel on a free square with a direction: a piece (not a king) that steps on it slides to the neighboring square that way, and the peel disappears. Costs no turn.",
     "Отключает способность врага на ": "Disables an enemy ability for ",
     " ходов (перезарядка идёт). Ход не тратится.": " turns (its cooldown keeps running). Costs no turn.",
@@ -4834,7 +4922,27 @@ const EN = {
 };
 Object.assign(EN, {
     "Всплывающие объявления способностей": "Ability announcements",
-    "Анимации на доске (полёты, эффекты)": "Board animations (flights, effects)"
+    "Анимации на доске (полёты, эффекты)": "Board animations (flights, effects)",
+    "Фокусник": "Magician",
+    "Фокусы и пропажи": "Tricks & Vanishing Acts",
+    [PASSIVES.sawing.name]: "Sawing the Board",
+    [PASSIVES.sawing.desc]: "For your pieces the left and right edges of the board are connected: bishops, rooks, queens and the king pass through an edge, pawns capture across it, a knight jumps to the other side. The top and bottom are not connected.",
+    [ABILITIES.fog.name]: "Stage Fog",
+    [ABILITIES.fog.desc]: "Smoke covers the chosen square and every square within two steps of it (vertical and horizontal) for " + CONFIG.fogTurns + " of your turns. Pieces (not kings) in the smoke are invisible to the opponent, and the log does not show where exactly in the fog a piece stood. Costs no turn.",
+    [ABILITIES.hatch.name]: "Secret Hatch",
+    [ABILITIES.hatch.desc]: "Creates a hatch tile on a free square. A piece (not a king) that steps on it falls through and climbs out of another free hatch of the mover's choice. If there is no other free hatch, nothing happens.",
+    [ABILITIES.hocus.name]: "Hocus Pocus",
+    [ABILITIES.hocus.desc]: "Swaps two pieces (not kings) within a 5×5 square around the first one. Your king must not be left in check.",
+    [ABILITIES.assistant.name]: "Assistant",
+    [ABILITIES.assistant.desc]: "Turns any piece (not a king) into a hare for " + CONFIG.hareTurns + " of your turns. The hare cannot capture and moves like a queen, then the piece changes back.",
+    "🌫️ Выберите клетку: дым накроет её и клетки в двух шагах вокруг. Ход не тратится.": "🌫️ Choose a square: smoke covers it and the squares within two steps. Costs no turn.",
+    "Выберите свободную клетку для потайного люка.": "Choose a free square for the secret hatch.",
+    "Выберите первую фигуру (не короля) для обмена.": "Choose the first piece (not a king) to swap.",
+    "Выберите вторую фигуру в квадрате 5×5 вокруг первой: они поменяются местами.": "Choose the second piece in the 5×5 square around the first: they will swap places.",
+    "🪵 Фигура провалилась в люк: выберите свободный люк, из которого она вылезет.": "🪵 The piece fell through the hatch: choose a free hatch it climbs out of.",
+    "Нет первого хода": "No first move",
+    "🌫️ Дым рассеялся": "🌫️ The smoke has cleared",
+    "🪵 Фигура проваливается в потайной люк и вылезает из другого": "🪵 A piece falls through a secret hatch and climbs out of another"
 });
 
 let LANG = 'ru';
@@ -4988,7 +5096,7 @@ function syncHeroButtons() {
     const set = (id, on) => { const b = document.getElementById(id); if (b) b.classList.toggle('nohero', !on); };
     set('btnGhost', has('hypnotist'));                      // иллюзии Экстрасенса
     set('btnTraps', has('hunter') || has('jester'));        // капканы Охотника и скрытое Шута (кожура, колпак, предатель)
-    set('btnInvis', has('samurai') || has('hypnotist'));    // невидимки Самурая и Экстрасенса («Ход — это ложь»)
+    set('btnInvis', has('samurai') || has('hypnotist') || has('magician'));    // невидимки Самурая и Экстрасенса («Ход — это ложь»)
     // «Завершить ход» (Архитектор) скрывает updateEndBtn()
 }
 
@@ -5353,10 +5461,10 @@ render = function () {
 
 // Внутри подбора целей и выбора клетки вражеская невидимка выглядит как свободная клетка
 const _abilityCellsV = abilityCells;
-abilityCells = function (key, col) {
+abilityCells = function (key, col, t, first) {
     const prev = VIEWER;
     VIEWER = col;
-    try { return JESTER_KEYS.includes(key) ? jesterCells(key, col) : _abilityCellsV.apply(this, arguments); } finally { VIEWER = prev; }
+    try { return JESTER_KEYS.includes(key) ? jesterCells(key, col) : MAGI_KEYS.includes(key) ? magiCells(key, col, first) : _abilityCellsV.apply(this, arguments); } finally { VIEWER = prev; }
 };
 const _onModeCellV = onModeCell;
 onModeCell = function () {
@@ -5494,6 +5602,217 @@ function sweepBananas() {
         }
         return false;
     });
+}
+
+// =====================================================================
+//  ФОКУСНИК
+// =====================================================================
+const MAGI_KEYS = ['fog', 'hatch', 'hocus', 'assistant'];
+let HATCH_TAIL = null;      // что делать после выбора люка (продолжение хода), в состояние партии не входит
+const MAGI_MEMO = new Map();      // проверка «можно ли применить» тяжёлая, поэтому запоминаем её на время одного состояния партии
+
+const fogAt = (r, c) => !!(G && G.fogs && G.fogs.some(f => f.r === r && f.c === c));
+
+// Раскрыть записи журнала, скрытые за невидимой фигурой
+function unhideLogs(p) {
+    if (p.uid) G.log.forEach(e => { if (e.hid === p.uid) { e.text = e.real + ' 🥷'; delete e.hid; delete e.real; } });
+}
+
+// Фигуры (не короли) в дыму невидимы, вышедшие из дыма становятся видимыми
+function syncFog() {
+    if (!G || !G.board) return;
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const p = G.board[r][c];
+        if (!p) continue;
+        const inFog = fogAt(r, c) && p.t !== 'k' && !p.ghost && p.t !== 'j' && !p.lie;
+        if (inFog) {
+            if (!p.invis && !p.fogSeen) { p.invis = true; p.fog = true; }
+        } else if (p.fog) {
+            delete p.fog; delete p.fogSeen;
+            if (p.invis) { delete p.invis; unhideLogs(p); }
+        }
+    }
+}
+
+// Сценический туман: клетка и всё в двух шагах (по вертикали и горизонтали)
+function doFog(r, c) {
+    const col = G.turn, A = ABILITIES.fog;
+    if (!G.fogs) G.fogs = [];
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+        if (Math.abs(dr) + Math.abs(dc) > 2) continue;
+        const rr = r + dr, cc = c + dc;
+        if (!inb(rr, cc)) continue;
+        const old = G.fogs.find(f => f.r === rr && f.c === cc);
+        if (old) { old.left = CONFIG.fogTurns + 1; old.owner = col; }
+        else G.fogs.push({ r: rr, c: cc, owner: col, left: CONFIG.fogTurns + 1 });
+        G.fx.push({ r: rr, c: cc, type: 'smoke' });
+    }
+    sfx('poof');
+    G.last = null;
+    syncFog();
+    finishAbility('fog', `${A.icon} ${A.name}: дым над ${sqName(r, c)} и рядом (ход не потрачен)`);
+}
+
+// Потайной люк: плитка на свободной клетке
+function doHatch(r, c) {
+    const A = ABILITIES.hatch;
+    if (!G.hatches) G.hatches = [];
+    G.hatches.push({ r, c, owner: G.turn });
+    G.fx.push({ r, c, type: 'cast' });
+    sfx('trap');
+    finishAbility('hatch', `${A.icon} ${A.name}: люк на ${sqName(r, c)}`);
+}
+
+// Свободные люки, из которых может вылезти фигура, упавшая в люк на (r, c)
+const hatchExits = (r, c) => (G.hatches || []).filter(h => !(h.r === r && h.c === c) && !G.board[h.r][h.c]);
+
+// Фигура провалилась в люк from и вылезла из люка to
+function hatchFall(from, to) {
+    const p = G.board[from[0]][from[1]];
+    if (!p) return;
+    G.board[from[0]][from[1]] = null;
+    G.board[to[0]][to[1]] = p;
+    p.prev = [from[0], from[1]];
+    G.fx.push({ r: to[0], c: to[1], type: 'ghost' });
+    queueAnim({ k: 'hatch', from: [from[0], from[1]], to: [to[0], to[1]] });
+    sfx('poof');
+    G.last = null;
+    const hid = p.invis || fogAt(from[0], from[1]) || fogAt(to[0], to[1]);
+    if (hid) addLog('n', '🪵 Фигура проваливается в потайной люк и вылезает из другого');
+    else addLog('n', `🪵 ${pieceSym(p)} проваливается в люк на ${sqName(from[0], from[1])} и вылезает на ${sqName(to[0], to[1])}`);
+    syncFog();
+}
+
+// После хода: фигура, вставшая на люк, проваливается (если есть свободный люк). true: ход продолжится после выбора игрока
+function hatchTrigger(p, mv, cont) {
+    if (!G.hatches || !G.hatches.length) return false;
+    const q = G.board[mv.tr][mv.tc];
+    if (q !== p || p.t === 'k' || p.ghost || p.warded > 0) return false;
+    if (!G.hatches.some(h => h.r === mv.tr && h.c === mv.tc)) return false;
+    const exits = hatchExits(mv.tr, mv.tc);
+    if (!exits.length) return false;
+    if (exits.length === 1) { hatchFall([mv.tr, mv.tc], [exits[0].r, exits[0].c]); return false; }
+    HATCH_TAIL = cont;
+    G.sel = null; G.moves = [];
+    G.mode = { type: 'hatchexit', locked: true, from: [mv.tr, mv.tc], cells: exits.map(h => [h.r, h.c]) };
+    render();
+    return true;
+}
+
+// Фокус-Покус: две фигуры в квадрате 5×5 вокруг первой
+const hocusPiece = (p, col) => !!p && p.t !== 'k' && p.t !== 'j' && !p.pair && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col) && !(p.ghost && p.c === col);
+function hocusOk(a, b2, col) {
+    const b = G.board, p = b[a[0]][a[1]], q = b[b2[0]][b2[1]];
+    if (!hocusPiece(p, col) || !hocusPiece(q, col)) return false;
+    if ((p.t === 'p' && (b2[0] === 0 || b2[0] === 7)) || (q.t === 'p' && (a[0] === 0 || a[0] === 7))) return false;      // пешка не должна оказаться на краевой горизонтали
+    const nb = cloneBoard(b);
+    nb[a[0]][a[1]] = { ...q };
+    nb[b2[0]][b2[1]] = { ...p };
+    return safeAfter(nb, col);
+}
+function hocusCells(col, a, first) {
+    const out = [];
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+        const r = a[0] + dr, c = a[1] + dc;
+        if (!inb(r, c) || (!dr && !dc)) continue;
+        if (hocusOk(a, [r, c], col)) { out.push([r, c]); if (first) return out; }
+    }
+    return out;
+}
+
+// Ассистент: фигура может стать зайцем, если после этого ваш король в безопасности
+function assistantOk(r, c, col) {
+    const b = G.board, p = b[r][c];
+    if (!p || p.t === 'k' || p.t === 'j' || p.t === 'h' || p.pair || p.soul || p.sup || p.lie || hiddenFor(p, col) || (p.ghost && p.c === col)) return false;
+    if (p.c !== col && !p.ghost && magicProof(b, r, c)) return false;
+    const nb = cloneBoard(b);
+    nb[r][c] = { ...nb[r][c], t: 'h', x: undefined };
+    return safeAfter(nb, col);
+}
+
+function magiCells(key, col, first) {
+    const b = G.board;
+    if (first && (key === 'hocus' || key === 'assistant')) {
+        const mkey = [key, col, G.turnNo || 0, G.log.length, (G.fogs || []).length, (G.hatches || []).length, G.over ? 1 : 0].join('|');
+        if (MAGI_MEMO.has(mkey)) return MAGI_MEMO.get(mkey);
+        if (MAGI_MEMO.size > 40) MAGI_MEMO.clear();
+        const res = magiCellsRaw(key, col, true);
+        MAGI_MEMO.set(mkey, res);
+        return res;
+    }
+    return magiCellsRaw(key, col, first);
+}
+function magiCellsRaw(key, col, first) {
+    const b = G.board, cells = [];
+    if (key === 'fog') {
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) cells.push([r, c]);
+    } else if (key === 'hatch') {
+        if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом плитка не спасает короля, а ход тратит
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isFreeCell(r, c)) { cells.push([r, c]); if (first) return cells; }
+    } else if (key === 'hocus') {
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            if (!hocusPiece(b[r][c], col)) continue;
+            if (hocusCells(col, [r, c], true).length) { cells.push([r, c]); if (first) return cells; }
+        }
+    } else if (key === 'assistant') {
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (assistantOk(r, c, col)) { cells.push([r, c]); if (first) return cells; }
+    }
+    return cells;
+}
+
+function doHocus(a, b2) {
+    const A = ABILITIES.hocus, bd = G.board;
+    const p = bd[a[0]][a[1]], q = bd[b2[0]][b2[1]];
+    const ghosts = [a, b2].filter(([r, c]) => bd[r][c].ghost);
+    if (ghosts.length) {      // вражеская иллюзия выглядела настоящей фигурой
+        ghosts.forEach(([r, c]) => vanishGhost(r, c, 'это была иллюзия', true));
+        finishAbility('hocus', `${A.icon} ${A.name}: среди целей была иллюзия, она рассеялась`);
+        return;
+    }
+    bd[a[0]][a[1]] = q;
+    bd[b2[0]][b2[1]] = p;
+    p.moved = true; q.moved = true;
+    delete p.fogSeen; delete q.fogSeen;
+    G.fx.push({ r: a[0], c: a[1], type: 'poof' }, { r: b2[0], c: b2[1], type: 'poof' });
+    queueAnim({ k: 'swap', a: [a[0], a[1]], b: [b2[0], b2[1]] });
+    sfx('illusion');
+    G.last = null;
+    const hid = p.invis || q.invis || fogAt(a[0], a[1]) || fogAt(b2[0], b2[1]);
+    finishAbility('hocus', hid
+        ? `${A.icon} ${A.name}: две фигуры поменялись местами (в тумане)`
+        : `${A.icon} ${A.name}: ${pieceSym(p)} ${sqName(a[0], a[1])} ⇄ ${pieceSym(q)} ${sqName(b2[0], b2[1])}`);
+}
+
+function doAssistant(r, c) {
+    const col = G.turn, A = ABILITIES.assistant, p = G.board[r][c];
+    if (p.ghost) {
+        vanishGhost(r, c, 'это была иллюзия', true);
+        finishAbility('assistant', `${A.icon} ${A.name} по ${sqName(r, c)}: цель оказалась иллюзией и рассеялась`);
+        return;
+    }
+    const orig = pieceSym(p), origT = p.t;
+    p.hare = { t: p.t, x: p.x ? [...p.x] : undefined, left: CONFIG.hareTurns + 1, by: col };
+    p.t = 'h'; delete p.x;
+    G.fx.push({ r, c, type: 'poof', delay: ANIM.board ? 0.35 : 0 });
+    queueAnim({ k: 'hat', at: [r, c], piece: { c: p.c, t: origT } });
+    sfx('illusion');
+    G.last = null;
+    const hid = p.invis || fogAt(r, c);
+    finishAbility('assistant', hid
+        ? `${A.icon} ${A.name}: фигура в тумане превращается в зайца на ${CONFIG.hareTurns} ${plural(CONFIG.hareTurns)}`
+        : `${A.icon} ${A.name}: ${orig} на ${sqName(r, c)} превращается в зайца на ${CONFIG.hareTurns} ${plural(CONFIG.hareTurns)}`);
+}
+
+// Заяц снова становится фигурой
+function revertHare(r, c, p) {
+    const h = p.hare;
+    delete p.hare;
+    p.t = h.t;
+    if (h.x && h.x.length) p.x = h.x;
+    let note = '';
+    if (p.t === 'p' && (r === 0 || r === 7)) { p.t = 'q'; note = ' (пешка дошла до края и стала ферзём)'; }
+    G.fx.push({ r, c, type: 'poof' });
+    addLog('n', p.invis ? '🐇 Заяц снова становится фигурой' : `🐇 Заяц на ${sqName(r, c)} снова становится фигурой: ${pieceSym(p)}${note}`);
 }
 
 /* =====================================================================
@@ -5717,6 +6036,69 @@ function runAnimQueue() {
                         { opacity: 1, transform: 'none', filter: 'none' }
                     ], { duration: 550, easing: 'ease-out' });
                 }, 700);
+            } else if (a.k === 'hatch') {
+                const se = cellEl(a.from[0], a.from[1]), de = cellEl(a.to[0], a.to[1]);
+                const real = de && de.querySelector('.piece');
+                if (!se || !real) return;
+                const sr = se.getBoundingClientRect(), dr = de.getBoundingClientRect();
+                hideCell(a.to[0], a.to[1], 950);
+                const down = pieceClone(real, sr);
+                const an1 = down.animate([
+                    { transform: 'translateY(0) scale(1)', opacity: 1, offset: 0 },
+                    { transform: `translateY(${sr.height * 0.35}px) scale(0.1)`, opacity: 0, offset: 1 }
+                ], { duration: 450, easing: 'ease-in', fill: 'forwards' });
+                an1.onfinish = () => down.remove();
+                setTimeout(() => {
+                    const up = pieceClone(real, dr);
+                    const an2 = up.animate([
+                        { transform: `translateY(${dr.height * 0.35}px) scale(0.1)`, opacity: 0, offset: 0 },
+                        { transform: 'translateY(0) scale(1)', opacity: 1, offset: 1 }
+                    ], { duration: 450, easing: 'ease-out', fill: 'forwards' });
+                    an2.onfinish = () => up.remove();
+                    setTimeout(() => up.remove(), 800);
+                }, 480);
+                setTimeout(() => down.remove(), 900);
+            } else if (a.k === 'swap') {
+                [[a.a, a.b, -1], [a.b, a.a, 1]].forEach(([x, y, sgn]) => {
+                    const xe = cellEl(x[0], x[1]), ye = cellEl(y[0], y[1]);
+                    const real = xe && xe.querySelector('.piece');
+                    if (!xe || !ye || !real) return;
+                    const xr = xe.getBoundingClientRect(), yr = ye.getBoundingClientRect();
+                    const cl = pieceClone(real, yr);
+                    hideCell(x[0], x[1], 700);
+                    const dx = xr.left - yr.left, dy = xr.top - yr.top;
+                    const an = cl.animate([
+                        { transform: 'translate(0,0) scale(1)', offset: 0, easing: 'ease-out' },
+                        { transform: `translate(${dx / 2}px,${dy / 2 + sgn * yr.height * 0.6}px) scale(1.2) rotate(${sgn * 20}deg)`, offset: 0.5, easing: 'ease-in' },
+                        { transform: `translate(${dx}px,${dy}px) scale(1)`, offset: 1 }
+                    ], { duration: 650, fill: 'forwards' });
+                    an.onfinish = () => cl.remove();
+                    setTimeout(() => cl.remove(), 1000);
+                });
+            } else if (a.k === 'hat') {
+                const te = cellEl(a.at[0], a.at[1]);
+                if (!te) return;
+                const rect = te.getBoundingClientRect();
+                hideCell(a.at[0], a.at[1], 780);      // заяц появится, когда цилиндр поднимется
+                const gp = document.createElement('div');      // исходная фигура стоит на месте, пока её не накроет цилиндр
+                gp.className = `piece ${a.piece.c} t-${a.piece.t} doomed`;
+                gp.innerHTML = GLYPH[a.piece.t];
+                te.appendChild(gp);
+                setTimeout(() => gp.remove(), 520);
+                const hat = document.createElement('div');
+                hat.className = 'magic-hat';
+                hat.textContent = '🎩';
+                hat.style.cssText = `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;font-size:${rect.width * 0.85}px`;
+                document.body.appendChild(hat);
+                const up = -rect.height * 2.4;
+                const an = hat.animate([
+                    { transform: `translateY(${up}px) rotate(-18deg)`, opacity: 0, offset: 0, easing: 'cubic-bezier(.4,0,.9,.6)' },
+                    { transform: 'translateY(0) rotate(0deg)', opacity: 1, offset: 0.3, easing: 'linear' },
+                    { transform: 'translateY(0) rotate(0deg)', opacity: 1, offset: 0.58, easing: 'ease-out' },
+                    { transform: `translateY(${up}px) rotate(14deg)`, opacity: 0, offset: 1 }
+                ], { duration: 1100, fill: 'forwards' });
+                an.onfinish = () => hat.remove();
+                setTimeout(() => hat.remove(), 1500);
             }
         } catch (e) { }
     });
