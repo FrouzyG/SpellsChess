@@ -329,7 +329,7 @@ Object.assign(ABILITIES, {
     fog: {
         free: true,
         icon: '🌫️', name: 'Сценический туман',
-        desc: 'Дым накрывает выбранную клетку и все клетки в двух шагах от неё (по вертикали и горизонтали) на ' + CONFIG.fogTurns + ' ваших хода. Фигуры (не короли) в дыму невидимы для противника, а где именно в тумане фигура встала, в журнале не видно. Ход не тратится.'
+        desc: 'Дым накрывает квадрат 3×3 вокруг выбранной клетки (в любом месте доски) на ' + CONFIG.fogTurns + ' ваших хода. Фигуры (не короли) в дыму невидимы для противника, а где именно в тумане фигура встала, в журнале не видно. Ход не тратится.'
     },
     hatch: {
         icon: '🪵', name: 'Потайной люк',
@@ -959,6 +959,25 @@ function applyMove(board, mv, promo) {
 function applyEffects(b, log) {
     if (!G.conv.length && !G.portals.length && !G.hogs.length) return;
     const touched = new Set();
+    // Ход сурка: фигура на временной ловушке возвращается туда, откуда пришла (король не страдает).
+    // Срабатывает ДО конвейера, иначе конвейер увёл бы фигуру с ловушки.
+    const hogStep = () => {
+        G.hogs.slice().forEach(h => {
+            const q = b[h.r][h.c];
+            if (!q) { if (log) h.exempt = null; return; }
+            if (q.ghost || q.t === 'k' || (h.exempt && q.uid === h.exempt)) return;
+            const pv = q.prev;
+            if (!pv || b[pv[0]][pv[1]]) return;
+            b[pv[0]][pv[1]] = q;
+            b[h.r][h.c] = null;
+            if (log) {
+                if (CONFIG.hogOnce) G.hogs = G.hogs.filter(x => x !== h);
+                G.fx.push({ r: h.r, c: h.c, type: 'poof' }, { r: pv[0], c: pv[1], type: 'ghost' });
+                addLog('n', q.invis ? '⏳ Ход сурка: невидимая фигура вернулась назад' : `⏳ Ход сурка: ${pieceSym(q)} возвращается с ${sqName(h.r, h.c)} на ${sqName(pv[0], pv[1])}`);
+            }
+        });
+    };
+    hogStep();
     // 1. Конвейеры толкают фигуру на себе (и всю колонну перед ней)
     G.conv.map(cv => ({ cv, p: b[cv.r][cv.c] })).filter(x => x.p).forEach(({ cv, p }) => {
         if (b[cv.r][cv.c] !== p || touched.has(p)) return;
@@ -967,7 +986,6 @@ function applyEffects(b, log) {
         let r = cv.r, c = cv.c;
         while (inb(r, c) && b[r][c]) { chain.push([r, c]); r += dr; c += dc; }
         if (!inb(r, c)) return;                     // некуда толкать: остаются на месте
-        if (chain.some(([cr, cc]) => { const q = b[cr][cc]; return q && q.t !== 'k' && q.warded > 0; })) return;   // конвейер не двигает только фигуры под «Очищением»; барьер Мага ему не помеха
         for (let i = chain.length - 1; i >= 0; i--) {
             const [cr, cc] = chain[i], q = b[cr][cc];
             b[cr + dr][cc + dc] = q;
@@ -992,21 +1010,8 @@ function applyEffects(b, log) {
         [pa, pb].forEach(q => { if (q) { q.moved = true; touched.add(q); } });
         if (log) G.fx.push({ r: a.r, c: a.c, type: 'ghost' }, { r: c2.r, c: c2.c, type: 'ghost' });
     });
-    // 3. Ход сурка: фигура на временной ловушке возвращается туда, откуда пришла (король не страдает)
-    G.hogs.slice().forEach(h => {
-        const q = b[h.r][h.c];
-        if (!q) { if (log) h.exempt = null; return; }
-        if (q.ghost || q.t === 'k' || (h.exempt && q.uid === h.exempt)) return;
-        const pv = q.prev;
-        if (!pv || b[pv[0]][pv[1]]) return;
-        b[pv[0]][pv[1]] = q;
-        b[h.r][h.c] = null;
-        if (log) {
-            if (CONFIG.hogOnce) G.hogs = G.hogs.filter(x => x !== h);
-            G.fx.push({ r: h.r, c: h.c, type: 'poof' }, { r: pv[0], c: pv[1], type: 'ghost' });
-            addLog('n', q.invis ? '⏳ Ход сурка: невидимая фигура вернулась назад' : `⏳ Ход сурка: ${pieceSym(q)} возвращается с ${sqName(h.r, h.c)} на ${sqName(pv[0], pv[1])}`);
-        }
-    });
+    // 3. Ход сурка ещё раз: фигура, которую конвейер или портал поставили на ловушку, тоже возвращается
+    hogStep();
 }
 
 // Король в безопасности после хода/способности, с учётом срабатывания конвейеров и порталов (nb: копия доски)
@@ -1746,7 +1751,7 @@ function abilityCells(key, col, t, first) {
         }
     } else if (key === 'groundhog') {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-            if (G.hogs.some(h => h.r === r && h.c === c)) continue;
+            if (G.hogs.some(h => h.r === r && h.c === c && h.visible)) continue;      // скрытую ловушку сурка новая заменит
             const p = b[r][c];
             if (!p || hiddenFor(p, col)) cells.push([r, c]);    // пустая клетка (или невидимка врага): скрыто и бесплатно
             else if (safeNow && !p.ghost) cells.push([r, c]);   // на фигуру: видно и тратит ход
@@ -1770,7 +1775,7 @@ function abilityCells(key, col, t, first) {
     } else if (key === 'trap') {
         if (!safeNow) return [];
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-            if ((!b[r][c] || hiddenFor(b[r][c], col)) && !G.traps.some(x => x.r === r && x.c === c)) cells.push([r, c]);
+            if (!b[r][c] || hiddenFor(b[r][c], col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
         }
     } else if (key === 'lure') {
         if (!safeNow) return [];
@@ -1877,7 +1882,7 @@ function startGame() {
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
         cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
-        bananas: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: []
+        bananas: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false }
     };
     HIST = [];
     ['w', 'b'].forEach(c => {
@@ -2157,7 +2162,7 @@ function sweepLures() {
 const sharpAt = (r, c) => G.sharp.find(z => (r + c) % 2 === z.parity && !z.skip.includes(r + ',' + c)) || null;
 
 // Острые клетки Самурая убивают фигуры, оказавшиеся на них, потом исчезают
-function sweepSharp() {
+function sweepSharp(pre) {      // pre: проверка до конвейера, счётчик ходов не трогаем
     G.sharp.forEach(z => {
         const vic = [];
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
@@ -2177,8 +2182,9 @@ function sweepSharp() {
             sfx('capture');
             addLog('n', `🗡 ${pieceSym(dp)} гибнет на острой клетке ${sqName(r, c)}`);
         });
-        z.left--;
+        if (!pre) z.left--;
     });
+    if (pre) return;
     const before = G.sharp.length;
     G.sharp = G.sharp.filter(z => z.left > 0);
     if (G.sharp.length < before) addLog('n', '🗡 Острые клетки исчезли');
@@ -2238,6 +2244,9 @@ function endTurn() {
             }
         }
     }));
+    if (G.conv.length || G.portals.length) {      // ловушки срабатывают и на фигуре, которую конвейер/портал сейчас сдвинет
+        sweepBananas(); sweepBurn(); sweepTraps(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true);
+    }
     applyEffects(G.board, true);
     sweepBananas();
     sweepBurn();
@@ -2635,6 +2644,7 @@ function useAbility(key, r, c, ref) {
         G.fx.push({ r, c, type: 'revive' });
         sfx('revive');
     } else if (key === 'trap') {
+        G.traps = G.traps.filter(x => !(x.r === r && x.c === c));      // одинаковые ловушки: действует та, что поставлена последней
         G.traps.push({ r, c, owner: col });
         text = `${A.icon} ${A.name}: капкан установлен (место скрыто)`;
         sfx('trap');
@@ -2908,6 +2918,7 @@ function doGroundhog(r, c) {
     const col = G.turn, via = G.mode && G.mode.via, cdKey = via || 'groundhog';
     const target = G.board[r][c];
     if (hiddenFor(target, col)) revealPiece(r, c, 'на неё применили Ход сурка');      // это уже «фигура под ловушкой»: ход тратится
+    G.hogs = G.hogs.filter(h => !(h.r === r && h.c === c));      // одинаковые ловушки: действует последняя
     G.hogs.push({ r, c, owner: col, exempt: target ? uidOf(target) : null, visible: !!target });
     if (target) {
         G.fx.push({ r, c, type: 'cast' });
@@ -2959,6 +2970,7 @@ function startMode(k, via) {
     const base = via ? { type: k, via } : { type: k };
     if (k === 'resurrect' || k === 'raise') G.mode = { ...base, piece: null, cells: [] };
     else if (k === 'timeslow' || k === 'tomato') G.mode = { ...base, cells: [] };
+    else if (k === 'hatch') G.mode = { ...base, stage: 'piece', need: (G.hatchUsed && G.hatchUsed[G.turn]) ? 1 : 2, cells: abilityCells(k, G.turn) };      // первый раз сразу два люка
     else if (STAGED.includes(k)) G.mode = { ...base, stage: 'piece', cells: abilityCells(k, G.turn) };
     else G.mode = { ...base, cells: abilityCells(k, G.turn) };
 }
@@ -2974,7 +2986,15 @@ function onModeCell(r, c) {
         return;
     }
     if (t === 'fog') { doFog(r, c); return; }
-    if (t === 'hatch') { doHatch(r, c); return; }
+    if (t === 'hatch') {
+        if (m.need === 2 && m.stage === 'piece') {          // первый люк из двух
+            m.first = [r, c]; m.stage = 'second';
+            m.cells = abilityCells('hatch', G.turn).filter(([rr, cc]) => !(rr === r && cc === c));
+            G.sel = { r, c };
+            render();
+        } else doHatch(r, c, m.first);
+        return;
+    }
     if (t === 'assistant') { doAssistant(r, c); return; }
     if (t === 'hocus') {
         if (m.stage === 'piece') {
@@ -3673,8 +3693,8 @@ function renderStatus() {
         else if (t === 'jaws') h = 'Выберите свободную клетку на первых трёх горизонталях вашей стороны: там появятся заводные челюсти.';
         else if (t === 'tomato') h = '🍅 Нажмите на способность врага в его панели: она отключится на ' + CONFIG.tomatoTurns + ' ходов. Ход не тратится.';
         else if (t === 'kghost') h = 'Король ушёл из-под шаха: выберите клетку, где останется его иллюзия.';
-        else if (t === 'fog') h = '🌫️ Выберите клетку: дым накроет её и клетки в двух шагах вокруг. Ход не тратится.';
-        else if (t === 'hatch') h = 'Выберите свободную клетку для потайного люка.';
+        else if (t === 'fog') h = '🌫️ Выберите центр дымовой завесы 3×3 (любая клетка). Ход не тратится.';
+        else if (t === 'hatch') h = m.need === 2 ? (m.stage === 'piece' ? 'Первое применение создаёт сразу два люка. Выберите клетку для первого.' : 'Выберите клетку для второго люка.') : 'Выберите свободную клетку для потайного люка.';
         else if (t === 'hocus') h = m.stage === 'piece' ? 'Выберите первую фигуру (не короля) для обмена.' : 'Выберите вторую фигуру в квадрате 5×5 вокруг первой: они поменяются местами.';
         else if (t === 'assistant') h = 'Выберите фигуру (не короля): она станет зайцем на ' + CONFIG.hareTurns + ' ваших хода.';
         else if (t === 'hatchexit') h = '🪵 Фигура провалилась в люк: выберите свободный люк, из которого она вылезет.';
@@ -4928,14 +4948,14 @@ Object.assign(EN, {
     [PASSIVES.sawing.name]: "Sawing the Board",
     [PASSIVES.sawing.desc]: "For your pieces the left and right edges of the board are connected: bishops, rooks, queens and the king pass through an edge, pawns capture across it, a knight jumps to the other side. The top and bottom are not connected.",
     [ABILITIES.fog.name]: "Stage Fog",
-    [ABILITIES.fog.desc]: "Smoke covers the chosen square and every square within two steps of it (vertical and horizontal) for " + CONFIG.fogTurns + " of your turns. Pieces (not kings) in the smoke are invisible to the opponent, and the log does not show where exactly in the fog a piece stood. Costs no turn.",
+    [ABILITIES.fog.desc]: "Smoke covers a 3×3 square around the chosen square (anywhere on the board) for " + CONFIG.fogTurns + " of your turns. Pieces (not kings) in the smoke are invisible to the opponent, and the log does not show where exactly in the fog a piece stood. Costs no turn.",
     [ABILITIES.hatch.name]: "Secret Hatch",
     [ABILITIES.hatch.desc]: "Creates a hatch tile on a free square. A piece (not a king) that steps on it falls through and climbs out of another free hatch of the mover's choice. If there is no other free hatch, nothing happens.",
     [ABILITIES.hocus.name]: "Hocus Pocus",
     [ABILITIES.hocus.desc]: "Swaps two pieces (not kings) within a 5×5 square around the first one. Your king must not be left in check.",
     [ABILITIES.assistant.name]: "Assistant",
     [ABILITIES.assistant.desc]: "Turns any piece (not a king) into a hare for " + CONFIG.hareTurns + " of your turns. The hare cannot capture and moves like a queen, then the piece changes back.",
-    "🌫️ Выберите клетку: дым накроет её и клетки в двух шагах вокруг. Ход не тратится.": "🌫️ Choose a square: smoke covers it and the squares within two steps. Costs no turn.",
+    "🌫️ Выберите центр дымовой завесы 3×3 (любая клетка). Ход не тратится.": "🌫️ Choose the centre of the 3×3 smoke screen (any square). Costs no turn.",
     "Выберите свободную клетку для потайного люка.": "Choose a free square for the secret hatch.",
     "Выберите первую фигуру (не короля) для обмена.": "Choose the first piece (not a king) to swap.",
     "Выберите вторую фигуру в квадрате 5×5 вокруг первой: они поменяются местами.": "Choose the second piece in the 5×5 square around the first: they will swap places.",
@@ -5512,7 +5532,7 @@ function jesterCells(key, col) {
         }
     } else if (key === 'banana') {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-            if (isFreeCell(r, c) && !G.bananas.some(x => x.r === r && x.c === c) && !G.traps.some(x => x.r === r && x.c === c)) cells.push([r, c]);
+            if (isFreeCell(r, c)) cells.push([r, c]);      // чужая скрытая кожура или капкан не мешают: новая ляжет поверх
         }
     } else if (key === 'jaws') {
         ownThree(col).forEach(r => {
@@ -5567,6 +5587,7 @@ function startPretenseIfNeeded(c) {
 
 function placeBanana(from, to) {
     const col = G.turn, cdKey = (G.mode && G.mode.via) || 'banana';
+    G.bananas = G.bananas.filter(x => !(x.r === from[0] && x.c === from[1]));      // одинаковые ловушки: действует последняя
     G.bananas.push({ r: from[0], c: from[1], owner: col, dir: [to[0] - from[0], to[1] - from[1]] });
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = 'banana';
@@ -5638,8 +5659,7 @@ function syncFog() {
 function doFog(r, c) {
     const col = G.turn, A = ABILITIES.fog;
     if (!G.fogs) G.fogs = [];
-    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
-        if (Math.abs(dr) + Math.abs(dc) > 2) continue;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {      // квадрат 3×3 вокруг выбранной клетки
         const rr = r + dr, cc = c + dc;
         if (!inb(rr, cc)) continue;
         const old = G.fogs.find(f => f.r === rr && f.c === cc);
@@ -5654,13 +5674,15 @@ function doFog(r, c) {
 }
 
 // Потайной люк: плитка на свободной клетке
-function doHatch(r, c) {
+function doHatch(r, c, first) {
     const A = ABILITIES.hatch;
     if (!G.hatches) G.hatches = [];
-    G.hatches.push({ r, c, owner: G.turn });
-    G.fx.push({ r, c, type: 'cast' });
+    if (!G.hatchUsed) G.hatchUsed = { w: false, b: false };
+    G.hatchUsed[G.turn] = true;
+    const cells = first ? [first, [r, c]] : [[r, c]];
+    cells.forEach(([hr, hc]) => { G.hatches.push({ r: hr, c: hc, owner: G.turn }); G.fx.push({ r: hr, c: hc, type: 'cast' }); });
     sfx('trap');
-    finishAbility('hatch', `${A.icon} ${A.name}: люк на ${sqName(r, c)}`);
+    finishAbility('hatch', first ? `${A.icon} ${A.name}: два люка, ${sqName(first[0], first[1])} и ${sqName(r, c)}` : `${A.icon} ${A.name}: люк на ${sqName(r, c)}`);
 }
 
 // Свободные люки, из которых может вылезти фигура, упавшая в люк на (r, c)
@@ -5748,7 +5770,7 @@ function magiCellsRaw(key, col, first) {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) cells.push([r, c]);
     } else if (key === 'hatch') {
         if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом плитка не спасает короля, а ход тратит
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isFreeCell(r, c)) { cells.push([r, c]); if (first) return cells; }
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isFreeCell(r, c)) { cells.push([r, c]); if (first && cells.length >= 2) return cells; }
     } else if (key === 'hocus') {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             if (!hocusPiece(b[r][c], col)) continue;
