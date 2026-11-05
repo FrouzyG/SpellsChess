@@ -5078,3 +5078,39 @@ button {
     .ed-win.need {
         outline: 2px solid var(--gold);
     }
+
+/* ---------- Цвета кругов выбора клеток Фокусника: люк коричневый, туман белый, Фокус-Покус фиолетовый ---------- */
+.cell.t-hatch::after, .cell.t-hatchexit::after {
+    border: 3px solid #8a5a2b;
+    background: rgba(138, 90, 43, 0.45);
+}
+
+.cell.t-fog::after {
+    border: 3px solid #ffffff;
+    background: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 0 1px #000000;
+}
+
+.cell.t-hocus::after {
+    border: 3px solid #b36bff;
+    background: rgba(179, 107, 255, 0.35);
+}
+
+/* красная точка на кнопке «Меню»: пришло сообщение в чате */
+#mMenu {
+    position: relative;
+    overflow: visible;
+}
+
+    #mMenu.has-unread::after {
+        content: "";
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        width: 14px;
+        height: 14px;
+        background: #ff2d2d;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        box-shadow: 0 0 6px rgba(255, 45, 45, 0.8);
+    }
