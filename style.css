@@ -3952,6 +3952,22 @@ button {
         margin: 0;
     }
 
+    .rooms-create .room-opt {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+        .rooms-create .room-opt input {
+            width: auto;
+            margin-top: 3px;
+            padding: 0;
+            flex: none;
+            accent-color: var(--pink);
+        }
+
 .rooms-info {
     font-size: 13px;
     opacity: 0.75;

@@ -36,7 +36,8 @@ const CONFIG = {
     wardTurns: 3,            // Очищение: сколько ходов держится защита от магии
     capTurns: 4,             // Шут: сколько ходов ВРАГА держится шутовской колпак (колпак держится на 1 меньше)
     jawsTurns: 3,            // Шут: сколько своих ходов живут заводные челюсти
-    fogTurns: 4,             // Фокусник: сколько ходов владельца держится дым
+    fogTurns: 5,             // Фокусник: сколько ходов владельца держится дым
+    sawingCooldown: 3,       // Фокусник: на сколько своих ходов пассивка «Распиливание» отключается у ВСЕХ фигур после прохода через край доски
     hareTurns: 3,            // Фокусник: на сколько своих ходов фигура становится зайцем
     tomatoTurns: 5,          // Шут: сколько ходов ВРАГА способность остаётся отключённой
     betrayAfter: 10,         // Шут: после какого по счёту хода ВРАГА можно ходить предательской фигурой
@@ -323,13 +324,13 @@ HEROES.jester = { icon: '🤡', name: 'Шут', tag: 'Трюки и сюрпри
 // Фокусник
 PASSIVES.sawing = {
     icon: '🪚', name: 'Распиливание доски',
-    desc: 'Для ваших фигур левый и правый край доски соединены: слон, ладья, ферзь и король проходят сквозь край, пешки рубят через него, конь перепрыгивает на другую сторону. Верх и низ не соединены.'
+    desc: 'Для ваших фигур левый и правый край доски соединены: слон, ладья и ферзь проходят сквозь край, пешки рубят через него, конь перепрыгивает на другую сторону. Верх и низ не соединены. На короля пассивка не действует. Когда любая ваша фигура прошла через край, пассивка отключается у всех ваших фигур на ' + CONFIG.sawingCooldown + ' хода.'
 };
 Object.assign(ABILITIES, {
     fog: {
         free: true,
         icon: '🌫️', name: 'Сценический туман',
-        desc: 'Дым накрывает квадрат 3×3 вокруг выбранной клетки (в любом месте доски) на ' + CONFIG.fogTurns + ' ваших хода. Фигуры (не короли) в дыму невидимы для противника, а где именно в тумане фигура встала, в журнале не видно. Ход не тратится.'
+        desc: 'Дым накрывает квадрат 3×3 вокруг выбранной клетки (в любом месте доски) на ' + CONFIG.fogTurns + ' ваших ' + plural(CONFIG.fogTurns) + '. Фигуры (не короли) в дыму невидимы для противника, а где именно в тумане фигура встала, в журнале не видно. Ход не тратится.'
     },
     hatch: {
         icon: '🪵', name: 'Потайной люк',
@@ -439,14 +440,29 @@ const KG = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]
 const DIAG = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
 const ORTH = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
-function initialBoard() {
+// Расстановка Фишера (шахматы 960): слоны на клетках разного цвета, король между ладьями, у обеих сторон одинаково. Случайность берётся из общего числа партии.
+function fischerBack() {
+    const row = Array(8).fill(null);
+    const take = list => list.splice(Math.floor(rnd() * list.length), 1)[0];
+    row[take([0, 2, 4, 6])] = 'b';
+    row[take([1, 3, 5, 7])] = 'b';
+    let free = [0, 1, 2, 3, 4, 5, 6, 7].filter(i => !row[i]);
+    row[take(free)] = 'q';
+    row[take(free)] = 'n';
+    row[take(free)] = 'n';
+    free = [0, 1, 2, 3, 4, 5, 6, 7].filter(i => !row[i]);      // осталось 3 клетки: ладья, король, ладья
+    ['r', 'k', 'r'].forEach((t, i) => { row[free[i]] = t; });
+    return row;
+}
+function initialBoard(fischer) {
     const b = Array.from({ length: 8 }, () => Array(8).fill(null));
-    const back = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
+    const back = fischer ? fischerBack() : ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
     for (let c = 0; c < 8; c++) {
         b[0][c] = mk(back[c], 'b');
         b[1][c] = mk('p', 'b');
         b[6][c] = mk('p', 'w');
         b[7][c] = mk(back[c], 'w');
+        if (fischer) { if (back[c] === 'k' || back[c] === 'r') { b[0][c].moved = true; b[7][c].moved = true; } }      // рокировки в этом режиме нет
     }
     return b;
 }
@@ -465,7 +481,13 @@ const supOpen = (b, t) => !!t && !!t.sup && !t.ghost && !!t.prev && !b[t.prev[0]
 const scaredDirs = tp => ((tp === 'r' || tp === 'j') ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
 
 // Распиливание доски (Фокусник): левый и правый край доски соединены для его фигур
-const wrapsOf = p => !!p && !!G && !!G.hero && G.hero[p.c] === 'magician';
+const wrapsOf = p => !!p && p.t !== 'k' && !!G && !!G.hero && G.hero[p.c] === 'magician' && !(G.cd && G.cd[p.c] && G.cd[p.c].sawing > 0);
+// Ход прошёл сквозь левый/правый край доски? (клетки пути соседние, поэтому скачок по столбцам больше 2 может быть только через край)
+function crossedEdge(mv) {
+    const pts = [[mv.fr, mv.fc], ...(mv.path || []), [mv.tr, mv.tc]];
+    for (let i = 0; i + 1 < pts.length; i++) if (Math.abs(pts[i + 1][1] - pts[i][1]) > 2 && Math.abs(pts[i + 1][0] - pts[i][0]) <= 2) return true;
+    return false;
+}
 const wcol = (p, c) => (c >= 0 && c < 8 ? c : (wrapsOf(p) ? ((c % 8) + 8) % 8 : -1));
 
 // Выход из портала: если на клетке портал, возвращает клетку его пары
@@ -1873,8 +1895,9 @@ function toGrave(p) {
 
 function startGame() {
     const oldOrb = document.getElementById('goOrb'); if (oldOrb) oldOrb.remove();
+    const fischer = _seed < 0;      // отрицательное общее число = шахматы Фишера (так режим сам доезжает до соперника и в повтор партии)
     G = {
-        board: initialBoard(), turn: 'w', hero: { ...selectedHeroes },
+        board: initialBoard(fischer), turn: 'w', hero: { ...selectedHeroes },
         grave: { w: [], b: [] }, cd: { w: {}, b: {} },
         fire: [], burn: [], traps: [], lureCells: [], conv: [], portals: [], nextPortal: 1, archUsed: false, sharp: [], pairStep: null, soulList: [],
         lastAb: { w: null, b: null },
@@ -1892,6 +1915,7 @@ function startGame() {
         if (G.hero[c] === 'jester') G.pretense[c] = 'pending';      // Притворство: выбор предателя перед первым ходом Шута
     });
     addLog('n', `Партия началась: Белые — ${HEROES[G.hero.w].name}, Чёрные — ${HEROES[G.hero.b].name}`);
+    if (fischer) addLog('n', '🎲 Шахматы Фишера: случайная расстановка фигур, рокировки нет');
     $('#setup').classList.add('hidden');
     $('#gameover').classList.add('hidden');
     $('#promo').classList.add('hidden');
@@ -2312,6 +2336,7 @@ function executeMove(mv, promo, ctx) {
     const sym = pieceSym(p), note = p.t === 'p' ? '' : sym;
     const from = sqName(mv.fr, mv.fc), to = sqName(mv.tr, mv.tc);
     delete p.fogSeen;
+    const sawed = wrapsOf(p) && !mv.castle && !mv.possess && crossedEdge(mv);      // фигура Фокусника прошла через край доски
     const wasGhost = !!p.ghost, pair = p.pair;
     const extra = !!(ctx.bonus || ctx.apo || ctx.pairSecond);
     let skipMate = false;                       // иллюзия короля при рождении не делает хода
@@ -2324,6 +2349,7 @@ function executeMove(mv, promo, ctx) {
     }
 
     const res = applyMove(b, mv, promo);
+    if (sawed && G.cd[col]) G.cd[col].sawing = CONFIG.sawingCooldown + 1;      // +1: уменьшится в начале следующего хода, а блок должен держаться все 3 следующих хода
     if (ctx.restoreC) p.c = ctx.restoreC;                 // Апокалипсис: чужой зомби возвращается к своему цвету
     const own = res.dead.find(d => d !== p && d.c === col && !d.ghost);   // срубленная своя фигура
     const cap = res.dead.some(d => d !== p && d.c !== col);
@@ -3533,7 +3559,7 @@ function renderBoard() {
         }
     }
     el.innerHTML = html;
-    el.classList.toggle('wrapped', G.hero.w === 'magician' || G.hero.b === 'magician');      // края доски соединены у Фокусника
+    el.classList.toggle('wrapped', ['w', 'b'].some(sd => G.hero[sd] === 'magician' && !(G.cd[sd].sawing > 0)));      // края доски соединены у Фокусника
 
     if (G.fx.some(x => x.type === 'boom' && !(x.delay > 0))) {
         el.classList.remove('shake');
@@ -3601,6 +3627,10 @@ function panelHTML(col) {
         const sub = cd > 0 ? '' : (active && !can ? 'нет целей' : ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? 'бесплатно' : 'готово'));
         h += `<button class="ab passive-btn ${on ? 'on' : ''}" data-ab="${pk}" ${can || on ? '' : 'disabled'} title="${ps.desc}">
       <span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}${(pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${cd > 0 ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
+    }
+    if (hero.passive === 'sawing') {      // пассивка Фокусника: просто показывает перезарядку
+        const scd = G.cd[col].sawing | 0;
+        h += `<button class="ab passive-btn" disabled title="${ps.desc}"><span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}</span><span class="ab-cd">${scd > 0 ? '' : 'готово'}</span>${scd > 0 ? `<span class="cd-badge">⏳${scd}</span>` : ''}</button>`;
     }
     h += '</div>';
 
@@ -3974,7 +4004,7 @@ function toggleReady() {
 // Партия начинается, когда оба нажали «Готов». Запускает хозяин комнаты и сообщает героев и общее число для случайностей.
 function maybeStart() {
     if (!(NET.on && NET.host && NET.ready && NET.oppReady && NET.oppHero)) return;
-    _seed = (Math.random() * 2147483647) | 0;
+    _seed = NET.fischer ? -1 - ((Math.random() * 2147483646) | 0) : (Math.random() * 2147483647) | 0;      // отрицательное число = шахматы Фишера
     const heroes = { w: selectedHeroes.w, b: NET.oppHero };
     NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0, inc: NET.inc || 0, mode: NET.mode || null, rated: !!NET.rated };
     netSend({ t: 'start', ...NET.lastStart });
@@ -4837,6 +4867,7 @@ const EN = {
     "🚪 Список комнат": "🚪 Room list",
     "🚪 Комнаты": "🚪 Rooms",
     "Пароль комнаты (необязательно)": "Room password (optional)",
+    "🎲 Шахматы Фишера: случайная расстановка фигур на первой и последней горизонталях (без рокировки)": "🎲 Fischer random chess: pieces are placed randomly on the first and last ranks (no castling)",
     "Создать комнату": "Create a room",
     "Открытые комнаты": "Open rooms",
     "⟳ Обновить": "⟳ Refresh",
@@ -4946,7 +4977,7 @@ Object.assign(EN, {
     "Фокусник": "Magician",
     "Фокусы и пропажи": "Tricks & Vanishing Acts",
     [PASSIVES.sawing.name]: "Sawing the Board",
-    [PASSIVES.sawing.desc]: "For your pieces the left and right edges of the board are connected: bishops, rooks, queens and the king pass through an edge, pawns capture across it, a knight jumps to the other side. The top and bottom are not connected.",
+    [PASSIVES.sawing.desc]: "For your pieces the left and right edges of the board are connected: bishops, rooks and queens pass through an edge, pawns capture across it, a knight jumps to the other side. The top and bottom are not connected. The passive does not work on the king. When any of your pieces has passed through an edge, the passive is switched off for all your pieces for " + CONFIG.sawingCooldown + " turns.",
     [ABILITIES.fog.name]: "Stage Fog",
     [ABILITIES.fog.desc]: "Smoke covers a 3×3 square around the chosen square (anywhere on the board) for " + CONFIG.fogTurns + " of your turns. Pieces (not kings) in the smoke are invisible to the opponent, and the log does not show where exactly in the fog a piece stood. Costs no turn.",
     [ABILITIES.hatch.name]: "Secret Hatch",
@@ -5362,12 +5393,12 @@ function timePicker(root, st, onChange) {
 
 // После соединения хозяин сообщает гостю время, добавку и режим партии
 function tcOnOpen() {
-    if (NET.host) netSend({ t: 'tc', min: NET.tc || 0, inc: NET.inc || 0, rated: !!NET.rated, mode: NET.mode || null });
+    if (NET.host) netSend({ t: 'tc', min: NET.tc || 0, inc: NET.inc || 0, rated: !!NET.rated, mode: NET.mode || null, fischer: !!NET.fischer });
     updateSetupTc();
 }
 const _netRecvTc = netRecv;
 netRecv = function (m) {
-    if (m && m.t === 'tc') { if (!NET.host) { NET.tc = m.min | 0; NET.inc = m.inc | 0; NET.rated = !!m.rated; NET.mode = MODES[m.mode] ? m.mode : null; updateSetupTc(); } return; }
+    if (m && m.t === 'tc') { if (!NET.host) { NET.tc = m.min | 0; NET.inc = m.inc | 0; NET.rated = !!m.rated; NET.mode = MODES[m.mode] ? m.mode : null; NET.fischer = !!m.fischer; updateSetupTc(); } return; }
     if (m && m.t === 'flag') { if (m.side === other(NET.me)) flagSide(m.side, !!m.opening); return; }
     _netRecvTc(m);
 };
@@ -5383,6 +5414,7 @@ function updateSetupTc() {
     el.classList.remove('hidden');
     let txt = tc === null ? L('Время партии: определится, когда подключится соперник.', 'Game time: will be set when your opponent connects.') : L('Время партии: ', 'Game time: ') + fmtTime(tc, curInc()) + '.';
     if (NET.on && tc !== null) txt += NET.rated ? L(` Рейтинговая партия, режим «${modeName(NET.mode)}».`, ` Rated game, ${modeName(NET.mode)} mode.`) : L(' Дружеская партия: рейтинг не меняется.', ' Friendly game: rating does not change.');
+    if (NET.on && NET.fischer) txt += L(' Режим: шахматы Фишера (случайная расстановка).', ' Mode: Fischer random chess.');
     el.textContent = txt;
 }
 const _openSetupTc = openSetup;
@@ -5726,7 +5758,8 @@ const hocusPiece = (p, col) => !!p && p.t !== 'k' && p.t !== 'j' && !p.pair && !
 function hocusOk(a, b2, col) {
     const b = G.board, p = b[a[0]][a[1]], q = b[b2[0]][b2[1]];
     if (!hocusPiece(p, col) || !hocusPiece(q, col)) return false;
-    if ((p.t === 'p' && (b2[0] === 0 || b2[0] === 7)) || (q.t === 'p' && (a[0] === 0 || a[0] === 7))) return false;      // пешка не должна оказаться на краевой горизонтали
+    const promoRow = c => (c === 'w' ? 0 : 7);
+    if ((p.t === 'p' && b2[0] === promoRow(p.c)) || (q.t === 'p' && a[0] === promoRow(q.c))) return false;      // пешка не должна оказаться на горизонтали превращения (на своей первой можно)
     const nb = cloneBoard(b);
     nb[a[0]][a[1]] = { ...q };
     nb[b2[0]][b2[1]] = { ...p };
@@ -6622,7 +6655,7 @@ async function startQuick(mode) {
     try {
         const j = await (await fetch(API + '/quick?mode=' + mode)).json();
         if (!j.room) { lobbyStatus('Сервер занят, попробуйте позже.'); return; }
-        NET.mode = mode; NET.rated = true; NET.tc = MODES[mode].min; NET.inc = 0;
+        NET.mode = mode; NET.rated = true; NET.tc = MODES[mode].min; NET.inc = 0; NET.fischer = false;
         NET.host = j.role === 'host';
         lobbyStatus('');
         showWait(NET.host ? L(`Ищем соперника: ${modeName(mode)}...`, `Looking for an opponent: ${modeName(mode)}...`) : L('Соперник найден, подключаемся...', 'Opponent found, connecting...'));
@@ -6692,7 +6725,7 @@ async function makeListedRoom() {
         const pass = $('#roomPass').value;
         const j = await (await fetch(API + '/lobby/create', { method: 'POST', body: JSON.stringify({ min: ROOMSET.min, inc: ROOMSET.inc, pass, token }) })).json();
         if (!j.room) { roomsMsg('Сервер занят, попробуйте позже.'); return; }
-        NET.tc = ROOMSET.min; NET.inc = ROOMSET.inc; NET.rated = false; NET.mode = null; NET.host = true;
+        NET.tc = ROOMSET.min; NET.inc = ROOMSET.inc; NET.rated = false; NET.mode = null; NET.host = true; NET.fischer = !!$('#roomFischer').checked;
         closeRooms();
         showWait(pass ? L('Комната создана (с паролем). Ждём соперника...', 'Room created (password-protected). Waiting for an opponent...') : L('Комната создана и видна в списке. Ждём соперника...', 'Room created and visible in the list. Waiting for an opponent...'));
         attachConn(relayConn(j.room, 'host'));
@@ -6707,7 +6740,7 @@ async function joinListed(room, pw) {
         if (r.status === 403) { roomsMsg('Неверный пароль.'); return; }
         if (r.status === 429) { roomsMsg('Слишком много попыток, подождите минуту.'); return; }
         if (!r.ok || !j.ticket) { roomsMsg('Комната уже занята или закрыта.'); loadRooms(); return; }
-        NET.host = false; NET.tc = undefined; NET.inc = 0; NET.rated = false; NET.mode = null;
+        NET.host = false; NET.tc = undefined; NET.inc = 0; NET.rated = false; NET.mode = null; NET.fischer = false;
         closeRooms();
         showWait(L('Подключаемся...', 'Connecting...'));
         attachConn(relayConn(room, 'guest', j.ticket));
