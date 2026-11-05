@@ -363,6 +363,7 @@ const cdOf = (col, k) => CONFIG.cooldown[k] + ((G.cdBonus && G.cdBonus[col] && G
 let HIST = [];
 // Общий генератор случайных чисел (одинаковый у обоих игроков онлайн): влияет только на порядок строк в журнале
 let _seed = 1;
+let CUSTOM = null;      // своя доска из редактора для следующей партии (null: обычная или Фишер)
 const rnd = () => { _seed = (_seed + 0x6D2B79F5) | 0; let t = Math.imul(_seed ^ (_seed >>> 15), 1 | _seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };   // снимки состояния в начале каждого хода (для способности «Мисклик!»)
 const $ = s => document.querySelector(s);
 
@@ -590,9 +591,21 @@ function findKing(b, col) {
     return null;
 }
 
+// Редактор доски: у стороны режим победы над ней. 'mate': обычный мат (шах учитывается), 'all': нужно срубить все её фигуры (шаха нет, короли рубятся)
+const allMode = c => !!(G && G.win && G.win[c] === 'all');
+function findKings(b, col) {
+    const out = [];
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const p = b[r][c];
+        if (p && p.t === 'k' && p.c === col && !p.ghost) out.push([r, c]);
+    }
+    return out;
+}
 function kingAttacked(b, col) {
-    const k = findKing(b, col);
-    return !k || isAttacked(b, k[0], k[1], other(col));
+    if (allMode(col)) return false;
+    const ks = findKings(b, col);
+    if (!ks.length) return true;
+    return ks.some(k => isAttacked(b, k[0], k[1], other(col)));      // королей несколько: шах, если под боем любой из них
 }
 
 /* ---------- Пассивки: Братство Паладина и барьер Мага ---------- */
@@ -690,7 +703,7 @@ function pseudoMoves(b, r, c) {
     // король не рубит фигуру под щитом; Некромант рубит свои пешки
     const passable = t => !t || (t.ghost && t.c === p.c) || (!ghost && supOpen(b, t));   // своя иллюзия и фигура в суперпозиции не мешают
     const canTake = (t, tr, tc) => {
-        if (ghost || p.t === 'h' || !t || t.ghost || t.t === 'k' || t.frozen) return false;      // заяц не рубит
+        if (ghost || p.t === 'h' || !t || t.ghost || (t.t === 'k' && !allMode(t.c)) || t.frozen) return false;      // заяц не рубит
         if (p.t === 'k' && t.shield) return false;
         if (t.c === p.c) return harvest && t.t === 'p' && !t.orig;
         return !brotherImmune(b, tr, tc);
@@ -1056,7 +1069,7 @@ function isLegalMove(b, mv) {
     const col = b[mv.fr][mv.fc].c;
     const nb = cloneBoard(b);
     const res = applyMove(nb, mv, 'q');
-    if (res.dead.some(d => d.t === 'k')) return false;
+    if (res.dead.some(d => d.t === 'k' && !allMode(d.c))) return false;
     bananaSlideOnBoard(nb, mv.tr, mv.tc, col);      // если после съезжания король окажется под шахом, такой ход недоступен
     return safeAfter(nb, col);
 }
@@ -1888,16 +1901,16 @@ function guardSwap(r, c, unsafe) {
 
 function toGrave(p) {
     if (p.t === 'j') return;      // заводные челюсти не уходят в сброс
+    if (p.t === 'k') return;      // срубленный король (режим «срубить все») в сброс не попадает
     if (p.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(p)}: фигура погибла`);
     G.deaths = (G.deaths || 0) + 1;
     G.grave[p.orig || p.c].push(p.hare ? { t: p.hare.t, x: [...(p.hare.x || [])] } : { t: p.t, x: [...(p.x || [])] });      // заяц в сброс идёт как исходная фигура
 }
 
-function startGame() {
-    const oldOrb = document.getElementById('goOrb'); if (oldOrb) oldOrb.remove();
-    const fischer = _seed < 0;      // отрицательное общее число = шахматы Фишера (так режим сам доезжает до соперника и в повтор партии)
-    G = {
-        board: initialBoard(fischer), turn: 'w', hero: { ...selectedHeroes },
+// Начальное состояние партии (отдельной функцией, чтобы редактор досок мог проверять позиции)
+function newState(board, hero, win) {
+    return {
+        board, turn: 'w', hero,
         grave: { w: [], b: [] }, cd: { w: {}, b: {} },
         fire: [], burn: [], traps: [], lureCells: [], conv: [], portals: [], nextPortal: 1, archUsed: false, sharp: [], pairStep: null, soulList: [],
         lastAb: { w: null, b: null },
@@ -1905,8 +1918,16 @@ function startGame() {
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
         cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
-        bananas: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false }
+        bananas: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false },
+        win
     };
+}
+
+function startGame() {
+    const oldOrb = document.getElementById('goOrb'); if (oldOrb) oldOrb.remove();
+    const cfg = CUSTOM;      // своя доска из редактора
+    const fischer = !cfg && _seed < 0;      // отрицательное общее число = шахматы Фишера (так режим сам доезжает до соперника и в повтор партии)
+    G = newState(cfg ? boardFromCfg(cfg) : initialBoard(fischer), { ...selectedHeroes }, cfg ? { ...cfg.win } : { w: 'mate', b: 'mate' });
     HIST = [];
     ['w', 'b'].forEach(c => {
         const h = HEROES[G.hero[c]];
@@ -1916,6 +1937,10 @@ function startGame() {
     });
     addLog('n', `Партия началась: Белые — ${HEROES[G.hero.w].name}, Чёрные — ${HEROES[G.hero.b].name}`);
     if (fischer) addLog('n', '🎲 Шахматы Фишера: случайная расстановка фигур, рокировки нет');
+    if (cfg) {
+        const need = ['w', 'b'].filter(x => cfg.win[x] === 'all').map(x => `над ${x === 'w' ? 'Белыми' : 'Чёрными'} нужно срубить все их фигуры`);
+        addLog('n', '🧩 Своя доска' + (cfg.name ? ` «${cfg.name}»` : '') + (need.length ? ': победа ' + need.join(', ') : ''));
+    }
     $('#setup').classList.add('hidden');
     $('#gameover').classList.add('hidden');
     $('#promo').classList.add('hidden');
@@ -2065,11 +2090,16 @@ function startTurn() {
         (G.hero[x] === 'paladin' && G.grave[x].length) ||
         (G.hero[x] === 'necromancer' && (G.grave.w.length + G.grave.b.length)));
 
-    if (!hasAnyAction(c)) {
+    const wiped = ['w', 'b'].filter(x => allMode(x) && !G.board.flat().some(p => p && p.c === x && !p.ghost));
+    if (wiped.length) {      // режим «срубить все»: у стороны не осталось фигур
+        G.over = wiped.length === 2
+            ? { winner: null, title: 'Ничья', text: 'На доске не осталось фигур.' }
+            : { winner: other(wiped[0]), title: 'Победа!', text: `${colorName(other(wiped[0]))} срубили все фигуры соперника.` };
+    } else if (!hasAnyAction(c)) {
         G.over = (attacked || latent)
             ? { winner: other(c), title: 'Мат!', text: `${colorName(other(c))} побеждают.` }
             : { winner: null, title: 'Пат', text: 'У игрока нет возможных действий. Ничья.' };
-    } else if (total === 2 && !canRevive) {
+    } else if (total === 2 && !canRevive && G.board.flat().filter(p => p && !p.ghost && p.t === 'k').length === 2) {
         G.over = { winner: null, title: 'Ничья', text: 'На доске остались только короли.' };
     }
 
@@ -3452,7 +3482,11 @@ function renderBoard() {
     $('#app').classList.toggle('flipped', flip);
     if (G.sel && actor) G.moves.filter(m => !m.hidden).forEach(m => targets.set(m.tr + ',' + m.tc, ((G.board[m.tr][m.tc] && !G.board[m.tr][m.tc].invis && !supOpen(G.board, G.board[m.tr][m.tc])) || m.ep) ? 't-cap' : 't-move'));
     if (G.mode && G.mode.cells && actor) (G.mode.cells.show || G.mode.cells).forEach(([r, c]) => targets.set(r + ',' + c, 't-' + G.mode.type));      // show: клетки, которые подсвечиваем (остальные нажимаются, но выглядят опасными)
-    const kingPos = G.check ? findKing(G.board, G.turn) : null;
+    let kingPos = [];
+    if (G.check) {
+        kingPos = findKings(G.board, G.turn).filter(k => isAttacked(G.board, k[0], k[1], other(G.turn)));
+        if (!kingPos.length) { const k0 = findKing(G.board, G.turn); if (k0) kingPos = [k0]; }
+    }
     const must = new Set(G.over || G.mode || !actor ? [] : G.forced.map(m => m.fr + ',' + m.fc));
 
     let html = '';
@@ -3468,7 +3502,7 @@ function renderBoard() {
             if (G.last && ((G.last.fr === r && G.last.fc === c) || (G.last.tr === r && G.last.tc === c))) cls += ' last';
             const tm = targets.get(r + ',' + c);
             if (tm) cls += ' ' + tm;
-            if (kingPos && kingPos[0] === r && kingPos[1] === c) cls += ' incheck';
+            if (kingPos.some(k => k[0] === r && k[1] === c)) cls += ' incheck';
 
             html += `<div class="${cls}" data-r="${r}" data-c="${c}">`;
             if (ci === 0) html += `<span class="coord rank">${8 - r}</span>`;
@@ -4006,7 +4040,7 @@ function maybeStart() {
     if (!(NET.on && NET.host && NET.ready && NET.oppReady && NET.oppHero)) return;
     _seed = NET.fischer ? -1 - ((Math.random() * 2147483646) | 0) : (Math.random() * 2147483647) | 0;      // отрицательное число = шахматы Фишера
     const heroes = { w: selectedHeroes.w, b: NET.oppHero };
-    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0, inc: NET.inc || 0, mode: NET.mode || null, rated: !!NET.rated };
+    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0, inc: NET.inc || 0, mode: NET.mode || null, rated: !!NET.rated, custom: CUSTOM || null };
     netSend({ t: 'start', ...NET.lastStart });
     selectedHeroes = heroes;
     NET.ready = false; NET.oppReady = false;
@@ -4232,7 +4266,7 @@ function netRecv(m) {
             maybeStart();
             break;
         case 'start':
-            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; if (m.inc !== undefined) NET.inc = m.inc | 0; if (m.mode !== undefined) NET.mode = MODES[m.mode] ? m.mode : null; if (m.rated !== undefined) NET.rated = !!m.rated; selectedHeroes = { ...m.heroes }; _seed = m.seed; NET.ready = false; NET.oppReady = false; startGame(); }
+            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; if (m.inc !== undefined) NET.inc = m.inc | 0; if (m.mode !== undefined) NET.mode = MODES[m.mode] ? m.mode : null; if (m.rated !== undefined) NET.rated = !!m.rated; selectedHeroes = { ...m.heroes }; _seed = m.seed; CUSTOM = normCfg(m.custom); NET.ready = false; NET.oppReady = false; startGame(); }
             break;
         case 'orb':
             showOrbNote(!!m.gained);
@@ -4867,7 +4901,21 @@ const EN = {
     "🚪 Список комнат": "🚪 Room list",
     "🚪 Комнаты": "🚪 Rooms",
     "Пароль комнаты (необязательно)": "Room password (optional)",
-    "🎲 Шахматы Фишера: случайная расстановка фигур на первой и последней горизонталях (без рокировки)": "🎲 Fischer random chess: pieces are placed randomly on the first and last ranks (no castling)",
+    "🧩 Редактор доски": "🧩 Board editor",
+    "♟ Фигуры": "♟ Pieces",
+    "🧱 Плитки": "🧱 Tiles",
+    "Зеркальное редактирование": "Mirror editing",
+    "Без зеркала": "No mirror",
+    "По вертикали": "Vertical",
+    "По вертикали и горизонтали": "Vertical and horizontal",
+    "Классическая расстановка": "Classic setup",
+    "Очистить доску": "Clear board",
+    "💾 Сохранить в слот": "💾 Save to slot",
+    "📂 Загрузить слот": "📂 Load slot",
+    "🗑 Очистить слот": "🗑 Empty slot",
+    "Использовать эту доску": "Use this board",
+    "Название доски (необязательно)": "Board name (optional)",
+    "Доска для партии": "Board for the game",
     "Создать комнату": "Create a room",
     "Открытые комнаты": "Open rooms",
     "⟳ Обновить": "⟳ Refresh",
@@ -5393,12 +5441,12 @@ function timePicker(root, st, onChange) {
 
 // После соединения хозяин сообщает гостю время, добавку и режим партии
 function tcOnOpen() {
-    if (NET.host) netSend({ t: 'tc', min: NET.tc || 0, inc: NET.inc || 0, rated: !!NET.rated, mode: NET.mode || null, fischer: !!NET.fischer });
+    if (NET.host) netSend({ t: 'tc', min: NET.tc || 0, inc: NET.inc || 0, rated: !!NET.rated, mode: NET.mode || null, fischer: !!NET.fischer, custom: !!NET.custom });
     updateSetupTc();
 }
 const _netRecvTc = netRecv;
 netRecv = function (m) {
-    if (m && m.t === 'tc') { if (!NET.host) { NET.tc = m.min | 0; NET.inc = m.inc | 0; NET.rated = !!m.rated; NET.mode = MODES[m.mode] ? m.mode : null; NET.fischer = !!m.fischer; updateSetupTc(); } return; }
+    if (m && m.t === 'tc') { if (!NET.host) { NET.tc = m.min | 0; NET.inc = m.inc | 0; NET.rated = !!m.rated; NET.mode = MODES[m.mode] ? m.mode : null; NET.fischer = !!m.fischer; NET.custom = !!m.custom; updateSetupTc(); } return; }
     if (m && m.t === 'flag') { if (m.side === other(NET.me)) flagSide(m.side, !!m.opening); return; }
     _netRecvTc(m);
 };
@@ -5414,6 +5462,7 @@ function updateSetupTc() {
     el.classList.remove('hidden');
     let txt = tc === null ? L('Время партии: определится, когда подключится соперник.', 'Game time: will be set when your opponent connects.') : L('Время партии: ', 'Game time: ') + fmtTime(tc, curInc()) + '.';
     if (NET.on && tc !== null) txt += NET.rated ? L(` Рейтинговая партия, режим «${modeName(NET.mode)}».`, ` Rated game, ${modeName(NET.mode)} mode.`) : L(' Дружеская партия: рейтинг не меняется.', ' Friendly game: rating does not change.');
+    if (NET.on && NET.custom) txt += L(' Режим: своя доска из редактора.', ' Mode: custom board from the editor.');
     if (NET.on && NET.fischer) txt += L(' Режим: шахматы Фишера (случайная расстановка).', ' Mode: Fischer random chess.');
     el.textContent = txt;
 }
@@ -6595,6 +6644,7 @@ function startReplay(d, title) {
     showGhosts = true; showInvis = true; showTraps = true;
     selectedHeroes = { w: d.white_hero, b: d.black_hero };
     _seed = d.seed;
+    CUSTOM = null;
     startGame();
     CLOCK.on = false;
     const soundWas = CONFIG.sound;
@@ -6655,7 +6705,7 @@ async function startQuick(mode) {
     try {
         const j = await (await fetch(API + '/quick?mode=' + mode)).json();
         if (!j.room) { lobbyStatus('Сервер занят, попробуйте позже.'); return; }
-        NET.mode = mode; NET.rated = true; NET.tc = MODES[mode].min; NET.inc = 0; NET.fischer = false;
+        NET.mode = mode; NET.rated = true; NET.tc = MODES[mode].min; NET.inc = 0; NET.fischer = false; NET.custom = false; CUSTOM = null;
         NET.host = j.role === 'host';
         lobbyStatus('');
         showWait(NET.host ? L(`Ищем соперника: ${modeName(mode)}...`, `Looking for an opponent: ${modeName(mode)}...`) : L('Соперник найден, подключаемся...', 'Opponent found, connecting...'));
@@ -6668,9 +6718,14 @@ $('#quickModes').addEventListener('click', e => {
 });
 
 // ----- игра на одном экране -----
-$('#lobbyLocal').addEventListener('click', () => { timePicker($('#localTimePick'), LOCALSET, saveTimes); $('#local').classList.remove('hidden'); });
+$('#lobbyLocal').addEventListener('click', () => { timePicker($('#localTimePick'), LOCALSET, saveTimes); boardPicker($('#localBoardPick'), LOCALBOARD, false); $('#localMsg').textContent = ''; $('#local').classList.remove('hidden'); });
 $('#localClose').addEventListener('click', () => $('#local').classList.add('hidden'));
-$('#localStart').addEventListener('click', () => { saveTimes(); $('#local').classList.add('hidden'); $('#lobby').classList.add('hidden'); });
+$('#localStart').addEventListener('click', () => {
+    if (LOCALBOARD.mode === 'custom' && !LOCALBOARD.cfg) { $('#localMsg').textContent = L('Сначала выберите доску в редакторе.', 'First choose a board in the editor.'); return; }
+    CUSTOM = LOCALBOARD.mode === 'custom' ? LOCALBOARD.cfg : null;
+    NET.custom = false;
+    saveTimes(); $('#local').classList.add('hidden'); $('#lobby').classList.add('hidden');
+});
 
 // ----- комнаты: создать (время, добавка, пароль) или войти -----
 async function loadRooms() {
@@ -6706,6 +6761,7 @@ function openRooms() {
     if (NET.on) return;
     roomsMsg('');
     timePicker($('#roomTimePick'), ROOMSET, saveTimes);
+    boardPicker($('#roomBoardPick'), ROOMBOARD, true);
     $('#rooms').classList.remove('hidden');
     $('#roomsList').textContent = 'Загрузка...';
     loadRooms();
@@ -6716,6 +6772,7 @@ function closeRooms() { clearInterval(ROOMS.timer); $('#rooms').classList.add('h
 
 async function makeListedRoom() {
     if (!RELAY) { roomsMsg('Комнаты работают только на сайте с сервером игры.'); return; }
+    if (ROOMBOARD.mode === 'custom' && !ROOMBOARD.cfg) { roomsMsg(L('Сначала выберите доску в редакторе.', 'First choose a board in the editor.')); return; }
     const btn = $('#roomMake');
     btn.disabled = true;
     try {
@@ -6725,7 +6782,7 @@ async function makeListedRoom() {
         const pass = $('#roomPass').value;
         const j = await (await fetch(API + '/lobby/create', { method: 'POST', body: JSON.stringify({ min: ROOMSET.min, inc: ROOMSET.inc, pass, token }) })).json();
         if (!j.room) { roomsMsg('Сервер занят, попробуйте позже.'); return; }
-        NET.tc = ROOMSET.min; NET.inc = ROOMSET.inc; NET.rated = false; NET.mode = null; NET.host = true; NET.fischer = !!$('#roomFischer').checked;
+        NET.tc = ROOMSET.min; NET.inc = ROOMSET.inc; NET.rated = false; NET.mode = null; NET.host = true; NET.fischer = ROOMBOARD.mode === 'fischer'; CUSTOM = ROOMBOARD.mode === 'custom' ? ROOMBOARD.cfg : null; NET.custom = !!CUSTOM;
         closeRooms();
         showWait(pass ? L('Комната создана (с паролем). Ждём соперника...', 'Room created (password-protected). Waiting for an opponent...') : L('Комната создана и видна в списке. Ждём соперника...', 'Room created and visible in the list. Waiting for an opponent...'));
         attachConn(relayConn(j.room, 'host'));
@@ -6740,7 +6797,7 @@ async function joinListed(room, pw) {
         if (r.status === 403) { roomsMsg('Неверный пароль.'); return; }
         if (r.status === 429) { roomsMsg('Слишком много попыток, подождите минуту.'); return; }
         if (!r.ok || !j.ticket) { roomsMsg('Комната уже занята или закрыта.'); loadRooms(); return; }
-        NET.host = false; NET.tc = undefined; NET.inc = 0; NET.rated = false; NET.mode = null; NET.fischer = false;
+        NET.host = false; NET.tc = undefined; NET.inc = 0; NET.rated = false; NET.mode = null; NET.fischer = false; NET.custom = false; CUSTOM = null;
         closeRooms();
         showWait(L('Подключаемся...', 'Connecting...'));
         attachConn(relayConn(room, 'guest', j.ticket));
@@ -6831,4 +6888,262 @@ $('#installBtn').addEventListener('click', async () => {
     const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
     if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone && !window.Capacitor) $('#iosHint').classList.remove('hidden');
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.Capacitor) navigator.serviceWorker.register('sw.js').catch(() => { });
+}
+
+/* =====================================================================
+   РЕДАКТОР ДОСКИ (режим «своя доска»)
+   Доска хранится строками: заглавные буквы белые фигуры, строчные чёрные, точка пустая клетка.
+   ===================================================================== */
+const BOARD_SLOTS = 5;
+const ED_CH = '.KQRBNPkqrbnp';
+const CLASSIC_ROWS = ['rnbqkbnr', 'pppppppp', '........', '........', '........', '........', 'PPPPPPPP', 'RNBQKBNR'];
+const chColor = ch => (ch === ch.toUpperCase() ? 'w' : 'b');
+const swapCase = ch => (ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase());
+const ROOMBOARD = { mode: 'classic', cfg: null }, LOCALBOARD = { mode: 'classic', cfg: null };
+
+// Проверка и приведение доски к единому виду (годится и для данных от соперника)
+function normCfg(x) {
+    if (!x || !Array.isArray(x.rows) || x.rows.length !== 8) return null;
+    const rows = [], n = { w: 0, b: 0, kw: 0, kb: 0 };
+    for (let r = 0; r < 8; r++) {
+        const row = x.rows[r];
+        if (typeof row !== 'string' || row.length !== 8) return null;
+        for (let c = 0; c < 8; c++) {
+            const ch = row[c];
+            if (!ED_CH.includes(ch)) return null;
+            if ((ch === 'P' || ch === 'p') && (r === 0 || r === 7)) return null;
+            if (ch === '.') continue;
+            const sd = chColor(ch);
+            n[sd]++;
+            if (ch.toLowerCase() === 'k') n['k' + sd]++;
+        }
+        rows.push(row);
+    }
+    if (!n.w || !n.b) return null;
+    const win = {};
+    ['w', 'b'].forEach(sd => {
+        const k = n['k' + sd];
+        win[sd] = k === 0 ? 'all' : k === 1 ? 'mate' : (x.win && x.win[sd] === 'all' ? 'all' : 'mate');
+    });
+    return { v: 1, name: String(x.name || '').slice(0, 20), rows, win };
+}
+
+function boardFromCfg(cfg) {
+    return cfg.rows.map((row, r) => [...row].map((ch, c) => {
+        if (ch === '.') return null;
+        const col = chColor(ch), t = ch.toLowerCase(), p = mk(t, col), home = col === 'w' ? 7 : 0;
+        if (t === 'k') p.moved = !(r === home && c === 4);                     // рокировка возможна, только если король и ладья на своих местах
+        if (t === 'r') p.moved = !(r === home && (c === 0 || c === 7));
+        return p;
+    }));
+}
+
+function loadSlots() {
+    let a = [];
+    try { a = JSON.parse(localStorage.getItem('sc_boards') || '[]'); } catch (e) { }
+    return Array.from({ length: BOARD_SLOTS }, (_, i) => normCfg(a[i]));
+}
+function saveSlots(list) { try { localStorage.setItem('sc_boards', JSON.stringify(list)); } catch (e) { } }
+const cfgPieceCount = cfg => cfg.rows.join('').replace(/\./g, '').length;
+
+// ---------- состояние редактора ----------
+const ED = { rows: null, tool: 'P', mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
+const edSideName = sd => (sd === 'w' ? L('белых', 'White') : L('чёрных', 'Black'));
+
+function edCounts() {
+    const n = { w: { n: 0, k: 0 }, b: { n: 0, k: 0 } };
+    ED.rows.forEach(row => row.forEach(ch => {
+        if (ch === '.') return;
+        const sd = chColor(ch);
+        n[sd].n++;
+        if (ch.toLowerCase() === 'k') n[sd].k++;
+    }));
+    return n;
+}
+function edCfg() {
+    const cnt = edCounts(), win = {};
+    ['w', 'b'].forEach(sd => { win[sd] = cnt[sd].k === 0 ? 'all' : cnt[sd].k === 1 ? 'mate' : ED.win[sd]; });
+    return { v: 1, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), win };
+}
+
+function edOpen(onPick, cfg) {
+    const base = cfg || { rows: CLASSIC_ROWS, win: { w: null, b: null }, name: '' };
+    ED.rows = base.rows.map(r => [...r]);
+    ED.win = { w: null, b: null };
+    const cnt = edCounts();
+    ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 2 && base.win && base.win[sd]) ED.win[sd] = base.win[sd]; });
+    ED.onPick = onPick; ED.msg = ''; ED.slots = loadSlots();
+    $('#edName').value = base.name || '';
+    $('#editor').classList.remove('hidden');
+    edRender();
+}
+
+function edRender() {
+    // доска
+    let h = '';
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const ch = ED.rows[r][c];
+        h += `<div class="cell ${(r + c) % 2 ? 'dark' : 'light'}" data-r="${r}" data-c="${c}">`;
+        if (c === 0) h += `<span class="coord rank">${8 - r}</span>`;
+        if (r === 7) h += `<span class="coord file">${'abcdefgh'[c]}</span>`;
+        if (ch !== '.') h += `<div class="piece ${chColor(ch)} t-${ch.toLowerCase()}">${GLYPH[ch.toLowerCase()]}</div>`;
+        h += '</div>';
+    }
+    $('#edBoard').innerHTML = h;
+    // фигуры для расстановки
+    const nm = { k: L('король', 'king'), q: L('ферзь', 'queen'), r: L('ладья', 'rook'), b: L('слон', 'bishop'), n: L('конь', 'knight'), p: L('пешка', 'pawn') };
+    let p = '';
+    ['K', 'Q', 'R', 'B', 'N', 'P', 'k', 'q', 'r', 'b', 'n', 'p'].forEach(ch => {
+        p += `<button class="ed-tool${ED.tool === ch ? ' on' : ''}" data-tool="${ch}" title="${(chColor(ch) === 'w' ? L('Белая ', 'White ') : L('Чёрная ', 'Black ')) + nm[ch.toLowerCase()]}">${pImg(chColor(ch), ch.toLowerCase())}</button>`;
+    });
+    p += `<button class="ed-tool erase${ED.tool === '.' ? ' on' : ''}" data-tool="." title="${L('Ластик', 'Eraser')}">✖</button>`;
+    $('#edPalette').innerHTML = p;
+    $('#edMirror').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === ED.mirror));
+    // слоты
+    $('#edSlots').innerHTML = ED.slots.map((cfg, i) => `<button class="ed-slot${ED.slot === i ? ' on' : ''}" data-slot="${i}"><b>${L('Слот', 'Slot')} ${i + 1}</b><span>${cfg ? ((cfg.name || L('без названия', 'untitled')).replace(/</g, '&lt;') + ' · ' + cfgPieceCount(cfg)) : L('пусто', 'empty')}</span></button>`).join('');
+    // условия победы
+    const cnt = edCounts();
+    let w = '', need = false;
+    ['w', 'b'].forEach(sd => {
+        const who = sd === 'w' ? L('Белых', 'White') : L('Чёрных', 'Black'), k = cnt[sd].k;
+        if (k >= 2) {
+            if (!ED.win[sd]) need = true;
+            w += `<div>${L(`Чтобы победить ${who} (королей: ${k}):`, `To beat ${who} (${k} kings):`)}</div>`
+                + `<label><input type="radio" name="edwin-${sd}" data-win="${sd}" value="all"${ED.win[sd] === 'all' ? ' checked' : ''}>${L('срубить все их фигуры', 'capture all of their pieces')}</label>`
+                + `<label><input type="radio" name="edwin-${sd}" data-win="${sd}" value="mate"${ED.win[sd] === 'mate' ? ' checked' : ''}>${L('поставить мат хотя бы одному королю', 'checkmate at least one king')}</label>`;
+        } else if (k === 0) {
+            w += `<div>${L(`У ${who} нет королей: чтобы победить, нужно срубить все их фигуры.`, `${who} has no kings: to win, capture all of their pieces.`)}</div>`;
+        } else {
+            w += `<div>${L(`У ${who} один король: обычный мат.`, `${who} has one king: ordinary checkmate.`)}</div>`;
+        }
+    });
+    $('#edWin').innerHTML = w;
+    $('#edWin').classList.toggle('need', need);
+    $('#edMsg').textContent = ED.msg;
+}
+
+// Поставить фигуру (или убрать) с учётом зеркала
+function edPlace(r, c) {
+    let ch = ED.tool;
+    if (ED.rows[r][c] === ch) ch = '.';          // повторное нажатие той же фигурой убирает её
+    const t = [[r, c, ch]];
+    if (ED.mirror >= 1) t.push([7 - r, c, swapCase(ch)]);          // по вертикали: отражается сверху вниз, цвет меняется
+    if (ED.mirror >= 2) { t.push([r, 7 - c, ch]); t.push([7 - r, 7 - c, swapCase(ch)]); }
+    if ((ch === 'P' || ch === 'p') && t.some(x => x[0] === 0 || x[0] === 7)) {
+        ED.msg = L('Пешку нельзя ставить на первую и последнюю горизонталь.', 'A pawn cannot be placed on the first or last rank.');
+        edRender(); return;
+    }
+    t.forEach(([tr, tc, tch]) => { ED.rows[tr][tc] = tch; });
+    ED.msg = '';
+    const cnt = edCounts();
+    ['w', 'b'].forEach(sd => { if (cnt[sd].k < 2) ED.win[sd] = null; });
+    edRender();
+}
+function edErase(r, c) {
+    const t = [[r, c]];
+    if (ED.mirror >= 1) t.push([7 - r, c]);
+    if (ED.mirror >= 2) { t.push([r, 7 - c]); t.push([7 - r, 7 - c]); }
+    t.forEach(([tr, tc]) => { ED.rows[tr][tc] = '.'; });
+    ED.msg = '';
+    const cnt = edCounts();
+    ['w', 'b'].forEach(sd => { if (cnt[sd].k < 2) ED.win[sd] = null; });
+    edRender();
+}
+
+// Можно ли сохранить и играть: возвращает текст проблемы или ''
+function edValidate() {
+    const cnt = edCounts();
+    if (!cnt.w.n || !cnt.b.n) return L('У каждой стороны должна быть хотя бы одна фигура.', 'Each side needs at least one piece.');
+    for (const sd of ['w', 'b']) {
+        if (cnt[sd].k >= 2 && !ED.win[sd]) return L(`Выберите условие победы над ${sd === 'w' ? 'Белыми' : 'Чёрными'}.`, `Choose how to beat ${sd === 'w' ? 'White' : 'Black'}.`);
+    }
+    const cfg = edCfg(), saved = G;
+    let bad = '';
+    try {
+        G = newState(boardFromCfg(cfg), { w: 'paladin', b: 'paladin' }, cfg.win);
+        for (const sd of ['w', 'b']) {
+            if (!allMode(sd) && kingAttacked(G.board, sd)) { bad = L(`Королю ${edSideName(sd)} грозит шах: так сохранить нельзя.`, `The ${edSideName(sd)} king is in check: this cannot be saved.`); break; }
+        }
+        if (!bad && !anyLegalMove(G.board, 'w')) bad = L('У белых нет ни одного хода: партия закончилась бы сразу.', 'White has no legal moves: the game would end at once.');
+    } catch (e) { bad = L('Не удалось проверить доску.', 'Could not check the board.'); }
+    finally { G = saved; }
+    return bad;
+}
+
+// ---------- события ----------
+$('#edBoard').addEventListener('click', e => {
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    edPlace(+cell.dataset.r, +cell.dataset.c);
+});
+$('#edBoard').addEventListener('contextmenu', e => {          // правая кнопка мыши убирает фигуру
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    e.preventDefault();
+    edErase(+cell.dataset.r, +cell.dataset.c);
+});
+$('#edPalette').addEventListener('click', e => { const b = e.target.closest('[data-tool]'); if (b) { ED.tool = b.dataset.tool; edRender(); } });
+$('#edMirror').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { ED.mirror = +b.dataset.m; edRender(); } });
+$('#edSlots').addEventListener('click', e => { const b = e.target.closest('[data-slot]'); if (b) { ED.slot = +b.dataset.slot; ED.msg = ''; edRender(); } });
+$('#edWin').addEventListener('change', e => { const i = e.target.closest('[data-win]'); if (i) { ED.win[i.dataset.win] = i.value; ED.msg = ''; edRender(); } });
+$('#edClassic').addEventListener('click', () => { ED.rows = CLASSIC_ROWS.map(r => [...r]); ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
+$('#edClear').addEventListener('click', () => { ED.rows = Array.from({ length: 8 }, () => Array(8).fill('.')); ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
+$('#edSave').addEventListener('click', () => {
+    const bad = edValidate();
+    if (bad) { ED.msg = bad; edRender(); return; }
+    const cfg = normCfg(edCfg());
+    ED.slots[ED.slot] = cfg;
+    saveSlots(ED.slots);
+    ED.msg = L(`Сохранено в слот ${ED.slot + 1}.`, `Saved to slot ${ED.slot + 1}.`);
+    edRender();
+});
+$('#edLoad').addEventListener('click', () => {
+    const cfg = ED.slots[ED.slot];
+    if (!cfg) { ED.msg = L('Этот слот пуст.', 'This slot is empty.'); edRender(); return; }
+    ED.rows = cfg.rows.map(r => [...r]);
+    ED.win = { w: null, b: null };
+    const cnt = edCounts();
+    ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 2) ED.win[sd] = cfg.win[sd]; });
+    $('#edName').value = cfg.name || '';
+    ED.msg = L(`Загружен слот ${ED.slot + 1}.`, `Loaded slot ${ED.slot + 1}.`);
+    edRender();
+});
+$('#edDel').addEventListener('click', () => {
+    ED.slots[ED.slot] = null;
+    saveSlots(ED.slots);
+    ED.msg = L(`Слот ${ED.slot + 1} очищен.`, `Slot ${ED.slot + 1} emptied.`);
+    edRender();
+});
+$('#edUse').addEventListener('click', () => {
+    const bad = edValidate();
+    if (bad) { ED.msg = bad; edRender(); return; }
+    const cfg = normCfg(edCfg());
+    $('#editor').classList.add('hidden');
+    if (ED.onPick) ED.onPick(cfg);
+});
+$('#edClose').addEventListener('click', () => $('#editor').classList.add('hidden'));
+
+// ---------- выбор доски в комнатах и на одном экране ----------
+function boardPicker(root, st, allowFischer) {
+    root.textContent = '';
+    root.classList.add('bd-pick');
+    const modes = [['classic', L('Обычные шахматы', 'Classic chess')]];
+    if (allowFischer) modes.push(['fischer', L('🎲 Шахматы Фишера', '🎲 Fischer random')]);
+    modes.push(['custom', L('🧩 Своя доска', '🧩 Custom board')]);
+    const seg = mkEl('div', 'bd-seg'), btns = {};
+    modes.forEach(([k, name]) => { const b = mkEl('button', '', name, true); b.type = 'button'; seg.appendChild(b); btns[k] = b; });
+    const info = mkEl('div', 'bd-info', '', true);
+    const edit = mkEl('button', 'small-btn', L('✏️ Редактор доски', '✏️ Board editor'), true);
+    edit.type = 'button';
+    root.append(mkEl('b', '', L('Доска для партии', 'Board for the game'), true), seg, info, edit);
+    const paint = () => {
+        Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === st.mode));
+        edit.classList.toggle('hidden', st.mode !== 'custom');
+        info.classList.toggle('hidden', st.mode === 'classic');
+        if (st.mode === 'fischer') info.textContent = L('Фигуры на первой и последней горизонталях расставляются случайно, у обеих сторон одинаково. Рокировки нет.', 'Pieces on the first and last ranks are placed randomly, the same for both sides. No castling.');
+        else if (st.mode === 'custom') info.textContent = st.cfg ? L(`Выбрана доска: ${st.cfg.name || 'без названия'} (фигур: ${cfgPieceCount(st.cfg)}).`, `Selected board: ${st.cfg.name || 'untitled'} (${cfgPieceCount(st.cfg)} pieces).`) : L('Доска не выбрана: откройте редактор, соберите или загрузите доску и нажмите «Использовать эту доску».', 'No board selected: open the editor, build or load a board and press “Use this board”.');
+    };
+    Object.entries(btns).forEach(([k, b]) => b.addEventListener('click', () => { st.mode = k; paint(); }));
+    edit.addEventListener('click', () => edOpen(cfg => { st.cfg = cfg; paint(); }, st.cfg));
+    paint();
 }

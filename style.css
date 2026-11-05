@@ -4866,3 +4866,215 @@ button {
     border: 3px solid #ffd400;
     background: rgba(255, 212, 0, 0.3);
 }
+
+/* ---------- Выбор доски и редактор доски ---------- */
+.bd-pick {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+}
+
+.bd-seg, .ed-seg, .ed-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+    .bd-seg button, .ed-seg button, .ed-tabs button {
+        flex: 1 1 auto;
+        padding: 8px 10px;
+        font: inherit;
+        font-size: 14px;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+        .bd-seg button.on, .ed-seg button.on, .ed-tabs button.on {
+            border-color: var(--gold);
+            background: rgba(240, 199, 94, 0.18);
+        }
+
+        .ed-tabs button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+.bd-info {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.ed-card {
+    width: min(820px, 100%);
+    padding: 14px;
+}
+
+    .ed-card h2 {
+        margin: 0 0 8px;
+    }
+
+    .ed-card #edName {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 12px;
+        font-size: 15px;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid var(--pink);
+        border-radius: 8px;
+    }
+
+.ed-slots {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.ed-slot {
+    padding: 6px 4px;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.25;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+    .ed-slot b {
+        display: block;
+    }
+
+    .ed-slot span {
+        display: block;
+        font-size: 11px;
+        opacity: 0.75;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .ed-slot.on {
+        border-color: var(--gold);
+        background: rgba(240, 199, 94, 0.18);
+    }
+
+.ed-main {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: center;
+    margin: 12px 0;
+}
+
+#edBoard {
+    --cell: min(46px, calc((100vw - 80px) / 8));
+    display: grid;
+    grid-template-columns: repeat(8, var(--cell));
+    grid-template-rows: repeat(8, var(--cell));
+    border: 8px solid var(--frame);
+    border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px #000;
+}
+
+    #edBoard .cell {
+        cursor: pointer;
+    }
+
+.ed-side {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 220px;
+    gap: 8px;
+    max-width: 320px;
+    min-width: 200px;
+    text-align: left;
+}
+
+.ed-palette {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
+}
+
+.ed-tool {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    padding: 0;
+    color: #3a1a31;
+    background: var(--light);
+    border: 3px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+    .ed-tool.on {
+        border-color: var(--gold);
+        box-shadow: 0 0 0 2px var(--gold);
+    }
+
+    .ed-tool .pi {
+        display: block;
+        width: 100%;
+        height: 100%;
+        font-size: 28px;
+        line-height: 1.5;
+        text-align: center;
+    }
+
+.img-pieces .ed-tool .pi {
+    font-size: 0;
+}
+
+.ed-tool.erase {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.ed-lbl {
+    font-size: 13px;
+    opacity: 0.8;
+}
+
+.ed-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin: 8px 0;
+}
+
+.ed-win {
+    padding: 10px 12px;
+    font-size: 14px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+    .ed-win div {
+        margin: 4px 0;
+    }
+
+    .ed-win label {
+        display: block;
+        margin: 2px 0 2px 14px;
+        cursor: pointer;
+    }
+
+    .ed-win input {
+        accent-color: var(--pink);
+        margin-right: 6px;
+    }
+
+    .ed-win.need {
+        outline: 2px solid var(--gold);
+    }

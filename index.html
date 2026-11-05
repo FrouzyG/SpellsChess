@@ -187,8 +187,38 @@
         <div class="small-card rooms-card">
             <h2>Игра на одном экране</h2>
             <div id="localTimePick"></div>
+            <div id="localBoardPick"></div>
+            <p id="localMsg" class="auth-msg"></p>
             <button id="localStart" class="big-btn">Начать</button>
             <button id="localClose" class="small-btn">Отмена</button>
+        </div>
+    </div>
+
+    <!-- Редактор доски -->
+    <div id="editor" class="overlay hidden">
+        <div class="setup-card ed-card">
+            <h2>🧩 Редактор доски</h2>
+            <div id="edSlots" class="ed-slots"></div>
+            <input id="edName" maxlength="20" placeholder="Название доски (необязательно)" autocomplete="off">
+            <div class="ed-main">
+                <div id="edBoard"></div>
+                <div class="ed-side">
+                    <div class="ed-tabs"><button class="on" data-tab="pieces">♟ Фигуры</button><button data-tab="tiles" disabled title="Плитки появятся позже">🧱 Плитки</button></div>
+                    <div id="edPalette" class="ed-palette"></div>
+                    <div class="ed-lbl">Зеркальное редактирование</div>
+                    <div id="edMirror" class="ed-seg"><button data-m="0">Без зеркала</button><button data-m="1">По вертикали</button><button data-m="2">По вертикали и горизонтали</button></div>
+                    <div class="ed-row"><button id="edClassic" class="small-btn">Классическая расстановка</button><button id="edClear" class="small-btn">Очистить доску</button></div>
+                </div>
+            </div>
+            <div id="edWin" class="ed-win"></div>
+            <p id="edMsg" class="auth-msg"></p>
+            <div class="ed-row">
+                <button id="edSave" class="small-btn">💾 Сохранить в слот</button>
+                <button id="edLoad" class="small-btn">📂 Загрузить слот</button>
+                <button id="edDel" class="small-btn">🗑 Очистить слот</button>
+            </div>
+            <button id="edUse" class="big-btn">Использовать эту доску</button>
+            <button id="edClose" class="small-btn">Закрыть</button>
         </div>
     </div>
 
@@ -200,7 +230,7 @@
                 <b>Создать комнату</b>
                 <div id="roomTimePick"></div>
                 <input id="roomPass" maxlength="20" placeholder="Пароль комнаты (необязательно)" autocomplete="off">
-                <label class="room-opt"><input type="checkbox" id="roomFischer"><span>🎲 Шахматы Фишера: случайная расстановка фигур на первой и последней горизонталях (без рокировки)</span></label>
+                <div id="roomBoardPick"></div>
                 <button id="roomMake" class="big-btn">Создать комнату</button>
             </div>
             <div class="rooms-head"><b>Открытые комнаты</b><button id="roomsRefresh" class="small-btn">⟳ Обновить</button></div>
