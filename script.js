@@ -103,7 +103,7 @@ const ABILITIES = {
     // --- Экстрасенс
     illusion: {
         icon: '🎭', name: 'Иллюзия',
-        desc: 'Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит и рассеивается, если ему или оригиналу что-то грозит.'
+        desc: 'Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит. Рассеивается, если двойнику или оригиналу что-то грозит, а также если шах даёт оригинал или двойник.'
     },
     hypnosis: {
         icon: '🌀', name: 'Гипноз',
@@ -3552,7 +3552,7 @@ function renderBoard() {
             if (wallAt(r, c)) html += '<div class="wall-mark"></div>';
             if (sharpAt(r, c)) html += '<div class="sharp-mark"></div>';
             const bt = burnAt(r, c);
-            if (bt) html += `<div class="burn-mark"><span>🔥</span><i>${bt.life}</i></div>`;
+            if (bt) html += `<div class="burn-mark"><span>🔥</span><i>${Number.isFinite(bt.life) ? bt.life : '∞'}</i></div>`;
             G.fire.filter(x => x.kind === 'shomen' && x.c === c).forEach(f => { html += `<div class="shomen-mark ${f.owner}"></div>`; });
             G.fire.filter(x => x.r === r && x.c === c).forEach(f => {
                 html += f.kind === 'arrow'
@@ -3569,7 +3569,7 @@ function renderBoard() {
                 const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
                 if (bn && jesterSees(bn.owner)) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
             }
-            if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${vn.left}</i></div>`; }
+            if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${Number.isFinite(vn.left) ? vn.left : '∞'}</i></div>`; }
             if (G.virus.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark virus-mark">☣️</div>';
             {
                 const rt = G.rituals.find(x => x.r === r && x.c === c);
@@ -4370,7 +4370,7 @@ const EN = {
     "Зеркало": "Mirror",
     "Повторяет последнюю способность врага.": "Repeats the enemy's last ability.",
     "Иллюзия": "Illusion",
-    "Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит и рассеивается, если ему или оригиналу что-то грозит.": "Creates a double of a piece. They move only together; the double captures nothing and fades if it or the original is threatened.",
+    "Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит. Рассеивается, если двойнику или оригиналу что-то грозит, а также если шах даёт оригинал или двойник.": "Creates a double of a piece. They move only together; the double captures nothing. It fades if it or the original is threatened, or if the original or the double gives check.",
     "Гипноз": "Hypnosis",
     "Вражеская фигура в радиусе 3×3 от вашей фигуры ходит за вас ": "An enemy piece within 3×3 of one of your pieces moves for you for ",
     " ваших хода или пока не срубит фигуру. Короля нельзя.": " of your turns, or until it captures a piece. Kings are immune.",
@@ -6981,7 +6981,8 @@ const CLASSIC_ROWS = ['rnbqkbnr', 'pppppppp', '........', '........', '........'
 const chColor = ch => (ch === ch.toUpperCase() ? 'w' : 'b');
 const swapCase = ch => (ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase());
 const ROOMBOARD = { mode: 'classic', cfg: null }, LOCALBOARD = { mode: 'classic', cfg: null };
-const ROOMCOLOR = { v: 'w' };      // цвет хозяина комнаты: 'w', 'b' или 'r' (случайный)
+const ROOMCOLOR = { v: 'r' };      // цвет хозяина комнаты: 'w', 'b' или 'r' (случайный, по умолчанию)
+try { const sc = localStorage.getItem('sc_roomcolor'); if (sc === 'w' || sc === 'b' || sc === 'r') ROOMCOLOR.v = sc; } catch (e) { }
 
 const TILE_KINDS = ['wall', 'conv', 'portal', 'gen', 'virus', 'vine', 'ritual', 'hatch', 'trap', 'lure', 'banana', 'burn', 'hog', 'fog'];
 const TILE_DIRS = { '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' };
@@ -7073,15 +7074,15 @@ function installTiles(g, cfg) {
             case 'portal': g.portals.push({ ...b, id: t.id }); maxId = Math.max(maxId, t.id); break;
             case 'gen': g.gens.push({ ...b, sign: t.s }); break;
             case 'virus': g.virus.push(b); break;
-            case 'vine': g.vines.push({ ...b, left: CONFIG.vineTurns }); break;
+            case 'vine': g.vines.push({ ...b, left: Infinity }); break;
             case 'ritual': g.rituals.push(b); break;
             case 'hatch': g.hatches.push(b); break;
             case 'trap': g.traps.push(b); break;
             case 'lure': g.lureCells.push(b); break;
             case 'banana': g.bananas.push({ ...b, dir: [...t.d] }); break;
-            case 'burn': g.burn.push({ ...b, life: CONFIG.burnTurns }); break;
+            case 'burn': g.burn.push({ ...b, life: Infinity }); break;
             case 'hog': g.hogs.push({ ...b, exempt: null, visible: true }); break;
-            case 'fog': g.fogs.push({ ...b, left: CONFIG.fogTurns }); break;
+            case 'fog': g.fogs.push({ ...b, left: Infinity }); break;
         }
     });
     if (maxId) g.nextPortal = maxId + 1;
@@ -7140,13 +7141,13 @@ function edTileHtml(t) {
         case 'portal': return `<div class="portal-mark pm${(t.o === 'w' ? 0 : 2) + t.id % 2}"><span>⇄</span></div><span class="ed-own ${t.o}"></span>`;
         case 'gen': return `<div class="tile-mark gen-mark ${t.s === '+' ? 'plus' : 'minus'}">${t.s === '+' ? '＋' : '－'}</div><span class="ed-own ${t.o}"></span>`;
         case 'virus': return `<div class="tile-mark virus-mark">☣️</div><span class="ed-own ${t.o}"></span>`;
-        case 'vine': return `<div class="tile-mark vine-mark">🌿<i class="vine-t">${CONFIG.vineTurns}</i></div><span class="ed-own ${t.o}"></span>`;
+        case 'vine': return `<div class="tile-mark vine-mark">🌿<i class="vine-t">∞</i></div><span class="ed-own ${t.o}"></span>`;
         case 'ritual': return `<div class="tile-mark ritual-mark${t.o === 'b' ? ' enemy' : ''}">🕯️</div><span class="ed-own ${t.o}"></span>`;
         case 'hatch': return `<div class="tile-mark hatch-mark"><span></span></div><span class="ed-own ${t.o}"></span>`;
         case 'trap': return `<div class="trap-mark">🪤</div><span class="ed-own ${t.o}"></span>`;
         case 'lure': return `<div class="lure-mark">🎣</div><span class="ed-own ${t.o}"></span>`;
         case 'banana': return `<div class="tile-mark banana-mark">🍌<i>${TILE_DIRS[t.d.join(',')]}</i></div><span class="ed-own ${t.o}"></span>`;
-        case 'burn': return `<div class="burn-mark"><span>🔥</span><i>${CONFIG.burnTurns}</i></div><span class="ed-own ${t.o}"></span>`;
+        case 'burn': return `<div class="burn-mark"><span>🔥</span><i>∞</i></div><span class="ed-own ${t.o}"></span>`;
         case 'hog': return `<div class="tile-mark hog-mark">⏳</div><span class="ed-own ${t.o}"></span>`;
         case 'fog': return `<div class="fog-mark"></div><span class="ed-own ${t.o}"></span>`;
     }
@@ -7433,7 +7434,7 @@ function colorPicker(root, st) {
     const seg = mkEl('div', 'bd-seg'), btns = {};
     [['w', L('⬜ Белые', '⬜ White')], ['b', L('⬛ Чёрные', '⬛ Black')], ['r', L('🎲 Случайно', '🎲 Random')]].forEach(([k, name]) => {
         const b = mkEl('button', '', name, true); b.type = 'button'; seg.appendChild(b); btns[k] = b;
-        b.addEventListener('click', () => { st.v = k; paint(); });
+        b.addEventListener('click', () => { st.v = k; paint(); try { localStorage.setItem('sc_roomcolor', k); } catch (e) { } });
     });
     root.append(mkEl('b', '', L('Ваши фигуры', 'Your pieces'), true), seg);
     const paint = () => Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === st.v));
