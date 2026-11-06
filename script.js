@@ -353,8 +353,10 @@ const NO_TARGET = ['zawarudo', 'misclick'];   // способности без �
 const STAGED = ['hocus', 'lie', 'generator', 'illusion', 'frankenstein', 'rescue', 'confusion', 'apocalypse', 'conveyor', 'portals', 'relocate', 'soulmates', 'banana'];
 
 const other = c => (c === 'w' ? 'b' : 'w');
-const inb = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
-const sqName = (r, c) => 'abcdefgh'[c] + (8 - r);
+let N = 8;      // размер доски (8 по умолчанию; своя доска из редактора может быть больше)
+const FILES = 'abcdefghijklmnopqrstuvwxyz';
+const inb = (r, c) => r >= 0 && r < N && c >= 0 && c < N;
+const sqName = (r, c) => FILES[c] + (N - r);
 const colorName = c => (c === 'w' ? 'Белые' : 'Чёрные');
 const cloneBoard = b => b.map(row => row.map(p => (p ? { ...p } : null)));
 const mk = (t, c) => ({ t, c, moved: false, shield: false, frozen: 0 });
@@ -484,14 +486,14 @@ const supOpen = (b, t) => !!t && !!t.sup && !t.ghost && !!t.prev && !b[t.prev[0]
 const scaredDirs = tp => ((tp === 'r' || tp === 'j') ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
 
 // Распиливание доски (Фокусник): левый и правый край доски соединены для его фигур
-const wrapsOf = p => !!p && p.t !== 'k' && !!G && !!G.hero && G.hero[p.c] === 'magician' && !(G.cd && G.cd[p.c] && G.cd[p.c].sawing > 0);
+const wrapsOf = p => !!p && !kSafe(p) && !!G && !!G.hero && G.hero[p.c] === 'magician' && !(G.cd && G.cd[p.c] && G.cd[p.c].sawing > 0);
 // Ход прошёл сквозь левый/правый край доски? (клетки пути соседние, поэтому скачок по столбцам больше 2 может быть только через край)
 function crossedEdge(mv) {
     const pts = [[mv.fr, mv.fc], ...(mv.path || []), [mv.tr, mv.tc]];
     for (let i = 0; i + 1 < pts.length; i++) if (Math.abs(pts[i + 1][1] - pts[i][1]) > 2 && Math.abs(pts[i + 1][0] - pts[i][0]) <= 2) return true;
     return false;
 }
-const wcol = (p, c) => (c >= 0 && c < 8 ? c : (wrapsOf(p) ? ((c % 8) + 8) % 8 : -1));
+const wcol = (p, c) => (c >= 0 && c < N ? c : (wrapsOf(p) ? ((c % N) + N) % N : -1));
 
 // Выход из портала: если на клетке портал, возвращает клетку его пары
 function portalExit(r, c) {
@@ -505,7 +507,7 @@ function portalExit(r, c) {
 function rayWalk(b, r, c, dr, dc, cb) {
     const wrap = wrapsOf(b[r][c]);
     let rr = r + dr, cc = c + dc, hops = 0, guard = 0;
-    if (wrap) cc = ((cc % 8) + 8) % 8;
+    if (wrap) cc = ((cc % N) + N) % N;
     const path = [];
     while (inb(rr, cc)) {
         if (wrap && (++guard > 30 || (rr === r && cc === c))) return;      // луч сквозь край не должен ходить по кругу
@@ -522,12 +524,12 @@ function rayWalk(b, r, c, dr, dc, cb) {
                 if (cb(ex[0], ex[1], te, path)) return;
                 path.push([ex[0], ex[1]]);
                 rr = ex[0] + dr; cc = ex[1] + dc;
-                if (wrap) cc = ((cc % 8) + 8) % 8;
+                if (wrap) cc = ((cc % N) + N) % N;
                 continue;
             }
         }
         rr += dr; cc += dc;
-        if (wrap) cc = ((cc % 8) + 8) % 8;
+        if (wrap) cc = ((cc % N) + N) % N;
     }
 }
 
@@ -537,7 +539,7 @@ function lineSquares(b, r, c, tp) {
     const out = [];
     if (tp === 'n') {
         const wp = b[r][c];
-        KN.forEach(([dr, dc]) => { const tc = wcol(wp, c + dc); if (r + dr >= 0 && r + dr < 8 && tc >= 0) out.push([r + dr, tc]); });
+        KN.forEach(([dr, dc]) => { const tc = wcol(wp, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); });
         return out;
     }
     const dirs = tp === 'b' ? DIAG : tp === 'r' ? ORTH : [...DIAG, ...ORTH];
@@ -554,17 +556,17 @@ function attackSquares(b, r, c) {
     const p = b[r][c], out = [];
     if (p.scared) {                               // напуганная фигура бьёт только на 1 клетку по своим направлениям
         if (p.t === 'p') return out;
-        moveTypes(p).forEach(tp => scaredDirs(tp).forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < 8 && tc >= 0) out.push([r + dr, tc]); }));
+        moveTypes(p).forEach(tp => scaredDirs(tp).forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); }));
         return out;
     }
     moveTypes(p).forEach(tp => {
         if (tp === 'p') {
             const d = p.c === 'w' ? -1 : 1;
-            [-1, 1].forEach(dc => { const tc = wcol(p, c + dc); if (r + d >= 0 && r + d < 8 && tc >= 0) out.push([r + d, tc]); });
+            [-1, 1].forEach(dc => { const tc = wcol(p, c + dc); if (r + d >= 0 && r + d < N && tc >= 0) out.push([r + d, tc]); });
         } else if (tp === 'k') {
-            KG.forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < 8 && tc >= 0) out.push([r + dr, tc]); });
+            KG.forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); });
         } else if (tp === 'j') {
-            ORTH.forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < 8 && tc >= 0) out.push([r + dr, tc]); });
+            ORTH.forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); });
         } else if (tp === 'h') {
             /* заяц никого не бьёт */
         } else {
@@ -576,8 +578,8 @@ function attackSquares(b, r, c) {
 
 // Замороженные, пойманные капканом фигуры и иллюзии никого не атакуют
 function isAttacked(b, r, c, by, noKing) {
-    for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
+    for (let i = 0; i < N; i++) {
+        for (let j = 0; j < N; j++) {
             const p = b[i][j];
             if (!p || p.c !== by || p.frozen > 0 || p.snared > 0 || p.ghost || p.cap > 0 || (noKing && p.t === 'k')) continue;      // фигура в шутовском колпаке шахов не создаёт
             if (attackSquares(b, i, j).some(([x, y]) => x === r && y === c)) return true;
@@ -587,7 +589,7 @@ function isAttacked(b, r, c, by, noKing) {
 }
 
 function findKing(b, col) {
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = b[r][c];
         if (p && p.t === 'k' && p.c === col && !p.ghost) return [r, c];
     }
@@ -596,9 +598,11 @@ function findKing(b, col) {
 
 // Редактор доски: у стороны режим победы над ней. 'mate': обычный мат (шах учитывается), 'all': нужно срубить все её фигуры (шаха нет, короли рубятся)
 const allMode = c => !!(G && G.win && G.win[c] === 'all');
+// Король, которого защищают особые правила (не рубится магией, не прячется и т. д.). В режиме «срубить все» королей нет в этом смысле: они обычные фигуры
+const kSafe = p => !!p && p.t === 'k' && !allMode(p.c);
 function findKings(b, col) {
     const out = [];
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = b[r][c];
         if (p && p.t === 'k' && p.c === col && !p.ghost) out.push([r, c]);
     }
@@ -620,15 +624,15 @@ function brotherImmune(b, r, c) {
     const own = x => { const q = b[r][x]; return !!q && q.t === 'p' && q.c === p.c && !q.ghost && !q.orig; };
     let lo = c, hi = c;
     while (lo > 0 && own(lo - 1)) lo--;
-    while (hi < 7 && own(hi + 1)) hi++;
+    while (hi < N - 1 && own(hi + 1)) hi++;
     return hi - lo + 1 === 2;
 }
 
 // Фигура Мага в радиусе 3×3 от его короля
 function auraProtected(b, r, c) {
     const p = b[r][c];
-    if (p && p.t !== 'k' && p.warded > 0) return true;                     // Очищение: такая же защита, как у барьера
-    if (!p || p.t === 'k' || p.orig || G.hero[p.c] !== 'mage') return false;
+    if (p && !kSafe(p) && p.warded > 0) return true;                     // Очищение: такая же защита, как у барьера
+    if (!p || kSafe(p) || p.orig || G.hero[p.c] !== 'mage') return false;
     const k = findKing(b, p.c);
     return !!k && Math.abs(k[0] - r) <= 1 && Math.abs(k[1] - c) <= 1;
 }
@@ -638,7 +642,7 @@ function auraProtected(b, r, c) {
 function magicProof(b, r, c, owner, ignoreFrozen) {
     const p = b[r][c];
     if (!p) return false;
-    if (p.t === 'k') return true;
+    if (kSafe(p)) return true;
     if (!ignoreFrozen && p.frozen > 0) return true;   // заморозка защищает от магии (кроме огненного шара)
     return auraProtected(b, r, c);
 }
@@ -666,7 +670,7 @@ function kingSafe(b, col, fires, settle) {
         let changed = false;
         enemyFires.forEach(f => {
             if (f.kind === 'shomen') {
-                for (let r = 0; r < 8; r++) if (b2[r][f.c] && !magicProof(b2, r, f.c)) { b2[r][f.c] = null; changed = true; }
+                for (let r = 0; r < N; r++) if (b2[r][f.c] && !magicProof(b2, r, f.c)) { b2[r][f.c] = null; changed = true; }
                 return;
             }
             const p = b2[f.r][f.c];
@@ -715,13 +719,13 @@ function pseudoMoves(b, r, c) {
 
     if (p.scared) {                               // испуг: дальность хода 1 клетка
         if (p.t === 'p') {                        // пешка: только на 1 вперёд, без рубки, двойного хода и взятия на проходе
-            const f = p.c === 'w' ? -1 : 1, lastRank = p.c === 'w' ? 0 : 7, tr = r + f;
+            const f = p.c === 'w' ? -1 : 1, lastRank = p.c === 'w' ? 0 : N - 1, tr = r + f;
             if (inb(tr, c) && passable(b[tr][c]) && !(ghost && tr === lastRank)) add(tr, c, { promo: tr === lastRank });
             return mv;
         }
         moveTypes(p).forEach(tp => scaredDirs(tp).forEach(([dr, dc]) => {
             const tr = r + dr, tc = wcol(p, c + dc);
-            if (tr < 0 || tr > 7 || tc < 0) return;
+            if (tr < 0 || tr >= N || tc < 0) return;
             const t = b[tr][tc];
             if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
         }));
@@ -729,7 +733,7 @@ function pseudoMoves(b, r, c) {
     }
 
     if (p.t === 'p') {
-        const d = p.c === 'w' ? -1 : 1, start = p.c === 'w' ? 6 : 1, last = p.c === 'w' ? 0 : 7;
+        const d = p.c === 'w' ? -1 : 1, start = p.c === 'w' ? N - 2 : 1, last = p.c === 'w' ? 0 : N - 1;
         const f1 = inb(r + d, c) ? b[r + d][c] : null;
         const open1 = inb(r + d, c) && passable(f1);
         if (open1 && !(ghost && r + d === last)) add(r + d, c, { promo: r + d === last });
@@ -737,7 +741,7 @@ function pseudoMoves(b, r, c) {
         if ((open1 || (f1 && passThru(f1, p.c, r + d, c))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c) && !wallAt(r + d, c)) add(r + 2 * d, c, { double: true });
         [-1, 1].forEach(dc => {
             const tr = r + d, tc = wcol(p, c + dc), wr = tc !== c + dc ? { path: [] } : {};
-            if (tr < 0 || tr > 7 || tc < 0) return;
+            if (tr < 0 || tr >= N || tc < 0) return;
             const t = b[tr][tc];
             if (t && supOpen(b, t)) return;      // фигуру в суперпозиции пешка рубить не может
             if (canTake(t, tr, tc)) add(tr, tc, { promo: tr === last, ...wr });
@@ -755,21 +759,21 @@ function pseudoMoves(b, r, c) {
         if (tp === 'n') {
             KN.forEach(([dr, dc]) => {
                 const tr = r + dr, tc = wcol(p, c + dc);
-                if (tr < 0 || tr > 7 || tc < 0) return;
+                if (tr < 0 || tr >= N || tc < 0) return;
                 const t = b[tr][tc];
                 if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
             });
         } else if (tp === 'j') {                       // заводные челюсти: на 1 клетку по вертикали и горизонтали, ходят и рубят
             ORTH.forEach(([dr, dc]) => {
                 const tr = r + dr, tc = wcol(p, c + dc);
-                if (tr < 0 || tr > 7 || tc < 0) return;
+                if (tr < 0 || tr >= N || tc < 0) return;
                 const t = b[tr][tc];
                 if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
             });
         } else if (tp === 'k') {
             KG.forEach(([dr, dc]) => {
                 const tr = r + dr, tc = wcol(p, c + dc);
-                if (tr < 0 || tr > 7 || tc < 0) return;
+                if (tr < 0 || tr >= N || tc < 0) return;
                 const t = b[tr][tc];
                 if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
             });
@@ -820,10 +824,10 @@ function possessCells(b, r, c) {
         const [cr, cc] = queue.shift();
         for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
             const nr = cr + dr, nc = cc + dc;
-            if ((!dr && !dc) || !inb(nr, nc) || seen.has(nr * 8 + nc)) continue;
+            if ((!dr && !dc) || !inb(nr, nc) || seen.has(nr * N + nc)) continue;
             const t = b[nr][nc];
-            if (!t || t.c !== col || t.ghost || t.t === 'k') continue;
-            seen.add(nr * 8 + nc);
+            if (!t || t.c !== col || t.ghost || kSafe(t)) continue;
+            seen.add(nr * N + nc);
             chain.push([nr, nc]);
             queue.push([nr, nc]);
         }
@@ -832,7 +836,7 @@ function possessCells(b, r, c) {
     chain.forEach(([pr, pc]) => {
         for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
             const nr = pr + dr, nc = pc + dc;
-            if (inb(nr, nc) && !b[nr][nc]) out.set(nr * 8 + nc, [nr, nc]);
+            if (inb(nr, nc) && !b[nr][nc]) out.set(nr * N + nc, [nr, nc]);
         }
     });
     return [...out.values()];
@@ -866,7 +870,7 @@ function pickGuardian(board, vr, vc, victim, exclude, unsafe) {
         const ar = vr + dr, ac = vc + dc;
         if (!inb(ar, ac)) continue;
         const a = board[ar][ac];
-        if (!a || a === exclude || a === victim || !(a.altruist > 0) || a.c !== victim.c || a.t === 'k' || a.ghost || a.frozen > 0) continue;
+        if (!a || a === exclude || a === victim || !(a.altruist > 0) || a.c !== victim.c || kSafe(a) || a.ghost || a.frozen > 0) continue;
         if (unsafe && unsafe(ar, ac)) continue;
         cands.push({ a, v: victim, from: [ar, ac], to: [vr, vc] });
     }
@@ -874,7 +878,7 @@ function pickGuardian(board, vr, vc, victim, exclude, unsafe) {
     const low = Math.min(...cands.map(x => PIECE_VAL[x.a.t] || 0));
     cands = cands.filter(x => (PIECE_VAL[x.a.t] || 0) === low);
     if (cands.length === 1) return cands[0];
-    const h = ((G && G.log ? G.log.length : 0) * 31 + ((G && G.deaths) || 0) * 17 + vr * 8 + vc) >>> 0;
+    const h = ((G && G.log ? G.log.length : 0) * 31 + ((G && G.deaths) || 0) * 17 + vr * N + vc) >>> 0;
     return cands[h % cands.length];
 }
 
@@ -899,7 +903,7 @@ function applyMove(board, mv, promo) {
     // Если из-за гибели срубившего его собственному королю откроется шах, он остаётся жив, колпак всё равно слетает, ход потрачен
     // Фигура под Очищением или в ауре Мага (на клетке, куда она рубит) игнорирует колпак и просто рубит
     const capImmune = !!(victim && victim.cap > 0 && (p.warded > 0 || (!p.orig && G.hero[p.c] === 'mage' && (() => { const k = findKing(board, p.c); return !!k && Math.abs(k[0] - mv.tr) <= 1 && Math.abs(k[1] - mv.tc) <= 1; })())));
-    if (victim && victim.cap > 0 && victim.c !== p.c && p.t !== 'k' && !p.ghost && !victim.ghost && !capImmune) {
+    if (victim && victim.cap > 0 && victim.c !== p.c && !kSafe(p) && !p.ghost && !victim.ghost && !capImmune) {
         if (mv.ep) board[mv.pr][mv.pc] = victim;
         delete victim.cap; delete victim.capBy;
         res.capBack = victim;
@@ -917,7 +921,7 @@ function applyMove(board, mv, promo) {
         return res;
     }
     // Ангел-хранитель: самоотверженная фигура рядом меняется с жертвой местами и гибнет вместо неё
-    if (victim && victim.t !== 'k' && !victim.ghost) {
+    if (victim && !kSafe(victim) && !victim.ghost) {
         const vr = mv.ep ? mv.pr : mv.tr, vc = mv.ep ? mv.pc : mv.tc;
         const guard = pickGuardian(board, vr, vc, victim, p);
         if (guard) {
@@ -964,12 +968,12 @@ function applyMove(board, mv, promo) {
     } else {
         if (mv.promo) p.t = promo || 'q';
         // горящая клетка на пути или в конце хода: фигура сгорает (король неуязвим, конь перепрыгивает)
-        if (p.t !== 'k' && G.burn.length) {
+        if (!kSafe(p) && G.burn.length) {
             const hit = moveCells(mv).map(([r, c]) => burnAt(r, c)).find(Boolean);
             if (hit && !magicProof(board, mv.tr, mv.tc, hit.owner, true)) tileDeath(false);
         }
         // острая клетка Самурая: вставшая на неё фигура погибает (пройти сквозь можно)
-        if (!res.burned && p.t !== 'k' && G.sharp.length) {
+        if (!res.burned && !kSafe(p) && G.sharp.length) {
             const z = sharpAt(mv.tr, mv.tc);
             if (z && !magicProof(board, mv.tr, mv.tc)) tileDeath(true);
         }
@@ -1004,7 +1008,7 @@ function applyEffects(b, log) {
         G.hogs.slice().forEach(h => {
             const q = b[h.r][h.c];
             if (!q) { if (log) h.exempt = null; return; }
-            if (q.ghost || q.t === 'k' || (h.exempt && q.uid === h.exempt)) return;
+            if (q.ghost || kSafe(q) || (h.exempt && q.uid === h.exempt)) return;
             const pv = q.prev;
             if (!pv || b[pv[0]][pv[1]]) return;
             b[pv[0]][pv[1]] = q;
@@ -1064,7 +1068,7 @@ function bananaSlideOnBoard(nb, r, c, col) {
     if (typeof G === 'undefined' || !G || !G.bananas || !G.bananas.length) return;
     const bn = G.bananas.find(x => x.r === r && x.c === c && x.owner === col);
     const q = nb[r][c];
-    if (!bn || !q || q.c !== col || q.t === 'k' || q.ghost || q.warded > 0) return;
+    if (!bn || !q || q.c !== col || kSafe(q) || q.ghost || q.warded > 0) return;
     const tr = r + bn.dir[0], tc = c + bn.dir[1];
     if (inb(tr, tc) && !nb[tr][tc] && !wallAt(tr, tc)) { nb[tr][tc] = q; nb[r][c] = null; }
 }
@@ -1084,7 +1088,7 @@ function isLegalMove(b, mv) {
 // null: люк не срабатывает (нет люка, король, иллюзия, защита или нет свободных люков).
 function hatchSafeExits(nb, tr, tc, col) {
     const q = nb[tr] && nb[tr][tc];
-    if (!G.hatches || !G.hatches.length || !q || q.t === 'k' || q.ghost || q.warded > 0) return null;
+    if (!G.hatches || !G.hatches.length || !q || kSafe(q) || q.ghost || q.warded > 0) return null;
     if (!G.hatches.some(h => h.r === tr && h.c === tc)) return null;
     const exits = G.hatches.filter(h => !(h.r === tr && h.c === tc) && !nb[h.r][h.c]);
     if (!exits.length) return null;
@@ -1100,7 +1104,7 @@ const legalMovesAt = (b, r, c) => pseudoMoves(b, r, c).filter(m => isLegalMove(b
 
 // Иллюзии в счёт возможных ходов не идут: они не могут снять шах
 function anyLegalMove(b, col) {
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = b[r][c];
         if (p && p.c === col && !p.ghost && asJester(p, col, () => legalMovesAt(b, r, c)).length) return true;
     }
@@ -1110,7 +1114,7 @@ function anyLegalMove(b, col) {
 // Ходы зомби, которые обязаны рубить
 function zombieForced(col) {
     const out = [];
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = G.board[r][c];
         if (!p || p.c !== col || !p.zombie || p.ghost) continue;
         legalMovesAt(G.board, r, c).forEach(m => {
@@ -1125,9 +1129,9 @@ function zombieForced(col) {
 function lureForced(col) {
     const out = [];
     if (!G.lureCells.length && !G.board.some(row => row.some(p => p && p.lure))) return out;
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = G.board[r][c];
-        if (!p || p.c !== col || p.t === 'k' || p.ghost) continue;
+        if (!p || p.c !== col || kSafe(p) || p.ghost) continue;
         legalMovesAt(G.board, r, c).forEach(m => {
             const t = m.ep ? G.board[m.pr][m.pc] : G.board[m.tr][m.tc];
             const onPiece = t && t.lure && t.lure !== col;
@@ -1155,7 +1159,7 @@ function computeForced(col) {
    ===================================================================== */
 function findGhost(pair) {
     if (pair == null) return null;
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = G.board[r][c];
         if (p && p.ghost && p.pair === pair) return { r, c, p };
     }
@@ -1163,7 +1167,7 @@ function findGhost(pair) {
 }
 function findOriginal(pair) {
     if (pair == null) return null;
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = G.board[r][c];
         if (p && !p.ghost && p.pair === pair) return { r, c, p };
     }
@@ -1186,7 +1190,7 @@ function pawnFrontThreat(b, r, c, enemy) {
 // Почему фигура на клетке должна стать видимой (или null)
 function invisReason(b, r, c) {
     const p = b[r][c], enemy = other(p.c);
-    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
         const q = b[i][j];
         if (q && q.c === enemy && q.t === 'p' && !q.ghost && !(q.frozen > 0) && !(q.snared > 0) &&
             attackSquares(b, i, j).some(([x, y]) => x === r && y === c)) return 'ей угрожает пешка';
@@ -1214,7 +1218,7 @@ function revealPiece(r, c, why) {
 }
 
 function checkInvis() {
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = G.board[r][c];
         if (!p || !p.invis) continue;
         const why = invisReason(G.board, r, c);
@@ -1229,7 +1233,7 @@ function pinnerOf(p, d) {
         applyMove(nb, d, 'q');
         const k = findKing(nb, p.c);
         if (!k) return null;
-        for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+        for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
             const q = nb[i][j];
             if (q && q.c === other(p.c) && q.invis && !q.ghost && !(q.frozen > 0) && !(q.snared > 0) &&
                 attackSquares(nb, i, j).some(([x, y]) => x === k[0] && y === k[1])) return [i, j];
@@ -1299,7 +1303,7 @@ function ghostExposed(b, gr, gc, col) {
 // Иллюзии цвета col, которые визуально прикрывают клетку (r, c)
 function ghostBlockers(b, col, r, c) {
     const out = [];
-    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
         const g = b[i][j];
         if (g && g.ghost && !g.fake && g.c === col && attackSquares(b, i, j).some(([x, y]) => x === r && y === c)) out.push([i, j]);
     }
@@ -1338,7 +1342,7 @@ function vanishGhost(r, c, reason, silent) {
 function checkIllusions() {
     // две иллюзии разных цветов: если одна угрожает другой, рассеиваются обе
     const gs = [];
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const g = G.board[r][c];
         if (g && g.ghost && !g.fake) gs.push({ r, c, g });
     }
@@ -1350,7 +1354,7 @@ function checkIllusions() {
         });
     });
     clash.forEach(k => { const [r, c] = k.split(',').map(Number); vanishGhost(r, c, 'две иллюзии столкнулись'); });
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const g = G.board[r][c];
         if (!g || !g.ghost || g.fake) continue;
         const o = findOriginal(g.pair);
@@ -1363,7 +1367,7 @@ function checkIllusions() {
 // Без дополнительных запретов: если двойник встанет под угрозу, он просто рассеется (это риск игрока).
 function illusionOptions(r, c, first) {
     const b = G.board, p = b[r][c], res = [];
-    if (!p || p.ghost || p.pair || p.frozen || p.snared || p.t === 'k' || p.orig || p.invis) return res;
+    if (!p || p.ghost || p.pair || p.frozen || p.snared || kSafe(p) || p.orig || p.invis) return res;
     const touchesGhost = m => moveCells(m).some(([rr, cc]) => b[rr][cc] && b[rr][cc].ghost);
     const plain = m => !m.promo && !m.ep && !m.castle && !touchesGhost(m);
     const empties = pseudoMoves(b, r, c).filter(m => plain(m) && !b[m.tr][m.tc]);
@@ -1427,7 +1431,7 @@ function selectableMoves(r, c) {
 // Варианты: первый ход m1 вражеской фигуры и список вторых ходов (без рубки)
 function confusionOptions(r, c, first) {
     const b = G.board, p = b[r][c], res = [];
-    if (!p || p.ghost || p.t === 'k' || p.frozen > 0 || p.snared > 0) return res;
+    if (!p || p.ghost || kSafe(p) || p.frozen > 0 || p.snared > 0) return res;
     const col = other(p.c);                       // тот, кто применяет способность
     const quiet = (bd, rr, cc) => pseudoMoves(bd, rr, cc).filter(m => !m.promo && !m.castle && !m.ep && !bd[m.tr][m.tc]);
     for (const m1 of quiet(b, r, c)) {
@@ -1463,11 +1467,11 @@ function eatApply(board, r, c, tr, tc) {
 
 function frankTargets(r, c) {
     const b = G.board, p = b[r][c], out = [];
-    if (!p || p.ghost || p.frozen || p.snared || p.t === 'k' || p.t === 'p' || p.orig) return out;
+    if (!p || p.ghost || p.frozen || p.snared || kSafe(p) || p.t === 'p' || p.orig) return out;
     const seen = new Set();
     moveTypes(p).forEach(tp => lineSquares(b, r, c, tp).forEach(([tr, tc]) => {
-        const t = b[tr][tc], k = tr * 8 + tc;
-        if (seen.has(k) || !t || t.ghost || t.c !== p.c || t.frozen || t.t === 'k' || t.t === 'p' || t.orig) return;
+        const t = b[tr][tc], k = tr * N + tc;
+        if (seen.has(k) || !t || t.ghost || t.c !== p.c || t.frozen || kSafe(t) || t.t === 'p' || t.orig) return;
         seen.add(k);
         const nb = cloneBoard(b);
         eatApply(nb, r, c, tr, tc);
@@ -1479,15 +1483,15 @@ function frankTargets(r, c) {
 /* =====================================================================
    СПАСЕНИЕ (Паладин)
    ===================================================================== */
-const ownHalf = col => (col === 'w' ? [4, 5, 6, 7] : [0, 1, 2, 3]);
-const ownThree = col => (col === 'w' ? [5, 6, 7] : [0, 1, 2]);      // первые три линии стороны
+const ownHalf = col => Array.from({ length: Math.floor(N / 2) }, (_, k) => (col === 'w' ? N - 1 - k : k));
+const ownThree = col => Array.from({ length: 3 }, (_, k) => (col === 'w' ? N - 1 - k : k));      // первые три линии стороны
 
 function rescueDests(r, c) {
-    const b = G.board, p = b[r][c], col = p.c, out = [], home = col === 'w' ? 7 : 0;
+    const b = G.board, p = b[r][c], col = p.c, out = [], home = col === 'w' ? N - 1 : 0;
     (p.t === 'p' ? ownHalf(col).filter(x => x !== home) : [home]).forEach(rr => {
-        for (let cc = 0; cc < 8; cc++) {
+        for (let cc = 0; cc < N; cc++) {
             if (b[rr][cc] && !hiddenFor(b[rr][cc], col)) continue;
-            if (p.t !== 'k' && burnAt(rr, cc)) continue;
+            if (!kSafe(p) && burnAt(rr, cc)) continue;
             const nb = cloneBoard(b);
             nb[rr][cc] = nb[r][c];
             nb[r][c] = null;
@@ -1518,7 +1522,7 @@ const rangeFor = (col, base) => base;
 function arrowCells(col, range, ignoreFrozen) {
     const b = G.board, k = findKing(b, col), cells = [];
     if (!k) return cells;
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         if (Math.max(Math.abs(r - k[0]), Math.abs(c - k[1])) > range) continue;
         if (magicProof(b, r, c, col, ignoreFrozen)) continue;
         cells.push([r, c]);
@@ -1562,7 +1566,7 @@ function portalSafe(a, b2, col) {
 
 function portalPartners(a, col, first) {
     const out = [];
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         if ((r === a[0] && c === a[1]) || !isFreeCell(r, c)) continue;
         if (portalSafe(a, [r, c], col)) { out.push([r, c]); if (first) return out; }
     }
@@ -1586,7 +1590,7 @@ function moveProps(from, to) {
 
 function relocateDests(r, c, col, first) {
     const out = [];
-    for (let rr = 0; rr < 8; rr++) for (let cc = 0; cc < 8; cc++) {
+    for (let rr = 0; rr < N; rr++) for (let cc = 0; cc < N; cc++) {
         if ((rr === r && cc === c) || !isFreeCell(rr, cc) || burnAt(rr, cc) || G.fire.some(f => f.r === rr && f.c === cc) || G.lureCells.some(x => x.r === rr && x.c === cc)) continue;   // только СВОБОДНЫЕ клетки
         let undo = null;
         if (structSafe(col, () => { undo = moveProps([r, c], [rr, cc]); }, () => undo())) {
@@ -1601,7 +1605,7 @@ function relocateDests(r, c, col, first) {
 function aimCells(col) {
     const b = G.board, k = findKing(b, col), cells = [];
     if (!k) return cells;
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const dr = Math.abs(r - k[0]), dc = Math.abs(c - k[1]);
         if (dr + dc > 3) continue;      // 3 шага по клеткам (вперёд/назад/вбок), то есть ромб вокруг короля
         if (magicProof(b, r, c)) continue;
@@ -1617,7 +1621,7 @@ const hiddenFor = (p, col) => !!p && !!p.invis && p.c !== col && !p.ghost;
 // Доска глазами игрока col: вражеские невидимки исчезли, вражеские иллюзии выглядят настоящими угрозами
 function visionBoard(nb, col) {
     const vb = cloneBoard(nb);
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = vb[r][c];
         if (!p || p.c === col) continue;
         if (p.invis) vb[r][c] = null;
@@ -1639,7 +1643,7 @@ function guardPlacement(col, r, c, build, isKing) {
     if (safeAfter(cloneBoard(nb), col)) return false;
     if (!isKing) return true;          // у обычных фигур угроза ничего не раскрывает
     const k = findKing(nb, col);
-    if (k) for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+    if (k) for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
         const q = nb[i][j];
         if (!hiddenFor(q, col) || q.frozen > 0 || q.snared > 0) continue;
         if (attackSquares(nb, i, j).some(([x, y]) => x === k[0] && y === k[1])) revealPiece(i, j, 'ей встали под угрозу');
@@ -1660,8 +1664,8 @@ function abilityCellsRaw(key, col, t, first) {
     const safeNow = safeAfter(cloneBoard(b), col);
 
     if (key === 'resurrect' || key === 'raise') {
-        (t.t === 'p' ? ownHalf(col) : [col === 'w' ? 7 : 0]).forEach(r => {   // первая горизонталь (пешка: любая из первых четырёх)
-            for (let c = 0; c < 8; c++) {
+        (t.t === 'p' ? ownHalf(col) : [col === 'w' ? N - 1 : 0]).forEach(r => {   // первая горизонталь (пешка: любая из первых четырёх)
+            for (let c = 0; c < N; c++) {
                 if (b[r][c] && !hiddenFor(b[r][c], col)) continue;
                 const nb = cloneBoard(b);
                 nb[r][c] = { ...mk(t.t, col), x: [...(t.x || [])], moved: true, zombie: key === 'raise' };
@@ -1670,14 +1674,14 @@ function abilityCellsRaw(key, col, t, first) {
         });
     } else if (key === 'shield') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && !p.ghost && p.t !== 'k' && !p.shield) cells.push([r, c]);
+            if (p && p.c === col && !p.ghost && !kSafe(p) && !p.shield) cells.push([r, c]);
         }
     } else if (key === 'rescue') {
         const far = ownHalf(enemy);
         far.forEach(r => {
-            for (let c = 0; c < 8; c++) {
+            for (let c = 0; c < N; c++) {
                 const p = b[r][c];
                 if (p && p.c === col && !p.ghost && rescueDests(r, c).length) cells.push([r, c]);
             }
@@ -1691,9 +1695,9 @@ function abilityCellsRaw(key, col, t, first) {
     } else if (key === 'aim') {
         return aimCells(col);
     } else if (key === 'freeze') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (!p || p.t === 'k' || p.frozen > 0) continue;
+            if (!p || kSafe(p) || p.frozen > 0) continue;
             const own = p.c === col;
             if (own ? p.ghost : p.invis) continue;
             if (magicProof(b, r, c, col)) continue;
@@ -1703,9 +1707,9 @@ function abilityCellsRaw(key, col, t, first) {
             if (safeAfter(nb, col)) cells.push([r, c]);
         }
     } else if (key === 'hypnosis') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (!p || p.c !== enemy || p.t === 'k' || p.frozen || p.orig || p.invis) continue;
+            if (!p || p.c !== enemy || kSafe(p) || p.frozen || p.orig || p.invis) continue;
             if (magicProof(b, r, c, col)) continue;
             if (!nearOwn(b, r, c, col)) continue;
             if (p.ghost) { if (safeNow) cells.push([r, c]); continue; }
@@ -1715,15 +1719,15 @@ function abilityCellsRaw(key, col, t, first) {
             if (safeAfter(nb, col)) cells.push([r, c]);
         }
     } else if (key === 'confusion') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (!p || p.c !== enemy || p.t === 'k' || p.frozen || p.invis) continue;
+            if (!p || p.c !== enemy || kSafe(p) || p.frozen || p.invis) continue;
             if (magicProof(b, r, c, col)) continue;
             if (p.ghost) { if (safeNow) cells.push([r, c]); continue; }
             if (confusionOptions(r, c, true).length) cells.push([r, c]);
         }
     } else if (key === 'illusion') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
             if (p && p.c === col && illusionOptions(r, c, true).length) {
                 cells.push([r, c]);
@@ -1731,33 +1735,33 @@ function abilityCellsRaw(key, col, t, first) {
             }
         }
     } else if (key === 'frankenstein') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
             if (p && p.c === col && frankTargets(r, c).length) cells.push([r, c]);
         }
     } else if (key === 'apocalypse') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
             if (p && p.zombie && !p.ghost && !(p.c !== col && p.invis) && zombieMoves(r, c, col).length) cells.push([r, c]);
         }
     } else if (key === 'phase') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && p.t !== 'k' && !p.ghost && !p.phase && !p.orig) cells.push([r, c]);
+            if (p && p.c === col && !kSafe(p) && !p.ghost && !p.phase && !p.orig) cells.push([r, c]);
         }
     } else if (key === 'soulmates') {
         if (!safeNow) return [];
         const el = [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && !p.ghost && p.t !== 'k' && !p.soul && !magicProof(b, r, c) && !(p.invis && p.c !== col)) el.push([r, c]);
+            if (p && !p.ghost && !kSafe(p) && !p.soul && !magicProof(b, r, c) && !(p.invis && p.c !== col)) el.push([r, c]);
         }
         if (el.length >= 2) return el;
     } else if (key === 'scream') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (!p || p.c !== enemy || p.t === 'k' || p.scared || p.invis || magicProof(b, r, c)) continue;
+            if (!p || p.c !== enemy || kSafe(p) || p.scared || p.invis || magicProof(b, r, c)) continue;
             if (p.ghost) { if (safeNow) cells.push([r, c]); continue; }
             const nb = cloneBoard(b);
             nb[r][c].scared = true;
@@ -1765,20 +1769,20 @@ function abilityCellsRaw(key, col, t, first) {
         }
     } else if (key === 'shomen') {
         if (!safeNow || !G.deaths) return [];          // недоступен до первой смерти
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) cells.push([r, c]);
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) cells.push([r, c]);
     } else if (key === 'fukashi') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && p.t !== 'k' && !p.ghost && !p.invis && !p.pair && !p.orig && !invisReason(b, r, c)) cells.push([r, c]);
+            if (p && p.c === col && !kSafe(p) && !p.ghost && !p.invis && !p.pair && !p.orig && !invisReason(b, r, c)) cells.push([r, c]);
         }
     } else if (key === 'fenyan') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) cells.push([r, c]);
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) cells.push([r, c]);
     } else if (key === 'teleport') {
         const k = findKing(b, col);
         if (!k) return [];
         const show = [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (b[r][c] && !hiddenFor(b[r][c], col)) continue;
             const nb = cloneBoard(b);
             nb[r][c] = nb[k[0]][k[1]];
@@ -1788,22 +1792,22 @@ function abilityCellsRaw(key, col, t, first) {
         }
         cells.show = show;
     } else if (key === 'conveyor') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (isFreeCell(r, c) && conveyorDirs(r, c, col).length) cells.push([r, c]);
         }
     } else if (key === 'portals') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (isFreeCell(r, c) && portalPartners([r, c], col, true).length) cells.push([r, c]);
         }
     } else if (key === 'relocate') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (hasProps(cellProps(r, c)) && relocateDests(r, c, col, true).length) cells.push([r, c]);
         }
     } else if (key === 'guardian' || key === 'purify' || key === 'bumpuku') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (!p || p.t === 'k' || p.ghost) continue;
+            if (!p || kSafe(p) || p.ghost) continue;
             if (key === 'purify' ? (p.invis && p.c !== col) : p.c !== col) continue;
             if (key === 'guardian' && p.altruist > 0) continue;
             if (key === 'bumpuku' && p.bomb) continue;
@@ -1811,19 +1815,19 @@ function abilityCellsRaw(key, col, t, first) {
         }
     } else if (key === 'virus' || key === 'vine' || key === 'ritual') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isFreeCell(r, c)) cells.push([r, c]);
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) cells.push([r, c]);
     } else if (key === 'generator') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isFreeCell(r, c)) cells.push([r, c]);
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) cells.push([r, c]);
         if (cells.length < 2) return [];
     } else if (key === 'lie') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
             if (p && p.c === col && lieOptions(r, c, true).length) cells.push([r, c]);
         }
     } else if (key === 'groundhog') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (G.hogs.some(h => h.r === r && h.c === c && h.visible)) continue;      // скрытую ловушку сурка новая заменит
             const p = b[r][c];
             if (!p || hiddenFor(p, col)) cells.push([r, c]);    // пустая клетка (или невидимка врага): скрыто и бесплатно
@@ -1831,12 +1835,12 @@ function abilityCellsRaw(key, col, t, first) {
         }
     } else if (key === 'superposition') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.t !== 'k' && !p.ghost && !p.sup && !(p.invis && p.c !== col)) cells.push([r, c]);
+            if (p && !kSafe(p) && !p.ghost && !p.sup && !(p.invis && p.c !== col)) cells.push([r, c]);
         }
     } else if (key === 'zawarudo') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
             if (p && p.c === col && !p.ghost && legalMovesAt(b, r, c).some(m => !givesCheck(b, m) && !zwCapture(b, m))) return [[r, c]];
         }
@@ -1847,14 +1851,14 @@ function abilityCellsRaw(key, col, t, first) {
         return findKing(b, col) ? [[0, 0]] : [];
     } else if (key === 'trap') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenFor(b[r][c], col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
         }
     } else if (key === 'lure') {
         if (!safeNow) return [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && !hiddenFor(p, col)) { if (p.c === col && !p.ghost && p.t !== 'k' && !p.lure) cells.push([r, c]); }
+            if (p && !hiddenFor(p, col)) { if (p.c === col && !p.ghost && !kSafe(p) && !p.lure) cells.push([r, c]); }
             else if (!G.lureCells.some(x => x.r === r && x.c === c)) cells.push([r, c]);
         }
     }
@@ -1901,7 +1905,7 @@ function hasAnyAction(col) {
 }
 
 function hasBonusMove(col) {
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = G.board[r][c];
         if (p && p.c === col && !p.ghost && selectableMoves(r, c).length) return true;
     }
@@ -1926,7 +1930,7 @@ function orderVictims(list) {
 
 function guardSwap(r, c, unsafe) {
     const v = G.board[r][c];
-    if (!v || v.t === 'k' || v.ghost) return null;
+    if (!v || kSafe(v) || v.ghost) return null;
     const gd = pickGuardian(G.board, r, c, v, null, unsafe);
     if (!gd) return null;
     const [ar, ac] = gd.from, a = gd.a;
@@ -1964,6 +1968,8 @@ function newState(board, hero, win) {
 function startGame() {
     const oldOrb = document.getElementById('goOrb'); if (oldOrb) oldOrb.remove();
     const cfg = CUSTOM;      // своя доска из редактора
+    N = cfg && cfg.size ? cfg.size : 8;
+    document.documentElement.style.setProperty('--n', N);
     const fischer = !cfg && _seed < 0;      // отрицательное общее число = шахматы Фишера (так режим сам доезжает до соперника и в повтор партии)
     G = newState(cfg ? boardFromCfg(cfg) : initialBoard(fischer), { ...selectedHeroes }, cfg ? { ...cfg.win } : { w: 'mate', b: 'mate' });
     if (cfg) { installTiles(G, cfg); if (cfg.tiles && cfg.tiles.some(t => t.k === 'fog')) syncFog(); }      // плитки из редактора
@@ -2029,7 +2035,7 @@ function computeState(c) {
 // Удар Сёмен-ути: все фигуры на вертикали погибают (кроме королей и фигур под барьером Мага)
 function shomenStrike(f, owner) {
     const dead = [], vic = [];
-    for (let rr = 0; rr < 8; rr++) {
+    for (let rr = 0; rr < N; rr++) {
         const q = G.board[rr][f.c];
         G.fx.push({ r: rr, c: f.c, type: 'arrowhit' });
         if (!q || magicProof(G.board, rr, f.c)) continue;
@@ -2193,7 +2199,7 @@ function sweepBurn() {
 function sweepTraps() {
     G.traps = G.traps.filter(t => {
         const p = G.board[t.r][t.c];
-        if (!p || p.t === 'k' || p.ghost) return true;
+        if (!p || kSafe(p) || p.ghost) return true;
         if (p.warded > 0) {      // Очищение: фигура давит капкан без последствий
             addLog('n', p.invis ? '✴ Невидимая фигура под Очищением уничтожает капкан' : `✴ ${pieceSym(p)} под Очищением уничтожает капкан на ${sqName(t.r, t.c)}`);
             return false;
@@ -2210,7 +2216,7 @@ function sweepTraps() {
 function sweepVirus() {
     G.virus = G.virus.filter(v => {
         const p = G.board[v.r][v.c];
-        if (!p || p.t === 'k' || p.ghost || magicProof(G.board, v.r, v.c)) return true;
+        if (!p || kSafe(p) || p.ghost || magicProof(G.board, v.r, v.c)) return true;
         p.zombie = true;
         G.fx.push({ r: v.r, c: v.c, type: 'raise' });
         sfx('raise');
@@ -2247,7 +2253,7 @@ function sweepLures() {
     G.lureCells = G.lureCells.filter(l => {
         const p = G.board[l.r][l.c];
         if (!p || p.ghost) return true;
-        if (p.c === l.owner && !p.orig && p.t !== 'k') p.lure = l.owner;
+        if (p.c === l.owner && !p.orig && !kSafe(p)) p.lure = l.owner;
         return false;
     });
 }
@@ -2259,10 +2265,10 @@ const sharpAt = (r, c) => G.sharp.find(z => (r + c) % 2 === z.parity && !z.skip.
 function sweepSharp(pre) {      // pre: проверка до конвейера, счётчик ходов не трогаем
     G.sharp.forEach(z => {
         const vic = [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if ((r + c) % 2 !== z.parity || z.skip.includes(r + ',' + c)) continue;
             const p = G.board[r][c];
-            if (!p || p.t === 'k' || magicProof(G.board, r, c)) continue;
+            if (!p || kSafe(p) || magicProof(G.board, r, c)) continue;
             if (p.ghost) { vanishGhost(r, c, 'острая клетка'); continue; }
             vic.push({ r, c, p });
         }
@@ -2406,7 +2412,7 @@ function executeMove(mv, promo, ctx) {
     const sym = pieceSym(p), note = p.t === 'p' ? '' : sym;
     const from = sqName(mv.fr, mv.fc), to = sqName(mv.tr, mv.tc);
     delete p.fogSeen;
-    if (p.t === 'k' && !p.ghost && !mv.castle) ghostBlockers(G.board, other(p.c), mv.tr, mv.tc).forEach(([gr, gc]) => vanishGhost(gr, gc, 'король встал под её угрозу'));
+    if (kSafe(p) && !p.ghost && !mv.castle) ghostBlockers(G.board, other(p.c), mv.tr, mv.tc).forEach(([gr, gc]) => vanishGhost(gr, gc, 'король встал под её угрозу'));
     const sawed = wrapsOf(p) && !mv.castle && !mv.possess && crossedEdge(mv);      // фигура Фокусника прошла через край доски
     const wasGhost = !!p.ghost, pair = p.pair;
     const extra = !!(ctx.bonus || ctx.apo || ctx.pairSecond);
@@ -2452,7 +2458,7 @@ function executeMove(mv, promo, ctx) {
     if (kgAlt && !res.thorn && !res.burned && !cap && !own) {      // король срубил фигуру: по рубке видно настоящего, иллюзия не нужна
         const seen = new Set();
         kgBs = kgAlt.filter(m => {
-            const k = m.tr * 8 + m.tc;
+            const k = m.tr * N + m.tc;
             if (seen.has(k)) return false;
             seen.add(k);
             return ghostViable(b, m.tr, m.tc, p, mv.tr, mv.tc);
@@ -2488,7 +2494,7 @@ function executeMove(mv, promo, ctx) {
     if (harvest) text += ' 🌾';
 
     G.ep = (mv.double && !wasGhost) ? { r: (mv.fr + mv.tr) / 2, c: mv.fc, pr: mv.tr, pc: mv.tc } : null;
-    const hideMove = (!!p.invis || (p.t !== 'k' && !p.ghost && fogAt(mv.tr, mv.tc))) && !res.thorn && !res.burned;      // ход невидимой фигуры и ход в дым не выдаём
+    const hideMove = (!!p.invis || (!kSafe(p) && !p.ghost && fogAt(mv.tr, mv.tc))) && !res.thorn && !res.burned;      // ход невидимой фигуры и ход в дым не выдаём
     G.last = (kgBs.length || hideMove) ? null : { fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc };
     if (!kgBs.length) { if (hideMove) logHidden(col, p, text); else addLog(col, text); }
     if (res.released) addLog('n', `🌀 ${sym} срубила фигуру и вырывается из-под гипноза`);
@@ -2574,7 +2580,7 @@ function executeMove(mv, promo, ctx) {
 // Раскрытие невидимости и рассеивание иллюзии идут по обычным правилам: ошибка игрока считается зевком.
 function lieOptions(r, c, first) {
     const b = G.board, p = b[r][c], res = [];
-    if (!p || p.ghost || p.pair || p.frozen > 0 || p.snared > 0 || p.t === 'k' || p.orig || p.invis || p.lie) return res;
+    if (!p || p.ghost || p.pair || p.frozen > 0 || p.snared > 0 || kSafe(p) || p.orig || p.invis || p.lie) return res;
     const moves = legalMovesAt(b, r, c).filter(m => !m.promo && !m.castle && !m.ep);
     const empties = moves.filter(m => !b[m.tr][m.tc]);
     for (const R of moves) {
@@ -2757,8 +2763,8 @@ function useAbility(key, r, c, ref) {
         sfx('cast');
     } else if (key === 'shomen') {
         G.fire.push({ r: -1, c, owner: col, kind: 'shomen' });
-        for (let rr = 0; rr < 8; rr++) G.fx.push({ r: rr, c, type: 'cast' });
-        text = `${A.icon} ${A.name} нацелен на вертикаль ${'abcdefgh'[c]} (удар в начале вашего следующего хода)`;
+        for (let rr = 0; rr < N; rr++) G.fx.push({ r: rr, c, type: 'cast' });
+        text = `${A.icon} ${A.name} нацелен на вертикаль ${FILES[c]} (удар в начале вашего следующего хода)`;
         sfx('cast');
     } else if (key === 'phase') {
         target.phase = true;
@@ -2941,7 +2947,7 @@ function doFenyan(parity) {
     const A = ABILITIES.fenyan, skip = [];
     G.board.forEach((row, r) => row.forEach((p, c) => { if (p) skip.push(r + ',' + c); }));      // клетки с фигурами острыми не становятся
     G.sharp.push({ parity, owner: G.turn, left: 2, skip });
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === parity && !skip.includes(r + ',' + c)) G.fx.push({ r, c, type: 'cast' });
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if ((r + c) % 2 === parity && !skip.includes(r + ',' + c)) G.fx.push({ r, c, type: 'cast' });
     sfx('cast');
     G.last = null;
     finishAbility('fenyan', `${A.icon} ${A.name}: ${parity === 0 ? 'светлые' : 'тёмные'} клетки острые (ваш ход и ход врага). Теперь сделайте ход`);
@@ -3055,7 +3061,7 @@ function canPassive(col, k) {
     if (G.cd[col][k] > 0 || G.bonus || G.pairStep || G.archUsed) return false;
     if (G.disabled && G.disabled[col] && G.disabled[col][k] > 0) return false;
     if (k === 'teleport' && blockedByForce(col, k)) return false;
-    if (k === 'teleport' && !G.board.some(row => row.some(p => p && p.c === col && p.t !== 'k' && !p.ghost))) return false;      // у самурая нет других фигур
+    if (k === 'teleport' && !G.board.some(row => row.some(p => p && p.c === col && !kSafe(p) && !p.ghost))) return false;      // у самурая нет других фигур
     return abilityCells(k, col).length > 0;
 }
 
@@ -3531,9 +3537,9 @@ function renderBoard() {
     const must = new Set(G.over || G.mode || !actor ? [] : G.forced.map(m => m.fr + ',' + m.fc));
 
     let html = '';
-    for (let ri = 0; ri < 8; ri++) {
-        for (let ci = 0; ci < 8; ci++) {
-            const r = flip ? 7 - ri : ri, c = flip ? 7 - ci : ci;
+    for (let ri = 0; ri < N; ri++) {
+        for (let ci = 0; ci < N; ci++) {
+            const r = flip ? N - 1 - ri : ri, c = flip ? N - 1 - ci : ci;
             let p = G.board[r][c];
             if (km && km.to[0] === r && km.to[1] === c) p = null;
             if (km && km.orig[0] === r && km.orig[1] === c) p = km.kp;
@@ -3546,8 +3552,8 @@ function renderBoard() {
             if (kingPos.some(k => k[0] === r && k[1] === c)) cls += ' incheck';
 
             html += `<div class="${cls}" data-r="${r}" data-c="${c}">`;
-            if (ci === 0) html += `<span class="coord rank">${8 - r}</span>`;
-            if (ri === 7) html += `<span class="coord file">${'abcdefgh'[c]}</span>`;
+            if (ci === 0) html += `<span class="coord rank">${N - r}</span>`;
+            if (ri === N - 1) html += `<span class="coord file">${FILES[c]}</span>`;
 
             if (wallAt(r, c)) html += '<div class="wall-mark"></div>';
             if (sharpAt(r, c)) html += '<div class="sharp-mark"></div>';
@@ -5659,17 +5665,17 @@ function jesterCells(key, col) {
     const b = G.board, cells = [];
     if (key === 'blunder') {
         if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом колпак не спасает короля, а ход тратит: нельзя
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && !p.ghost && p.t !== 'k' && p.t !== 'j' && !(p.cap > 0)) cells.push([r, c]);
+            if (p && p.c === col && !p.ghost && !kSafe(p) && p.t !== 'j' && !(p.cap > 0)) cells.push([r, c]);
         }
     } else if (key === 'banana') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (isFreeCell(r, c)) cells.push([r, c]);      // чужая скрытая кожура или капкан не мешают: новая ляжет поверх
         }
     } else if (key === 'jaws') {
         ownThree(col).forEach(r => {
-            for (let c = 0; c < 8; c++) {
+            for (let c = 0; c < N; c++) {
                 if (!isEmptyCell(r, c)) continue;
                 const nb = cloneBoard(b);
                 nb[r][c] = { ...mk('j', col), moved: true };
@@ -5680,7 +5686,7 @@ function jesterCells(key, col) {
     } else if (key === 'tomato') {
         if (HEROES[G.hero[other(col)]].abilities.some(k => !(G.disabled[other(col)][k] > 0))) cells.push([0, 0]);      // цель выбирается кнопкой в панели врага
     } else if (key === 'pretense') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
             if (p && p.c !== col && !p.ghost && !p.invis && (p.t === 'b' || p.t === 'n') && !p.betray) cells.push([r, c]);
         }
@@ -5736,7 +5742,7 @@ function sweepBananas() {
     if (!G.bananas || !G.bananas.length) return;
     G.bananas = G.bananas.filter(bn => {
         const p = G.board[bn.r][bn.c];
-        if (!p || p.t === 'k' || p.ghost) return true;
+        if (!p || kSafe(p) || p.ghost) return true;
         if (p.warded > 0) {      // Очищение: фигура давит кожуру без последствий
             addLog('n', p.invis ? '✴ Невидимая фигура под Очищением уничтожает банановую кожуру' : `✴ ${pieceSym(p)} под Очищением уничтожает кожуру на ${sqName(bn.r, bn.c)}`);
             return false;
@@ -5775,10 +5781,10 @@ function unhideLogs(p) {
 // Фигуры (не короли) в дыму невидимы, вышедшие из дыма становятся видимыми
 function syncFog() {
     if (!G || !G.board) return;
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = G.board[r][c];
         if (!p) continue;
-        const inFog = fogAt(r, c) && p.t !== 'k' && !p.ghost && p.t !== 'j' && !p.lie;
+        const inFog = fogAt(r, c) && !kSafe(p) && !p.ghost && p.t !== 'j' && !p.lie;
         if (inFog) {
             if (!p.invis && !p.fogSeen) { p.invis = true; p.fog = true; }
         } else if (p.fog) {
@@ -5842,7 +5848,7 @@ function hatchFall(from, to) {
 function hatchTrigger(p, mv, cont) {
     if (!G.hatches || !G.hatches.length) return false;
     const q = G.board[mv.tr][mv.tc];
-    if (q !== p || p.t === 'k' || p.ghost || p.warded > 0) return false;
+    if (q !== p || kSafe(p) || p.ghost || p.warded > 0) return false;
     if (!G.hatches.some(h => h.r === mv.tr && h.c === mv.tc)) return false;
     let exits = hatchExits(mv.tr, mv.tc);
     if (!exits.length) return false;
@@ -5857,11 +5863,11 @@ function hatchTrigger(p, mv, cont) {
 }
 
 // Фокус-Покус: две фигуры в квадрате 5×5 вокруг первой
-const hocusPiece = (p, col) => !!p && p.t !== 'k' && p.t !== 'j' && !p.pair && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col) && !(p.ghost && p.c === col);
+const hocusPiece = (p, col) => !!p && !kSafe(p) && p.t !== 'j' && !p.pair && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col) && !(p.ghost && p.c === col);
 function hocusOk(a, b2, col) {
     const b = G.board, p = b[a[0]][a[1]], q = b[b2[0]][b2[1]];
     if (!hocusPiece(p, col) || !hocusPiece(q, col)) return false;
-    const promoRow = c => (c === 'w' ? 0 : 7);
+    const promoRow = c => (c === 'w' ? 0 : N - 1);
     if ((p.t === 'p' && b2[0] === promoRow(p.c)) || (q.t === 'p' && a[0] === promoRow(q.c))) return false;      // пешка не должна оказаться на горизонтали превращения (на своей первой можно)
     const nb = cloneBoard(b);
     nb[a[0]][a[1]] = { ...q };
@@ -5881,7 +5887,7 @@ function hocusCells(col, a, first) {
 // Ассистент: фигура может стать зайцем, если после этого ваш король в безопасности
 function assistantOk(r, c, col) {
     const b = G.board, p = b[r][c];
-    if (!p || p.t === 'k' || p.t === 'j' || p.t === 'h' || p.pair || p.soul || p.sup || p.lie || hiddenFor(p, col) || (p.ghost && p.c === col)) return false;
+    if (!p || kSafe(p) || p.t === 'j' || p.t === 'h' || p.pair || p.soul || p.sup || p.lie || hiddenFor(p, col) || (p.ghost && p.c === col)) return false;
     if (p.c !== col && !p.ghost && magicProof(b, r, c)) return false;
     const nb = cloneBoard(b);
     nb[r][c] = { ...nb[r][c], t: 'h', x: undefined };
@@ -5903,17 +5909,17 @@ function magiCells(key, col, first) {
 function magiCellsRaw(key, col, first) {
     const b = G.board, cells = [];
     if (key === 'fog') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) cells.push([r, c]);
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) cells.push([r, c]);
     } else if (key === 'hatch') {
         if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом плитка не спасает короля, а ход тратит
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isFreeCell(r, c)) { cells.push([r, c]); if (first && cells.length >= 2) return cells; }
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) { cells.push([r, c]); if (first && cells.length >= 2) return cells; }
     } else if (key === 'hocus') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!hocusPiece(b[r][c], col)) continue;
             if (hocusCells(col, [r, c], true).length) { cells.push([r, c]); if (first) return cells; }
         }
     } else if (key === 'assistant') {
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (assistantOk(r, c, col)) { cells.push([r, c]); if (first) return cells; }
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (assistantOk(r, c, col)) { cells.push([r, c]); if (first) return cells; }
     }
     return cells;
 }
@@ -5971,7 +5977,7 @@ function revertHare(r, c, p) {
     p.t = h.t;
     if (h.x && h.x.length) p.x = h.x;
     let note = '';
-    if (p.t === 'p' && (r === 0 || r === 7)) { p.t = 'q'; note = ' (пешка дошла до края и стала ферзём)'; }
+    if (p.t === 'p' && (r === 0 || r === N - 1)) { p.t = 'q'; note = ' (пешка дошла до края и стала ферзём)'; }
     G.fx.push({ r, c, type: 'poof' });
     addLog('n', p.invis ? '🐇 Заяц снова становится фигурой' : `🐇 Заяц на ${sqName(r, c)} снова становится фигурой: ${pieceSym(p)}${note}`);
 }
@@ -7006,16 +7012,18 @@ const TILE_PALETTE = [
 ];
 
 // Проверка и приведение доски к единому виду (годится и для данных от соперника)
+const MAX_N = 16;      // самый большой размер доски
 function normCfg(x) {
-    if (!x || !Array.isArray(x.rows) || x.rows.length !== 8) return null;
+    if (!x || !Array.isArray(x.rows) || x.rows.length < 8 || x.rows.length > MAX_N) return null;
+    const sz = x.rows.length;
     const rows = [], n = { w: 0, b: 0, kw: 0, kb: 0 };
-    for (let r = 0; r < 8; r++) {
+    for (let r = 0; r < sz; r++) {
         const row = x.rows[r];
-        if (typeof row !== 'string' || row.length !== 8) return null;
-        for (let c = 0; c < 8; c++) {
+        if (typeof row !== 'string' || row.length !== sz) return null;
+        for (let c = 0; c < sz; c++) {
             const ch = row[c];
             if (!ED_CH.includes(ch)) return null;
-            if ((ch === 'P' || ch === 'p') && (r === 0 || r === 7)) return null;
+            if ((ch === 'P' || ch === 'p') && (r === 0 || r === sz - 1)) return null;
             if (ch === '.') continue;
             const sd = chColor(ch);
             n[sd]++;
@@ -7026,7 +7034,7 @@ function normCfg(x) {
     if (!n.w || !n.b) return null;
     const tiles = [], base = new Set(), fogs = new Set(), pairs = {};
     for (const t of (Array.isArray(x.tiles) ? x.tiles.slice(0, 200) : [])) {
-        if (!t || !TILE_KINDS.includes(t.k) || !Number.isInteger(t.r) || !Number.isInteger(t.c) || t.r < 0 || t.r > 7 || t.c < 0 || t.c > 7) return null;
+        if (!t || !TILE_KINDS.includes(t.k) || !Number.isInteger(t.r) || !Number.isInteger(t.c) || t.r < 0 || t.r >= sz || t.c < 0 || t.c >= sz) return null;
         const key = t.r + ',' + t.c, o = t.o === 'b' ? 'b' : 'w', nt = { k: t.k, r: t.r, c: t.c, o };
         if (t.k === 'fog') { if (fogs.has(key)) return null; fogs.add(key); tiles.push(nt); continue; }
         if (base.has(key)) return null;
@@ -7048,17 +7056,17 @@ function normCfg(x) {
     const win = {};
     ['w', 'b'].forEach(sd => {
         const k = n['k' + sd];
-        win[sd] = k === 0 ? 'all' : k === 1 ? 'mate' : (x.win && x.win[sd] === 'all' ? 'all' : 'mate');
+        win[sd] = k === 0 ? 'all' : (x.win && x.win[sd] === 'all' ? 'all' : 'mate');
     });
-    return { v: 2, name: String(x.name || '').slice(0, 20), rows, tiles, win };
+    return { v: 2, size: sz, name: String(x.name || '').slice(0, 20), rows, tiles, win };
 }
 
 function boardFromCfg(cfg) {
     return cfg.rows.map((row, r) => [...row].map((ch, c) => {
         if (ch === '.') return null;
-        const col = chColor(ch), t = ch.toLowerCase(), p = mk(t, col), home = col === 'w' ? 7 : 0;
-        if (t === 'k') p.moved = !(r === home && c === 4);                     // рокировка возможна, только если король и ладья на своих местах
-        if (t === 'r') p.moved = !(r === home && (c === 0 || c === 7));
+        const col = chColor(ch), t = ch.toLowerCase(), p = mk(t, col), home = col === 'w' ? cfg.rows.length - 1 : 0, std = cfg.rows.length === 8;      // рокировка только на доске 8×8
+        if (t === 'k') p.moved = !(std && r === home && c === 4);                     // рокировка возможна, только если король и ладья на своих местах
+        if (t === 'r') p.moved = !(std && r === home && (c === 0 || c === 7));
         return p;
     }));
 }
@@ -7098,7 +7106,7 @@ const cfgPieceCount = cfg => cfg.rows.join('').replace(/\./g, '').length;
 const cfgTileCount = cfg => (cfg.tiles || []).length;
 
 // ---------- состояние редактора ----------
-const ED = { rows: null, tiles: [], tool: 'P', tab: 'pieces', tileId: 'wall', opt: { o: 'w', d: [1, 0], pair: 1 }, mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
+const ED = { n: 8, rows: null, tiles: [], tool: 'P', tab: 'pieces', tileId: 'wall', opt: { o: 'w', d: [1, 0], pair: 1 }, mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
 const edSideName = sd => (sd === 'w' ? L('белых', 'White') : L('чёрных', 'Black'));
 const edBaseAt = (r, c) => ED.tiles.find(t => t.r === r && t.c === c && t.k !== 'fog');
 const edFogAt = (r, c) => ED.tiles.find(t => t.r === r && t.c === c && t.k === 'fog');
@@ -7115,17 +7123,18 @@ function edCounts() {
 }
 function edCfg() {
     const cnt = edCounts(), win = {};
-    ['w', 'b'].forEach(sd => { win[sd] = cnt[sd].k === 0 ? 'all' : cnt[sd].k === 1 ? 'mate' : ED.win[sd]; });
-    return { v: 2, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), tiles: ED.tiles.map(t => ({ ...t, d: t.d ? [...t.d] : undefined })), win };
+    ['w', 'b'].forEach(sd => { win[sd] = cnt[sd].k === 0 ? 'all' : (ED.win[sd] === 'all' ? 'all' : 'mate'); });
+    return { v: 2, size: ED.n, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), tiles: ED.tiles.map(t => ({ ...t, d: t.d ? [...t.d] : undefined })), win };
 }
 
 function edOpen(onPick, cfg) {
     const base = cfg || { rows: CLASSIC_ROWS, tiles: [], win: { w: null, b: null }, name: '' };
+    ED.n = base.rows.length;
     ED.rows = base.rows.map(r => [...r]);
     ED.tiles = (base.tiles || []).map(t => ({ ...t, d: t.d ? [...t.d] : undefined }));
     ED.win = { w: null, b: null };
     const cnt = edCounts();
-    ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 2 && base.win && base.win[sd]) ED.win[sd] = base.win[sd]; });
+    ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 1 && base.win && base.win[sd]) ED.win[sd] = base.win[sd]; });
     ED.onPick = onPick; ED.msg = ''; ED.slots = loadSlots();
     $('#edName').value = base.name || '';
     $('#editor').classList.remove('hidden');
@@ -7154,14 +7163,31 @@ function edTileHtml(t) {
     return '';
 }
 
+// Смена размера доски: верх и низ расстановки остаются у своих краёв, по горизонтали всё центрируется
+function edResize(nn) {
+    if (nn === ED.n) return;
+    const o = ED.n, half = Math.floor(Math.min(o, nn) / 2), off = Math.floor((nn - o) / 2);
+    const mapR = r => (r < half ? r : (r >= nn - half ? r - (nn - o) : -1));
+    const rows = Array.from({ length: nn }, () => Array(nn).fill('.'));
+    for (let r = 0; r < nn; r++) for (let c = 0; c < nn; c++) {
+        const or = mapR(r), oc = c - off;
+        if (or >= 0 && or < o && oc >= 0 && oc < o) rows[r][c] = ED.rows[or][oc];
+    }
+    const inv = r => { for (let q = 0; q < nn; q++) if (mapR(q) === r) return q; return -1; };
+    const tiles = [];
+    ED.tiles.forEach(t => { const nr = inv(t.r), nc = t.c + off; if (nr >= 0 && nc >= 0 && nc < nn) tiles.push({ ...t, r: nr, c: nc, d: t.d ? [...t.d] : undefined }); });
+    ED.n = nn; ED.rows = rows; ED.tiles = tiles; ED.msg = ''; edFixWin(); edRender();
+}
 function edRender() {
+    $('#edBoard').style.setProperty('--en', ED.n);
+    $('#edSize').innerHTML = [8, 10, 12, 14, 16].map(v => `<button data-sz="${v}" class="${ED.n === v ? 'on' : ''}">${v}×${v}</button>`).join('');
     // доска
     let h = '';
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    for (let r = 0; r < ED.n; r++) for (let c = 0; c < ED.n; c++) {
         const ch = ED.rows[r][c];
         h += `<div class="cell ${(r + c) % 2 ? 'dark' : 'light'}" data-r="${r}" data-c="${c}">`;
-        if (c === 0) h += `<span class="coord rank">${8 - r}</span>`;
-        if (r === 7) h += `<span class="coord file">${'abcdefgh'[c]}</span>`;
+        if (c === 0) h += `<span class="coord rank">${ED.n - r}</span>`;
+        if (r === ED.n - 1) h += `<span class="coord file">${FILES[c]}</span>`;
         const bt = edBaseAt(r, c);
         if (bt) h += edTileHtml(bt);
         if (ch !== '.') h += `<div class="piece ${chColor(ch)} t-${ch.toLowerCase()}">${GLYPH[ch.toLowerCase()]}</div>`;
@@ -7203,15 +7229,13 @@ function edRender() {
     let w = '', need = false;
     ['w', 'b'].forEach(sd => {
         const who = sd === 'w' ? L('Белых', 'White') : L('Чёрных', 'Black'), k = cnt[sd].k;
-        if (k >= 2) {
-            if (!ED.win[sd]) need = true;
-            w += `<div>${L(`Чтобы победить ${who} (королей: ${k}):`, `To beat ${who} (${k} kings):`)}</div>`
-                + `<label><input type="radio" name="edwin-${sd}" data-win="${sd}" value="all"${ED.win[sd] === 'all' ? ' checked' : ''}>${L('срубить все их фигуры', 'capture all of their pieces')}</label>`
-                + `<label><input type="radio" name="edwin-${sd}" data-win="${sd}" value="mate"${ED.win[sd] === 'mate' ? ' checked' : ''}>${L('поставить мат хотя бы одному королю', 'checkmate at least one king')}</label>`;
-        } else if (k === 0) {
-            w += `<div>${L(`У ${who} нет королей: чтобы победить, нужно срубить все их фигуры.`, `${who} has no kings: to win, capture all of their pieces.`)}</div>`;
+        if (k >= 1) {
+            const cur = ED.win[sd] === 'all' ? 'all' : 'mate';
+            w += `<div>${L(`Чтобы победить ${who} (королей: ${k}):`, `To beat ${who} (${k} ${k === 1 ? 'king' : 'kings'}):`)}</div>`
+                + `<label><input type="radio" name="edwin-${sd}" data-win="${sd}" value="mate"${cur === 'mate' ? ' checked' : ''}>${k === 1 ? L('поставить мат королю', 'checkmate the king') : L('поставить мат хотя бы одному королю', 'checkmate at least one king')}</label>`
+                + `<label><input type="radio" name="edwin-${sd}" data-win="${sd}" value="all"${cur === 'all' ? ' checked' : ''}>${L('срубить все их фигуры (короли тоже рубятся и уязвимы для магии)', 'capture all of their pieces (kings can be captured and are open to magic)')}</label>`;
         } else {
-            w += `<div>${L(`У ${who} один король: обычный мат.`, `${who} has one king: ordinary checkmate.`)}</div>`;
+            w += `<div>${L(`У ${who} нет королей: чтобы победить, нужно срубить все их фигуры.`, `${who} has no kings: to win, capture all of their pieces.`)}</div>`;
         }
     });
     $('#edWin').innerHTML = w;
@@ -7222,11 +7246,11 @@ function edRender() {
 // Клетки с учётом зеркала. Возвращает [r, c, flipV, flipH]
 function edMirrorCells(r, c) {
     const t = [[r, c, false, false]];
-    if (ED.mirror >= 1) t.push([7 - r, c, true, false]);          // по вертикали: сверху вниз, цвет и владелец меняются
-    if (ED.mirror >= 2) { t.push([r, 7 - c, false, true]); t.push([7 - r, 7 - c, true, true]); }
+    if (ED.mirror >= 1) t.push([ED.n - 1 - r, c, true, false]);          // по вертикали: сверху вниз, цвет и владелец меняются
+    if (ED.mirror >= 2) { t.push([r, ED.n - 1 - c, false, true]); t.push([ED.n - 1 - r, ED.n - 1 - c, true, true]); }
     return t;
 }
-function edFixWin() { const cnt = edCounts();['w', 'b'].forEach(sd => { if (cnt[sd].k < 2) ED.win[sd] = null; }); }
+function edFixWin() { const cnt = edCounts();['w', 'b'].forEach(sd => { if (cnt[sd].k < 1) ED.win[sd] = null; }); }
 
 // Поставить фигуру (или убрать) с учётом зеркала
 function edPlace(r, c) {
@@ -7234,7 +7258,7 @@ function edPlace(r, c) {
     if (ch === '.') return edErase(r, c);
     if (ED.rows[r][c] === ch) ch = '.';          // повторное нажатие той же фигурой убирает её
     const t = edMirrorCells(r, c).map(([tr, tc, fv]) => [tr, tc, fv ? swapCase(ch) : ch]);
-    if ((ch === 'P' || ch === 'p') && t.some(x => x[0] === 0 || x[0] === 7)) {
+    if ((ch === 'P' || ch === 'p') && t.some(x => x[0] === 0 || x[0] === ED.n - 1)) {
         ED.msg = L('Пешку нельзя ставить на первую и последнюю горизонталь.', 'A pawn cannot be placed on the first or last rank.');
         edRender(); return;
     }
@@ -7301,16 +7325,16 @@ function edValidate() {
     const cnt = edCounts();
     if (!cnt.w.n || !cnt.b.n) return L('У каждой стороны должна быть хотя бы одна фигура.', 'Each side needs at least one piece.');
     for (const sd of ['w', 'b']) {
-        if (cnt[sd].k >= 2 && !ED.win[sd]) return L(`Выберите условие победы над ${sd === 'w' ? 'Белыми' : 'Чёрными'}.`, `Choose how to beat ${sd === 'w' ? 'White' : 'Black'}.`);
     }
     const pairs = {};
     ED.tiles.filter(t => t.k === 'portal').forEach(t => { pairs[t.id] = (pairs[t.id] || 0) + 1; });
     for (const id of Object.keys(pairs)) {
         if (pairs[id] !== 2) return L('У каждого портала должна быть пара: поставьте второй или уберите лишний.', 'Every portal needs a partner: place the second one or remove the extra.');
     }
-    const cfg = edCfg(), saved = G;
+    const cfg = edCfg(), saved = G, savedN = N;
     let bad = '';
     try {
+        N = ED.n;
         G = newState(boardFromCfg(cfg), { w: 'paladin', b: 'paladin' }, cfg.win);
         installTiles(G, cfg);
         for (const sd of ['w', 'b']) {
@@ -7318,7 +7342,7 @@ function edValidate() {
         }
         if (!bad && !anyLegalMove(G.board, 'w')) bad = L('У белых нет ни одного хода: партия закончилась бы сразу.', 'White has no legal moves: the game would end at once.');
     } catch (e) { bad = L('Не удалось проверить доску.', 'Could not check the board.'); }
-    finally { G = saved; }
+    finally { G = saved; N = savedN; }
     return bad;
 }
 
@@ -7362,9 +7386,10 @@ $('#edTileOpts').addEventListener('click', e => {
 });
 $('#edMirror').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { ED.mirror = +b.dataset.m; edRender(); } });
 $('#edSlots').addEventListener('click', e => { const b = e.target.closest('[data-slot]'); if (b) { ED.slot = +b.dataset.slot; ED.msg = ''; edRender(); } });
+$('#edSize').addEventListener('click', e => { const b = e.target.closest('[data-sz]'); if (b) edResize(+b.dataset.sz); });
 $('#edWin').addEventListener('change', e => { const i = e.target.closest('[data-win]'); if (i) { ED.win[i.dataset.win] = i.value; ED.msg = ''; edRender(); } });
-$('#edClassic').addEventListener('click', () => { ED.rows = CLASSIC_ROWS.map(r => [...r]); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
-$('#edClear').addEventListener('click', () => { ED.rows = Array.from({ length: 8 }, () => Array(8).fill('.')); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
+$('#edClassic').addEventListener('click', () => { ED.n = 8; ED.rows = CLASSIC_ROWS.map(r => [...r]); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
+$('#edClear').addEventListener('click', () => { ED.rows = Array.from({ length: ED.n }, () => Array(ED.n).fill('.')); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
 $('#edSave').addEventListener('click', () => {
     const bad = edValidate();
     if (bad) { ED.msg = bad; edRender(); return; }
@@ -7378,11 +7403,12 @@ $('#edSave').addEventListener('click', () => {
 $('#edLoad').addEventListener('click', () => {
     const cfg = ED.slots[ED.slot];
     if (!cfg) { ED.msg = L('Этот слот пуст.', 'This slot is empty.'); edRender(); return; }
+    ED.n = cfg.rows.length;
     ED.rows = cfg.rows.map(r => [...r]);
     ED.tiles = (cfg.tiles || []).map(t => ({ ...t, d: t.d ? [...t.d] : undefined }));
     ED.win = { w: null, b: null };
     const cnt = edCounts();
-    ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 2) ED.win[sd] = cfg.win[sd]; });
+    ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 1) ED.win[sd] = cfg.win[sd]; });
     $('#edName').value = cfg.name || '';
     ED.msg = L(`Загружен слот ${ED.slot + 1}.`, `Loaded slot ${ED.slot + 1}.`);
     edRender();
