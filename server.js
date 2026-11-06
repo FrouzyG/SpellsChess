@@ -105,8 +105,8 @@ async function recordGame(r) {
     r.recorded = r.gid;
     const gid = r.gid, rated = !!r.quickMode;
     const users = { host: r.user.host.id, guest: r.user.guest.id };
-    const body = JSON.stringify({ p_game: gid, p_white: users.host, p_black: users.guest, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null, p_rated: rated, p_mode: r.quickMode, p_inc: r.incv, p_seed: r.inlog ? r.seed : null, p_tc: r.tcv, p_log: r.inlog });
-    if (rated && r.heroes && !(await heroesAllowed({ w: users.host, b: users.guest }, r.heroes))) {
+    const body = JSON.stringify({ p_game: gid, p_white: r.hostColor === 'b' ? users.guest : users.host, p_black: r.hostColor === 'b' ? users.host : users.guest, p_result: res, p_wh: r.heroes ? r.heroes.w : null, p_bh: r.heroes ? r.heroes.b : null, p_reason: r.meta ? r.meta.reason : null, p_moves: r.meta ? r.meta.moves : null, p_rated: rated, p_mode: r.quickMode, p_inc: r.incv, p_seed: r.inlog ? r.seed : null, p_tc: r.tcv, p_log: r.inlog });
+    if (rated && r.heroes && !(await heroesAllowed(r.hostColor === 'b' ? { w: users.guest, b: users.host } : { w: users.host, b: users.guest }, r.heroes))) {
         console.log('результат НЕ записан: в рейтинговой партии выбран закрытый герой', gid, r.heroes.w, r.heroes.b);
         return;
     }
@@ -319,7 +319,7 @@ const server = http.createServer((req, res) => {
                 if (msg && msg.t === 'auth') handleAuth(room, r, role, msg.token);
                 else if (msg && msg.t === 'result') handleResult(r, role, msg.res, msg);
                 else {
-                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; r.rated = !!r.quickMode; r.incv = Math.max(0, Math.min(60, msg.inc | 0)); r.inlog = msg.custom ? null : []; r.seed = msg.seed | 0; r.tcv = msg.tc | 0; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
+                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; r.rated = !!r.quickMode; r.incv = Math.max(0, Math.min(60, msg.inc | 0)); r.inlog = msg.custom ? null : []; r.hostColor = msg.hostColor === 'b' ? 'b' : 'w'; r.seed = msg.seed | 0; r.tcv = msg.tc | 0; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
                     if (msg && msg.t === 'in' && r.inlog) {          // все действия игроков по порядку: из них собирается повтор партии
                         if (r.inlog.length >= 5000 || !msg.m || JSON.stringify(msg.m).length > 300) r.inlog = null;
                         else r.inlog.push(msg.m);

@@ -25,7 +25,7 @@ const CONFIG = {
         groundhog: 6,                                // Ход сурка
         timeslow: 4,                                 // пассивка Повелителя времени
         guardian: 5, purify: 10, lie: 10, virus: 3,  // новые способности
-        vine: 7, ritual: 5, bumpuku: 3, generator: 7,
+        vine: 5, ritual: 5, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
         fog: 5, hatch: 3, hocus: 7, assistant: 6         // Фокусник
     },
@@ -43,7 +43,7 @@ const CONFIG = {
     betrayAfter: 10,         // Шут: после какого по счёту хода ВРАГА можно ходить предательской фигурой
     bumpukuTurns: 2,         // Бумпуку: на каком своём ходу взрывается бомба
     hogOnce: true,           // Ход сурка: true — ловушка стоит вечно, но срабатывает один раз и исчезает; false — срабатывает на каждую новую фигуру
-    vineTurns: 5,            // Лоза: сколько ходов владельца она стоит
+    vineTurns: 7,            // Лоза: сколько ходов владельца она стоит
     freezeTurns: 3,   // сколько ходов замороженного игрока фигура стоит на месте
     hypnoTurns: 2,    // сколько ходов экстрасенса фигура ему подчиняется
     burnTurns: 3,     // сколько ходов Мага (считаются только его ходы) горит клетка после огненного шара
@@ -115,8 +115,8 @@ const ABILITIES = {
     },
     // --- Некромант
     raise: {
-        icon: '🧟', name: 'Зомби',
-        desc: 'Поднимает фигуру из любого сброса зомби на свободную клетку первой горизонтали (пешку на любую из первых четырёх).'
+        icon: '🧟', name: 'Кладбище',
+        desc: 'Поднимает из мёртвых фигуру из вашего или вражеского сброса в виде зомби и только на первой горизонтали (пешки можно на первых четырёх). Зомби фигуры обязаны рубить, если есть такая возможность.'
     },
     frankenstein: {
         icon: '🧪', name: 'Франкенштейн',
@@ -173,7 +173,7 @@ const ABILITIES = {
         desc: 'Невидимый капкан: вставшая на него фигура (не король) пропускает следующий ход.'
     },
     arrow: {
-        icon: '🏹', name: 'Стрела',
+        icon: '🏹', name: 'Лук',
         desc: 'Метка в радиусе 5 от короля: в начале вашего хода стрела убивает фигуру на ней.'
     },
     // --- Новые способности
@@ -195,7 +195,7 @@ const ABILITIES = {
     },
     vine: {
         icon: '🌿', name: 'Лоза',
-        desc: 'Лоза блокирует путь дальше себя. Исчезает, когда на неё встаёт фигура, или через ' + CONFIG.vineTurns + ' ваших хода.'
+        desc: 'Лоза блокирует путь дальше себя. Исчезает, когда на неё встаёт фигура, или через ' + CONFIG.vineTurns + ' ваших ходов.'
     },
     ritual: {
         free: true,
@@ -233,7 +233,7 @@ const ABILITIES = {
     },
     lure: {
         icon: '🎣', name: 'Приманка',
-        desc: 'Приманка на вашей фигуре (видна всем): вражеская фигура (не король) обязана срубить её или встать на её клетку.'
+        desc: 'Приманка на вашей фигуре или просто на клетке без фигуры (видна всем): вражеская фигура (не король) обязана срубить её или встать на её клетку.'
     }
 };
 
@@ -337,7 +337,7 @@ Object.assign(ABILITIES, {
         desc: 'Создаёт плитку-люк на свободной клетке. Фигура (не король), вставшая на неё, проваливается и вылезает из другой свободной плитки на выбор того, кто ходит. Если других плиток нет или все заняты, ничего не происходит. Король игрока после падения не должен остаться под шахом: если вылезти можно безопасно, только туда и можно, а если нельзя, ход на люк недоступен.'
     },
     hocus: {
-        icon: '🎩', name: 'Фокус-Покус',
+        icon: '🪄', name: 'Фокус-Покус',
         desc: 'Меняет местами две любые фигуры (кроме королей) в квадрате 5×5 вокруг первой. Ваш король не должен остаться под шахом.'
     },
     assistant: {
@@ -1286,18 +1286,21 @@ function kingThreat(b, r, c, col) {
 }
 
 // Иллюзия «грозит» королю (шах или клетки рядом) только внешне: реальные фигуры эти клетки не прикрывают
+// Иллюзия, которая «шахует» короля, рассеивается. Клетки вокруг короля она лишь визуально закрывает (см. ghostBlockers): король может туда встать, и тогда иллюзия рассеется
 function ghostExposed(b, gr, gc, col) {
-    const enemy = other(col), k = findKing(b, enemy);
+    const k = findKing(b, other(col));
     if (!k || !b[gr][gc]) return false;
-    const vis = attackSquares(b, gr, gc);
-    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-        const sr = k[0] + dr, sc = k[1] + dc;
-        if (!inb(sr, sc) || !vis.some(([x, y]) => x === sr && y === sc)) continue;
-        const t = b[sr][sc];
-        if ((dr || dc) && t && t.c === enemy) continue;       // там стоит фигура самого короля
-        if (!isAttacked(b, sr, sc, col)) return true;
+    return attackSquares(b, gr, gc).some(([x, y]) => x === k[0] && y === k[1]) && !isAttacked(b, k[0], k[1], col);
+}
+
+// Иллюзии цвета col, которые визуально прикрывают клетку (r, c)
+function ghostBlockers(b, col, r, c) {
+    const out = [];
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+        const g = b[i][j];
+        if (g && g.ghost && !g.fake && g.c === col && attackSquares(b, i, j).some(([x, y]) => x === r && y === c)) out.push([i, j]);
     }
-    return false;
+    return out;
 }
 
 // Любая настоящая угроза двойнику или оригиналу рассеивает иллюзию
@@ -1410,6 +1413,8 @@ function selectableMoves(r, c) {
     mv.forEach(m => {
         m.hidden = moveCells(m).some(([rr, cc]) => { const g = G.board[rr][cc]; return g && g.ghost && g.c === p.c && g !== p; });
     });
+    // король: клетки под визуальной угрозой вражеской иллюзии не подсвечиваются (выглядят закрытыми), но встать туда можно: иллюзия тогда рассеется
+    if (p.t === 'k' && !p.ghost) mv.forEach(m => { if (!m.castle && ghostBlockers(G.board, other(p.c), m.tr, m.tc).length) m.hidden = true; });
     return applyInvisView(p, r, c, mv);
 }
 
@@ -1562,7 +1567,7 @@ function portalPartners(a, col, first) {
 }
 
 // Перемещать можно только плитки и порталы (ловушки, огонь и метки не двигаются). Новые плитки добавлять сюда
-const TILE_KEYS = ['conv', 'gens', 'virus', 'vines', 'rituals', 'portals', 'burn'];
+const TILE_KEYS = ['conv', 'gens', 'virus', 'vines', 'rituals', 'portals', 'burn', 'hatches'];
 function cellProps(r, c) {
     return { tiles: TILE_KEYS.flatMap(k => G[k].filter(x => x.r === r && x.c === c)) };
 }
@@ -2105,7 +2110,8 @@ function startTurn() {
     checkIllusions();
 
     // 2. Перезарядка способностей
-    Object.keys(G.cd[c]).forEach(k => { if (G.cd[c][k] > 0) G.cd[c][k]--; });
+    Object.keys(G.cd[c]).forEach(k => { if (k !== 'sawing' && G.cd[c][k] > 0) G.cd[c][k]--; });
+    if (G.cd[other(c)] && G.cd[other(c)].sawing > 0) G.cd[other(c)].sawing--;      // Распиливание: перезарядка идёт по ходам соперника, чтобы угрозы от края видел и шах, и тот, кому он грозит
 
     // 3. Состояние партии
     const { attacked, latent } = computeState(c);
@@ -2391,6 +2397,7 @@ function executeMove(mv, promo, ctx) {
     const sym = pieceSym(p), note = p.t === 'p' ? '' : sym;
     const from = sqName(mv.fr, mv.fc), to = sqName(mv.tr, mv.tc);
     delete p.fogSeen;
+    if (p.t === 'k' && !p.ghost && !mv.castle) ghostBlockers(G.board, other(p.c), mv.tr, mv.tc).forEach(([gr, gc]) => vanishGhost(gr, gc, 'король встал под её угрозу'));
     const sawed = wrapsOf(p) && !mv.castle && !mv.possess && crossedEdge(mv);      // фигура Фокусника прошла через край доски
     const wasGhost = !!p.ghost, pair = p.pair;
     const extra = !!(ctx.bonus || ctx.apo || ctx.pairSecond);
@@ -4064,8 +4071,8 @@ function toggleReady() {
 function maybeStart() {
     if (!(NET.on && NET.host && NET.ready && NET.oppReady && NET.oppHero)) return;
     _seed = NET.fischer ? -1 - ((Math.random() * 2147483646) | 0) : (Math.random() * 2147483647) | 0;      // отрицательное число = шахматы Фишера
-    const heroes = { w: selectedHeroes.w, b: NET.oppHero };
-    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0, inc: NET.inc || 0, mode: NET.mode || null, rated: !!NET.rated, custom: CUSTOM || null };
+    const heroes = { [NET.me]: selectedHeroes[NET.me], [other(NET.me)]: NET.oppHero };
+    NET.lastStart = { seed: _seed, heroes, tc: NET.tc || 0, inc: NET.inc || 0, mode: NET.mode || null, rated: !!NET.rated, custom: CUSTOM || null, hostColor: NET.me };
     netSend({ t: 'start', ...NET.lastStart });
     selectedHeroes = heroes;
     NET.ready = false; NET.oppReady = false;
@@ -4256,7 +4263,7 @@ function attachConn(c) {
     NET.conn = c;
     c.on('open', () => {
         NET.on = true;
-        NET.me = NET.host ? 'w' : 'b';
+        NET.me = NET.host ? (NET.hostColor || 'w') : other(NET.hostColor || 'w');      // цвет хозяина комнаты: выбранный им (гость узнаёт его из сообщения tc)
         NET.oppLeft = false;
         $('#lobby').classList.add('hidden');
         openSetup();
@@ -4360,6 +4367,8 @@ const EN = {
     "Замешательство": "Confusion",
     "Вражеская фигура (не король) делает два хода подряд по вашему выбору, без рубки.": "An enemy piece (not a king) makes two moves in a row of your choice, without capturing.",
     "Зомби": "Zombies",
+    "Кладбище": "Graveyard",
+    "Поднимает из мёртвых фигуру из вашего или вражеского сброса в виде зомби и только на первой горизонтали (пешки можно на первых четырёх). Зомби фигуры обязаны рубить, если есть такая возможность.": "Raises a piece from your own or the enemy graveyard as a zombie, only on the first rank (pawns on any of the first four ranks). Zombie pieces must capture if they can.",
     "Поднимает фигуру из любого сброса зомби на свободную клетку первой горизонтали (пешку на любую из первых четырёх).": "Raises a piece from any graveyard as a zombie on a free square of your first rank (a pawn on any of the first four ranks).",
     "Франкенштейн": "Frankenstein",
     "Фигура рубит свою фигуру и получает её ходы.": "A piece captures its own piece and gains its moves.",
@@ -4387,6 +4396,7 @@ const EN = {
     "Капкан": "Trap",
     "Невидимый капкан: вставшая на него фигура (не король) пропускает следующий ход.": "An invisible trap: a piece (not a king) that steps on it skips its next turn.",
     "Стрела": "Arrow",
+    "Лук": "Bow",
     "Метка в радиусе 5 от короля: в начале вашего хода стрела убивает фигуру на ней.": "A mark within 5 squares of your king: at the start of your turn the arrow kills the piece on it.",
     "Ангел-хранитель": "Guardian Angel",
     " ходов союзная фигура самоотверженна: если рядом (3×3) другую союзную фигуру убивают (рубкой, огненным шаром, стрелой, взрывом и т. п.), она меняется с ней местами и гибнет вместо неё.": " turns an allied piece is selfless: if another allied piece next to it (3×3) is killed (by capture, fireball, arrow, explosion, etc.), it swaps places with it and dies instead.",
@@ -4400,6 +4410,7 @@ const EN = {
     "Лоза": "Vine",
     "Лоза блокирует путь дальше себя. Исчезает, когда на неё встаёт фигура, или через ": "The vine blocks the path beyond it. It disappears when a piece steps on it, or after ",
     " ваших хода.": " of your turns.",
+    " ваших ходов.": " of your turns.",
     "Ритуал": "Ritual",
     "Призрачная плитка: стоящая на ней фигура (своя или вражеская) прозрачна для ваших фигур. Сквозь вражескую фигуру на ней можно пройти и можно её срубить.": "A ghostly tile: a piece standing on it (yours or an enemy's) is transparent to your pieces. You can pass through an enemy piece on it, and also capture it.",
     "Бумпуку": "Bumpuku",
@@ -4415,7 +4426,7 @@ const EN = {
     "Суперпозиция": "Superposition",
     "Одноразово: фигура (не король) не мешает, если на её клетку встала или прошла сквозь неё другая фигура, и возвращается на клетку прошлого хода. Если вернуться нельзя, ничего не происходит. Если на клетку возврата встала ходившая фигура, её рубят.": "One-time: a piece (not a king) does not block when another piece stops on or passes through its square, and returns to the square of its last move. If it cannot return, nothing happens. If the moving piece lands on the return square, it is captured.",
     "Приманка": "Lure",
-    "Приманка на вашей фигуре (видна всем): вражеская фигура (не король) обязана срубить её или встать на её клетку.": "A lure on your piece (visible to all): an enemy piece (not a king) must capture it or step on its square.",
+    "Приманка на вашей фигуре или просто на клетке без фигуры (видна всем): вражеская фигура (не король) обязана срубить её или встать на её клетку.": "A lure on your piece or simply on an empty square (visible to all): an enemy piece (not a king) must capture it or step on its square.",
     "Братство": "Brotherhood",
     "Две пешки рядом на одной горизонтали нельзя срубить. Три и более подряд: эффекта нет.": "Two pawns side by side on one rank cannot be captured. Three or more in a row: no effect.",
     "Магический барьер": "Magic Barrier",
@@ -4467,6 +4478,7 @@ const EN = {
     " возвращается с ": " returns from ",
     " на ": " on ",
     "ей угрожает пешка": "a pawn threatens it",
+    "король встал под её угрозу": "a king stepped under its threat",
     "её можно взять на проходе": "it can be captured en passant",
     "она встала перед вражеской пешкой": "it stands in front of an enemy pawn",
     "шах": "check",
@@ -5471,12 +5483,12 @@ function timePicker(root, st, onChange) {
 
 // После соединения хозяин сообщает гостю время, добавку и режим партии
 function tcOnOpen() {
-    if (NET.host) netSend({ t: 'tc', min: NET.tc || 0, inc: NET.inc || 0, rated: !!NET.rated, mode: NET.mode || null, fischer: !!NET.fischer, custom: !!NET.custom });
+    if (NET.host) netSend({ t: 'tc', min: NET.tc || 0, inc: NET.inc || 0, rated: !!NET.rated, mode: NET.mode || null, fischer: !!NET.fischer, custom: !!NET.custom, hostColor: NET.hostColor || 'w' });
     updateSetupTc();
 }
 const _netRecvTc = netRecv;
 netRecv = function (m) {
-    if (m && m.t === 'tc') { if (!NET.host) { NET.tc = m.min | 0; NET.inc = m.inc | 0; NET.rated = !!m.rated; NET.mode = MODES[m.mode] ? m.mode : null; NET.fischer = !!m.fischer; NET.custom = !!m.custom; updateSetupTc(); } return; }
+    if (m && m.t === 'tc') { if (!NET.host) { NET.tc = m.min | 0; NET.inc = m.inc | 0; NET.rated = !!m.rated; NET.mode = MODES[m.mode] ? m.mode : null; NET.fischer = !!m.fischer; NET.custom = !!m.custom; NET.hostColor = m.hostColor === 'b' ? 'b' : 'w'; NET.me = other(NET.hostColor); if (!$('#setup').classList.contains('hidden')) buildSetup(); updateSetupTc(); } return; }
     if (m && m.t === 'flag') { if (m.side === other(NET.me)) flagSide(m.side, !!m.opening); return; }
     _netRecvTc(m);
 };
@@ -6229,8 +6241,16 @@ function runAnimQueue() {
                 setTimeout(() => gp.remove(), LIFT);
                 const hat = document.createElement('div');
                 hat.className = 'magic-hat';
-                hat.textContent = '🎩';
-                hat.style.cssText = `left:${rect.left - rect.width * 0.2}px;top:${rect.top - rect.height * 0.15}px;width:${rect.width * 1.4}px;height:${rect.height * 1.4}px;font-size:${rect.width * 1.25}px`;
+                // шляпа-колпак рисуется рисунком (не эмодзи), чтобы точно накрывать фигуру: ширина 1.3 клетки, по центру клетки
+                const HW = rect.width * 1.3, HH = rect.height * 1.25;
+                hat.innerHTML = '<svg viewBox="0 0 130 125" width="100%" height="100%" aria-hidden="true">'
+                    + '<ellipse cx="65" cy="108" rx="62" ry="12" fill="#14101a"/>'
+                    + '<path d="M17 20 Q17 8 65 8 Q113 8 113 20 L113 108 Q113 118 65 118 Q17 118 17 108 Z" fill="#1d1824"/>'
+                    + '<ellipse cx="65" cy="20" rx="48" ry="9" fill="#2c2536"/>'
+                    + '<rect x="17" y="84" width="96" height="16" fill="#b3263a"/>'
+                    + '<ellipse cx="65" cy="108" rx="62" ry="12" fill="none" stroke="#3a3346" stroke-width="3"/>'
+                    + '</svg>';
+                hat.style.cssText = `left:${rect.left + rect.width / 2 - HW / 2}px;top:${rect.top + rect.height / 2 - HH / 2}px;width:${HW}px;height:${HH}px;`;
                 document.body.appendChild(hat);
                 const up = -rect.height * 2.6;
                 const shake = (off, rot, x) => ({ transform: `translateX(${x}px) rotate(${rot}deg)`, opacity: 1, offset: off });
@@ -6750,7 +6770,7 @@ async function startQuick(mode) {
         const j = await (await fetch(API + '/quick?mode=' + mode)).json();
         if (!j.room) { lobbyStatus('Сервер занят, попробуйте позже.'); return; }
         NET.mode = mode; NET.rated = true; NET.tc = MODES[mode].min; NET.inc = 0; NET.fischer = false; NET.custom = false; CUSTOM = null;
-        NET.host = j.role === 'host';
+        NET.host = j.role === 'host'; NET.hostColor = 'w';
         lobbyStatus('');
         showWait(NET.host ? L(`Ищем соперника: ${modeName(mode)}...`, `Looking for an opponent: ${modeName(mode)}...`) : L('Соперник найден, подключаемся...', 'Opponent found, connecting...'));
         attachConn(relayConn(j.room, j.role));
@@ -6806,6 +6826,7 @@ function openRooms() {
     roomsMsg('');
     timePicker($('#roomTimePick'), ROOMSET, saveTimes);
     boardPicker($('#roomBoardPick'), ROOMBOARD, true);
+    colorPicker($('#roomColorPick'), ROOMCOLOR);
     $('#rooms').classList.remove('hidden');
     $('#roomsList').textContent = 'Загрузка...';
     loadRooms();
@@ -6826,7 +6847,7 @@ async function makeListedRoom() {
         const pass = $('#roomPass').value;
         const j = await (await fetch(API + '/lobby/create', { method: 'POST', body: JSON.stringify({ min: ROOMSET.min, inc: ROOMSET.inc, pass, token }) })).json();
         if (!j.room) { roomsMsg('Сервер занят, попробуйте позже.'); return; }
-        NET.tc = ROOMSET.min; NET.inc = ROOMSET.inc; NET.rated = false; NET.mode = null; NET.host = true; NET.fischer = ROOMBOARD.mode === 'fischer'; CUSTOM = ROOMBOARD.mode === 'custom' ? ROOMBOARD.cfg : null; NET.custom = !!CUSTOM;
+        NET.tc = ROOMSET.min; NET.inc = ROOMSET.inc; NET.rated = false; NET.mode = null; NET.host = true; NET.hostColor = ROOMCOLOR.v === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : ROOMCOLOR.v; NET.fischer = ROOMBOARD.mode === 'fischer'; CUSTOM = ROOMBOARD.mode === 'custom' ? ROOMBOARD.cfg : null; NET.custom = !!CUSTOM;
         closeRooms();
         showWait(pass ? L('Комната создана (с паролем). Ждём соперника...', 'Room created (password-protected). Waiting for an opponent...') : L('Комната создана и видна в списке. Ждём соперника...', 'Room created and visible in the list. Waiting for an opponent...'));
         attachConn(relayConn(j.room, 'host'));
@@ -6841,7 +6862,7 @@ async function joinListed(room, pw) {
         if (r.status === 403) { roomsMsg('Неверный пароль.'); return; }
         if (r.status === 429) { roomsMsg('Слишком много попыток, подождите минуту.'); return; }
         if (!r.ok || !j.ticket) { roomsMsg('Комната уже занята или закрыта.'); loadRooms(); return; }
-        NET.host = false; NET.tc = undefined; NET.inc = 0; NET.rated = false; NET.mode = null; NET.fischer = false; NET.custom = false; CUSTOM = null;
+        NET.host = false; NET.hostColor = 'w'; NET.tc = undefined; NET.inc = 0; NET.rated = false; NET.mode = null; NET.fischer = false; NET.custom = false; CUSTOM = null;
         closeRooms();
         showWait(L('Подключаемся...', 'Connecting...'));
         attachConn(relayConn(room, 'guest', j.ticket));
@@ -6944,6 +6965,19 @@ const CLASSIC_ROWS = ['rnbqkbnr', 'pppppppp', '........', '........', '........'
 const chColor = ch => (ch === ch.toUpperCase() ? 'w' : 'b');
 const swapCase = ch => (ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase());
 const ROOMBOARD = { mode: 'classic', cfg: null }, LOCALBOARD = { mode: 'classic', cfg: null };
+const ROOMCOLOR = { v: 'w' };      // цвет хозяина комнаты: 'w', 'b' или 'r' (случайный)
+function colorPicker(root, st) {
+    root.textContent = '';
+    root.classList.add('bd-pick');
+    const seg = mkEl('div', 'bd-seg'), btns = {};
+    [['w', L('⬜ Белые', '⬜ White')], ['b', L('⬛ Чёрные', '⬛ Black')], ['r', L('🎲 Случайно', '🎲 Random')]].forEach(([k, name]) => {
+        const b = mkEl('button', '', name, true); b.type = 'button'; seg.appendChild(b); btns[k] = b;
+        b.addEventListener('click', () => { st.v = k; paint(); });
+    });
+    root.append(mkEl('b', '', L('Ваши фигуры', 'Your pieces'), true), seg);
+    const paint = () => Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === st.v));
+    paint();
+}
 
 // Проверка и приведение доски к единому виду (годится и для данных от соперника)
 function normCfg(x) {
