@@ -472,6 +472,7 @@ function initialBoard(fischer) {
 // Клетки, до которых «достаёт» фигура типа tp (конь или слайдер).
 // Луч идёт до первой настоящей фигуры включительно; иллюзии прозрачны.
 // Прозрачная для своих фигура: сквозь неё проходят фигуры того же цвета (король Призрака прозрачен всегда)
+const wallAt = (r, c) => !!(G && G.walls && G.walls.some(w => w.r === r && w.c === c));      // стена из редактора доски: не пройти и не встать
 const isPhase = t => !!t && !t.ghost && (t.phase || (t.t === 'k' && G.hero[t.c] === 'phantom'));
 
 // Фигура в суперпозиции «открыта»: ей есть куда вернуться, значит она не мешает и не гибнет
@@ -508,6 +509,7 @@ function rayWalk(b, r, c, dr, dc, cb) {
     const path = [];
     while (inb(rr, cc)) {
         if (wrap && (++guard > 30 || (rr === r && cc === c))) return;      // луч сквозь край не должен ходить по кругу
+        if (wallAt(rr, cc)) return;                     // стена останавливает луч
         const t = b[rr][cc];
         if (cb(rr, cc, t, path)) return;
         path.push([rr, cc]);
@@ -695,6 +697,7 @@ function pseudoMoves(b, r, c) {
     const ghost = !!p.ghost;                                   // иллюзия ходит, но никого не рубит
     const harvest = !ghost && !p.orig && G.hero[p.c] === 'necromancer';   // Жатва: рубит свои пешки
     const add = (tr, tc, extra = {}) => {
+        if (wallAt(tr, tc)) return;
         const k = tr + ',' + tc + (extra.castle ? 'c' : '') + (extra.ep ? 'e' : '') + (extra.double ? 'd' : '');
         if (seen.has(k)) return;
         seen.add(k);
@@ -731,7 +734,7 @@ function pseudoMoves(b, r, c) {
         const open1 = inb(r + d, c) && passable(f1);
         if (open1 && !(ghost && r + d === last)) add(r + d, c, { promo: r + d === last });
         // двойной ход: первая клетка свободна ИЛИ на ней прозрачная для нас фигура (призрачная, на Ритуале)
-        if ((open1 || (f1 && passThru(f1, p.c, r + d, c))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c)) add(r + 2 * d, c, { double: true });
+        if ((open1 || (f1 && passThru(f1, p.c, r + d, c))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c) && !wallAt(r + d, c)) add(r + 2 * d, c, { double: true });
         [-1, 1].forEach(dc => {
             const tr = r + d, tc = wcol(p, c + dc), wr = tc !== c + dc ? { path: [] } : {};
             if (tr < 0 || tr > 7 || tc < 0) return;
@@ -782,7 +785,7 @@ function pseudoMoves(b, r, c) {
                 ].forEach(o => {
                     const rk = b[r][o.rc];
                     if (rk && rk.t === 'r' && rk.c === p.c && !rk.moved && !rk.frozen && !rk.snared && !rk.ghost &&
-                        o.between.every(x => (!b[r][x] || (!o.dest.includes(x) && b[r][x].c === p.c && isPhase(b[r][x]))) && !burnAt(r, x) && !vineAt(r, x)) &&
+                        o.between.every(x => (!b[r][x] || (!o.dest.includes(x) && b[r][x].c === p.c && isPhase(b[r][x]))) && !burnAt(r, x) && !vineAt(r, x) && !wallAt(r, x)) &&
                         o.path.every(x => !isAttacked(b, r, x, other(p.c)))) {
                         add(r, o.kt, { castle: true, rc: o.rc, rt: o.rt });
                     }
@@ -1021,7 +1024,7 @@ function applyEffects(b, log) {
         const chain = [];
         let r = cv.r, c = cv.c;
         while (inb(r, c) && b[r][c]) { chain.push([r, c]); r += dr; c += dc; }
-        if (!inb(r, c)) return;                     // некуда толкать: остаются на месте
+        if (!inb(r, c) || wallAt(r, c)) return;     // некуда толкать (край или стена): остаются на месте
         for (let i = chain.length - 1; i >= 0; i--) {
             const [cr, cc] = chain[i], q = b[cr][cc];
             b[cr + dr][cc + dc] = q;
@@ -1063,7 +1066,7 @@ function bananaSlideOnBoard(nb, r, c, col) {
     const q = nb[r][c];
     if (!bn || !q || q.c !== col || q.t === 'k' || q.ghost || q.warded > 0) return;
     const tr = r + bn.dir[0], tc = c + bn.dir[1];
-    if (inb(tr, tc) && !nb[tr][tc]) { nb[tr][tc] = q; nb[r][c] = null; }
+    if (inb(tr, tc) && !nb[tr][tc] && !wallAt(tr, tc)) { nb[tr][tc] = q; nb[r][c] = null; }
 }
 
 function isLegalMove(b, mv) {
@@ -1528,7 +1531,7 @@ function arrowCells(col, range, ignoreFrozen) {
 let VIEWER = null;
 // Для заводных челюстей годится любая пустая клетка, в том числе с плиткой или порталом
 const isEmptyCell = (r, c) => !G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER));
-const isFreeCell = (r, c) => (!G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
+const isFreeCell = (r, c) => !wallAt(r, c) && (!G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
     !G.gens.some(x => x.r === r && x.c === c) && !G.virus.some(x => x.r === r && x.c === c) && !G.vines.some(x => x.r === r && x.c === c) &&
     !G.rituals.some(x => x.r === r && x.c === c) && !(G.hatches || []).some(x => x.r === r && x.c === c);
 
@@ -1646,7 +1649,12 @@ function guardPlacement(col, r, c, build, isKing) {
 function cancelAbilityMode() { G.mode = null; G.sel = null; G.moves = []; render(); }
 
 // t — запись из сброса {t, x} для воскрешения и зомби; first — достаточно найти одну цель
+// Стена не может быть целью ни одной способности
 function abilityCells(key, col, t, first) {
+    const out = abilityCellsRaw(key, col, t, first);
+    return Array.isArray(out) ? out.filter(([r, c]) => !wallAt(r, c)) : out;
+}
+function abilityCellsRaw(key, col, t, first) {
     const b = G.board, cells = [];
     const enemy = other(col);
     const safeNow = safeAfter(cloneBoard(b), col);
@@ -1948,7 +1956,7 @@ function newState(board, hero, win) {
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
         cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
-        bananas: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false },
+        bananas: [], walls: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false },
         win
     };
 }
@@ -1958,6 +1966,7 @@ function startGame() {
     const cfg = CUSTOM;      // своя доска из редактора
     const fischer = !cfg && _seed < 0;      // отрицательное общее число = шахматы Фишера (так режим сам доезжает до соперника и в повтор партии)
     G = newState(cfg ? boardFromCfg(cfg) : initialBoard(fischer), { ...selectedHeroes }, cfg ? { ...cfg.win } : { w: 'mate', b: 'mate' });
+    if (cfg) { installTiles(G, cfg); if (cfg.tiles && cfg.tiles.some(t => t.k === 'fog')) syncFog(); }      // плитки из редактора
     HIST = [];
     ['w', 'b'].forEach(c => {
         const h = HEROES[G.hero[c]];
@@ -3540,6 +3549,7 @@ function renderBoard() {
             if (ci === 0) html += `<span class="coord rank">${8 - r}</span>`;
             if (ri === 7) html += `<span class="coord file">${'abcdefgh'[c]}</span>`;
 
+            if (wallAt(r, c)) html += '<div class="wall-mark"></div>';
             if (sharpAt(r, c)) html += '<div class="sharp-mark"></div>';
             const bt = burnAt(r, c);
             if (bt) html += `<div class="burn-mark"><span>🔥</span><i>${bt.life}</i></div>`;
@@ -6244,11 +6254,10 @@ function runAnimQueue() {
                 // шляпа-колпак рисуется рисунком (не эмодзи), чтобы точно накрывать фигуру: ширина 1.3 клетки, по центру клетки
                 const HW = rect.width * 1.3, HH = rect.height * 1.25;
                 hat.innerHTML = '<svg viewBox="0 0 130 125" width="100%" height="100%" aria-hidden="true">'
-                    + '<ellipse cx="65" cy="108" rx="62" ry="12" fill="#14101a"/>'
-                    + '<path d="M17 20 Q17 8 65 8 Q113 8 113 20 L113 108 Q113 118 65 118 Q17 118 17 108 Z" fill="#1d1824"/>'
+                    + '<ellipse cx="65" cy="107" rx="62" ry="12" fill="#14101a"/>'
+                    + '<path d="M17 20 Q17 8 65 8 Q113 8 113 20 L113 104 Q65 114 17 104 Z" fill="#1d1824"/>'
                     + '<ellipse cx="65" cy="20" rx="48" ry="9" fill="#2c2536"/>'
-                    + '<rect x="17" y="84" width="96" height="16" fill="#b3263a"/>'
-                    + '<ellipse cx="65" cy="108" rx="62" ry="12" fill="none" stroke="#3a3346" stroke-width="3"/>'
+                    + '<path d="M17 80 L113 80 L113 96 Q65 106 17 96 Z" fill="#b3263a"/>'
                     + '</svg>';
                 hat.style.cssText = `left:${rect.left + rect.width / 2 - HW / 2}px;top:${rect.top + rect.height / 2 - HH / 2}px;width:${HW}px;height:${HH}px;`;
                 document.body.appendChild(hat);
@@ -6711,14 +6720,20 @@ function startReplay(d, title) {
     CUSTOM = null;
     startGame();
     CLOCK.on = false;
-    const soundWas = CONFIG.sound;
+    const soundWas = CONFIG.sound, animWas = { ...ANIM };
     CONFIG.sound = false;           // партия проматывается мгновенно, звуки на этом этапе не нужны
+    ANIM.board = false; ANIM.banner = false;      // и анимации тоже: иначе все взрывы и полёты всей партии сыграют разом в начале
     try {
         for (const m of d.log) {
             if (!G || G.over) break;
             try { applyInput(m); } catch (e) { break; }
         }
-    } finally { CONFIG.sound = soundWas; }
+    } finally {
+        CONFIG.sound = soundWas;
+        Object.assign(ANIM, animWas);
+        ANIMQ.length = 0; ANIM_HIDE.length = 0;      // накопленные при промотке анимации выбрасываем
+        if (G) G.fx = [];
+    }
     $('#app').classList.add('replaying');
     $('#replayBar').classList.remove('hidden');
     $('#rpTitle').textContent = (LANG === 'en' ? 'Replay: ' : 'Повтор: ') + title;
@@ -6957,7 +6972,8 @@ $('#installBtn').addEventListener('click', async () => {
 
 /* =====================================================================
    РЕДАКТОР ДОСКИ (режим «своя доска»)
-   Доска хранится строками: заглавные буквы белые фигуры, строчные чёрные, точка пустая клетка.
+   Фигуры хранятся строками: заглавные буквы белые фигуры, строчные чёрные, точка пустая клетка.
+   Плитки хранятся списком: { k: вид, r, c, o: владелец, d: направление, id: пара портала, s: знак генератора }.
    ===================================================================== */
 const BOARD_SLOTS = 5;
 const ED_CH = '.KQRBNPkqrbnp';
@@ -6966,18 +6982,27 @@ const chColor = ch => (ch === ch.toUpperCase() ? 'w' : 'b');
 const swapCase = ch => (ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase());
 const ROOMBOARD = { mode: 'classic', cfg: null }, LOCALBOARD = { mode: 'classic', cfg: null };
 const ROOMCOLOR = { v: 'w' };      // цвет хозяина комнаты: 'w', 'b' или 'r' (случайный)
-function colorPicker(root, st) {
-    root.textContent = '';
-    root.classList.add('bd-pick');
-    const seg = mkEl('div', 'bd-seg'), btns = {};
-    [['w', L('⬜ Белые', '⬜ White')], ['b', L('⬛ Чёрные', '⬛ Black')], ['r', L('🎲 Случайно', '🎲 Random')]].forEach(([k, name]) => {
-        const b = mkEl('button', '', name, true); b.type = 'button'; seg.appendChild(b); btns[k] = b;
-        b.addEventListener('click', () => { st.v = k; paint(); });
-    });
-    root.append(mkEl('b', '', L('Ваши фигуры', 'Your pieces'), true), seg);
-    const paint = () => Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === st.v));
-    paint();
-}
+
+const TILE_KINDS = ['wall', 'conv', 'portal', 'gen', 'virus', 'vine', 'ritual', 'hatch', 'trap', 'lure', 'banana', 'burn', 'hog', 'fog'];
+const TILE_DIRS = { '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' };
+// Что показывается в панели плиток. own: у плитки есть владелец; dir: нужно направление; pair: пара портала
+const TILE_PALETTE = [
+    { id: 'wall', k: 'wall', ico: '🧱', ru: 'Стена', en: 'Wall' },
+    { id: 'conv', k: 'conv', ico: '➡', ru: 'Конвейер', en: 'Conveyor', own: true, dir: true },
+    { id: 'portal', k: 'portal', ico: '🌀', ru: 'Портал (пара)', en: 'Portal (pair)', own: true, pair: true },
+    { id: 'gen+', k: 'gen', s: '+', ico: '＋', ru: 'Генератор +', en: 'Generator +', own: true },
+    { id: 'gen-', k: 'gen', s: '-', ico: '－', ru: 'Генератор −', en: 'Generator −', own: true },
+    { id: 'virus', k: 'virus', ico: '☣️', ru: 'Заражённая плитка', en: 'Infected tile', own: true },
+    { id: 'vine', k: 'vine', ico: '🌿', ru: 'Лоза', en: 'Vine', own: true },
+    { id: 'ritual', k: 'ritual', ico: '🕯️', ru: 'Ритуал', en: 'Ritual', own: true },
+    { id: 'hatch', k: 'hatch', ico: '🪵', ru: 'Потайной люк', en: 'Trapdoor', own: true },
+    { id: 'trap', k: 'trap', ico: '🪤', ru: 'Капкан', en: 'Snare', own: true },
+    { id: 'lure', k: 'lure', ico: '🎣', ru: 'Приманка', en: 'Lure', own: true },
+    { id: 'banana', k: 'banana', ico: '🍌', ru: 'Банан', en: 'Banana', own: true, dir: true },
+    { id: 'burn', k: 'burn', ico: '🔥', ru: 'Горящая клетка', en: 'Burning square', own: true },
+    { id: 'hog', k: 'hog', ico: '⏳', ru: 'Ход сурка', en: 'Groundhog tile', own: true },
+    { id: 'fog', k: 'fog', ico: '🌫️', ru: 'Дым (поверх всего)', en: 'Smoke (over anything)', own: true }
+];
 
 // Проверка и приведение доски к единому виду (годится и для данных от соперника)
 function normCfg(x) {
@@ -6998,12 +7023,33 @@ function normCfg(x) {
         rows.push(row);
     }
     if (!n.w || !n.b) return null;
+    const tiles = [], base = new Set(), fogs = new Set(), pairs = {};
+    for (const t of (Array.isArray(x.tiles) ? x.tiles.slice(0, 200) : [])) {
+        if (!t || !TILE_KINDS.includes(t.k) || !Number.isInteger(t.r) || !Number.isInteger(t.c) || t.r < 0 || t.r > 7 || t.c < 0 || t.c > 7) return null;
+        const key = t.r + ',' + t.c, o = t.o === 'b' ? 'b' : 'w', nt = { k: t.k, r: t.r, c: t.c, o };
+        if (t.k === 'fog') { if (fogs.has(key)) return null; fogs.add(key); tiles.push(nt); continue; }
+        if (base.has(key)) return null;
+        base.add(key);
+        if (t.k === 'wall' && rows[t.r][t.c] !== '.') return null;
+        if (t.k === 'conv' || t.k === 'banana') {
+            if (!Array.isArray(t.d) || !TILE_DIRS[t.d.join(',')]) return null;
+            nt.d = [t.d[0], t.d[1]];
+        }
+        if (t.k === 'gen') { if (t.s !== '+' && t.s !== '-') return null; nt.s = t.s; }
+        if (t.k === 'portal') {
+            if (!Number.isInteger(t.id) || t.id < 1 || t.id > 4) return null;
+            nt.id = t.id; nt.o = t.id <= 2 ? 'w' : 'b';
+            pairs[t.id] = (pairs[t.id] || 0) + 1;
+        }
+        tiles.push(nt);
+    }
+    if (Object.values(pairs).some(v => v !== 2)) return null;      // у портала должна быть ровно одна пара
     const win = {};
     ['w', 'b'].forEach(sd => {
         const k = n['k' + sd];
         win[sd] = k === 0 ? 'all' : k === 1 ? 'mate' : (x.win && x.win[sd] === 'all' ? 'all' : 'mate');
     });
-    return { v: 1, name: String(x.name || '').slice(0, 20), rows, win };
+    return { v: 2, name: String(x.name || '').slice(0, 20), rows, tiles, win };
 }
 
 function boardFromCfg(cfg) {
@@ -7016,6 +7062,31 @@ function boardFromCfg(cfg) {
     }));
 }
 
+// Расставляет плитки из редактора по состоянию партии
+function installTiles(g, cfg) {
+    let maxId = 0;
+    (cfg.tiles || []).forEach(t => {
+        const b = { r: t.r, c: t.c, owner: t.o };
+        switch (t.k) {
+            case 'wall': g.walls.push({ r: t.r, c: t.c }); break;
+            case 'conv': g.conv.push({ ...b, dir: [...t.d] }); break;
+            case 'portal': g.portals.push({ ...b, id: t.id }); maxId = Math.max(maxId, t.id); break;
+            case 'gen': g.gens.push({ ...b, sign: t.s }); break;
+            case 'virus': g.virus.push(b); break;
+            case 'vine': g.vines.push({ ...b, left: CONFIG.vineTurns }); break;
+            case 'ritual': g.rituals.push(b); break;
+            case 'hatch': g.hatches.push(b); break;
+            case 'trap': g.traps.push(b); break;
+            case 'lure': g.lureCells.push(b); break;
+            case 'banana': g.bananas.push({ ...b, dir: [...t.d] }); break;
+            case 'burn': g.burn.push({ ...b, life: CONFIG.burnTurns }); break;
+            case 'hog': g.hogs.push({ ...b, exempt: null, visible: true }); break;
+            case 'fog': g.fogs.push({ ...b, left: CONFIG.fogTurns }); break;
+        }
+    });
+    if (maxId) g.nextPortal = maxId + 1;
+}
+
 function loadSlots() {
     let a = [];
     try { a = JSON.parse(localStorage.getItem('sc_boards') || '[]'); } catch (e) { }
@@ -7023,10 +7094,13 @@ function loadSlots() {
 }
 function saveSlots(list) { try { localStorage.setItem('sc_boards', JSON.stringify(list)); } catch (e) { } }
 const cfgPieceCount = cfg => cfg.rows.join('').replace(/\./g, '').length;
+const cfgTileCount = cfg => (cfg.tiles || []).length;
 
 // ---------- состояние редактора ----------
-const ED = { rows: null, tool: 'P', mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
+const ED = { rows: null, tiles: [], tool: 'P', tab: 'pieces', tileId: 'wall', opt: { o: 'w', d: [1, 0], pair: 1 }, mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
 const edSideName = sd => (sd === 'w' ? L('белых', 'White') : L('чёрных', 'Black'));
+const edBaseAt = (r, c) => ED.tiles.find(t => t.r === r && t.c === c && t.k !== 'fog');
+const edFogAt = (r, c) => ED.tiles.find(t => t.r === r && t.c === c && t.k === 'fog');
 
 function edCounts() {
     const n = { w: { n: 0, k: 0 }, b: { n: 0, k: 0 } };
@@ -7041,12 +7115,13 @@ function edCounts() {
 function edCfg() {
     const cnt = edCounts(), win = {};
     ['w', 'b'].forEach(sd => { win[sd] = cnt[sd].k === 0 ? 'all' : cnt[sd].k === 1 ? 'mate' : ED.win[sd]; });
-    return { v: 1, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), win };
+    return { v: 2, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), tiles: ED.tiles.map(t => ({ ...t, d: t.d ? [...t.d] : undefined })), win };
 }
 
 function edOpen(onPick, cfg) {
-    const base = cfg || { rows: CLASSIC_ROWS, win: { w: null, b: null }, name: '' };
+    const base = cfg || { rows: CLASSIC_ROWS, tiles: [], win: { w: null, b: null }, name: '' };
     ED.rows = base.rows.map(r => [...r]);
+    ED.tiles = (base.tiles || []).map(t => ({ ...t, d: t.d ? [...t.d] : undefined }));
     ED.win = { w: null, b: null };
     const cnt = edCounts();
     ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 2 && base.win && base.win[sd]) ED.win[sd] = base.win[sd]; });
@@ -7054,6 +7129,28 @@ function edOpen(onPick, cfg) {
     $('#edName').value = base.name || '';
     $('#editor').classList.remove('hidden');
     edRender();
+}
+
+// Значок плитки в клетке редактора (те же классы, что и в игре)
+function edTileHtml(t) {
+    const own = (t.o === 'b' ? ' ed-b' : '');
+    switch (t.k) {
+        case 'wall': return '<div class="wall-mark"></div>';
+        case 'conv': return `<div class="conv-mark">${TILE_DIRS[t.d.join(',')]}</div><span class="ed-own ${t.o}"></span>`;
+        case 'portal': return `<div class="portal-mark pm${(t.o === 'w' ? 0 : 2) + t.id % 2}"><span>⇄</span></div><span class="ed-own ${t.o}"></span>`;
+        case 'gen': return `<div class="tile-mark gen-mark ${t.s === '+' ? 'plus' : 'minus'}">${t.s === '+' ? '＋' : '－'}</div><span class="ed-own ${t.o}"></span>`;
+        case 'virus': return `<div class="tile-mark virus-mark">☣️</div><span class="ed-own ${t.o}"></span>`;
+        case 'vine': return `<div class="tile-mark vine-mark">🌿<i class="vine-t">${CONFIG.vineTurns}</i></div><span class="ed-own ${t.o}"></span>`;
+        case 'ritual': return `<div class="tile-mark ritual-mark${t.o === 'b' ? ' enemy' : ''}">🕯️</div><span class="ed-own ${t.o}"></span>`;
+        case 'hatch': return `<div class="tile-mark hatch-mark"><span></span></div><span class="ed-own ${t.o}"></span>`;
+        case 'trap': return `<div class="trap-mark">🪤</div><span class="ed-own ${t.o}"></span>`;
+        case 'lure': return `<div class="lure-mark">🎣</div><span class="ed-own ${t.o}"></span>`;
+        case 'banana': return `<div class="tile-mark banana-mark">🍌<i>${TILE_DIRS[t.d.join(',')]}</i></div><span class="ed-own ${t.o}"></span>`;
+        case 'burn': return `<div class="burn-mark"><span>🔥</span><i>${CONFIG.burnTurns}</i></div><span class="ed-own ${t.o}"></span>`;
+        case 'hog': return `<div class="tile-mark hog-mark">⏳</div><span class="ed-own ${t.o}"></span>`;
+        case 'fog': return `<div class="fog-mark"></div><span class="ed-own ${t.o}"></span>`;
+    }
+    return '';
 }
 
 function edRender() {
@@ -7064,21 +7161,42 @@ function edRender() {
         h += `<div class="cell ${(r + c) % 2 ? 'dark' : 'light'}" data-r="${r}" data-c="${c}">`;
         if (c === 0) h += `<span class="coord rank">${8 - r}</span>`;
         if (r === 7) h += `<span class="coord file">${'abcdefgh'[c]}</span>`;
+        const bt = edBaseAt(r, c);
+        if (bt) h += edTileHtml(bt);
         if (ch !== '.') h += `<div class="piece ${chColor(ch)} t-${ch.toLowerCase()}">${GLYPH[ch.toLowerCase()]}</div>`;
+        const ft = edFogAt(r, c);
+        if (ft) h += edTileHtml(ft);
         h += '</div>';
     }
     $('#edBoard').innerHTML = h;
+    // вкладки
+    $('.ed-tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === ED.tab));
+    $('#edPalette').classList.toggle('hidden', ED.tab !== 'pieces');
+    $('#edTilePanel').classList.toggle('hidden', ED.tab !== 'tiles');
     // фигуры для расстановки
     const nm = { k: L('король', 'king'), q: L('ферзь', 'queen'), r: L('ладья', 'rook'), b: L('слон', 'bishop'), n: L('конь', 'knight'), p: L('пешка', 'pawn') };
     let p = '';
     ['K', 'Q', 'R', 'B', 'N', 'P', 'k', 'q', 'r', 'b', 'n', 'p'].forEach(ch => {
-        p += `<button class="ed-tool${ED.tool === ch ? ' on' : ''}" data-tool="${ch}" title="${(chColor(ch) === 'w' ? L('Белая ', 'White ') : L('Чёрная ', 'Black ')) + nm[ch.toLowerCase()]}">${pImg(chColor(ch), ch.toLowerCase())}</button>`;
+        p += `<button class="ed-tool${ED.tab === 'pieces' && ED.tool === ch ? ' on' : ''}" data-tool="${ch}" title="${(chColor(ch) === 'w' ? L('Белая ', 'White ') : L('Чёрная ', 'Black ')) + nm[ch.toLowerCase()]}">${pImg(chColor(ch), ch.toLowerCase())}</button>`;
     });
-    p += `<button class="ed-tool erase${ED.tool === '.' ? ' on' : ''}" data-tool="." title="${L('Ластик', 'Eraser')}">✖</button>`;
+    p += `<button class="ed-tool erase${ED.tool === '.' ? ' on' : ''}" data-tool="." title="${L('Ластик: сначала убирает дым, потом фигуру, потом плитку', 'Eraser: removes smoke first, then the piece, then the tile')}">✖</button>`;
     $('#edPalette').innerHTML = p;
+    // плитки
+    const cur = TILE_PALETTE.find(x => x.id === ED.tileId);
+    let tp = TILE_PALETTE.map(x => `<button class="ed-tile${ED.tab === 'tiles' && ED.tileId === x.id ? ' on' : ''}" data-tile="${x.id}" title="${L(x.ru, x.en)}"><span>${x.ico}</span><b>${L(x.ru, x.en)}</b></button>`).join('');
+    tp += `<button class="ed-tile erase${ED.tool === '.' ? ' on' : ''}" data-tool="." title="${L('Ластик', 'Eraser')}"><span>✖</span><b>${L('Ластик', 'Eraser')}</b></button>`;
+    $('#edTiles').innerHTML = tp;
+    let op = '';
+    if (cur.own && !cur.pair) op += `<div class="ed-optrow"><span>${L('Владелец:', 'Owner:')}</span>` + ['w', 'b'].map(o => `<button class="${ED.opt.o === o ? 'on' : ''}" data-o="${o}">${o === 'w' ? L('⬜ Белые', '⬜ White') : L('⬛ Чёрные', '⬛ Black')}</button>`).join('') + '</div>';
+    if (cur.dir) op += `<div class="ed-optrow"><span>${L('Направление:', 'Direction:')}</span>` + Object.entries(TILE_DIRS).map(([k, a]) => `<button class="${ED.opt.d.join(',') === k ? 'on' : ''}" data-d="${k}">${a}</button>`).join('') + '</div>';
+    if (cur.pair) {
+        op += `<div class="ed-optrow"><span>${L('Пара:', 'Pair:')}</span>` + [1, 2, 3, 4].map(i => `<button class="${ED.opt.pair === i ? 'on' : ''}" data-pair="${i}">${i <= 2 ? '⬜' : '⬛'}${i <= 2 ? i : i - 2}</button>`).join('') + '</div>';
+        op += `<div class="ed-hint">${L('Порталы ставятся по два на пару (⬜ белых и ⬛ чёрных пар по две). На порталы зеркало не действует.', 'Portals come two to a pair (two ⬜ white and two ⬛ black pairs). Mirror does not affect portals.')}</div>`;
+    }
+    $('#edTileOpts').innerHTML = op;
     $('#edMirror').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === ED.mirror));
     // слоты
-    $('#edSlots').innerHTML = ED.slots.map((cfg, i) => `<button class="ed-slot${ED.slot === i ? ' on' : ''}" data-slot="${i}"><b>${L('Слот', 'Slot')} ${i + 1}</b><span>${cfg ? ((cfg.name || L('без названия', 'untitled')).replace(/</g, '&lt;') + ' · ' + cfgPieceCount(cfg)) : L('пусто', 'empty')}</span></button>`).join('');
+    $('#edSlots').innerHTML = ED.slots.map((cfg, i) => `<button class="ed-slot${ED.slot === i ? ' on' : ''}" data-slot="${i}"><b>${L('Слот', 'Slot')} ${i + 1}</b><span>${cfg ? ((cfg.name || L('без названия', 'untitled')).replace(/</g, '&lt;') + ' · ' + cfgPieceCount(cfg) + (cfgTileCount(cfg) ? ' + ' + cfgTileCount(cfg) : '')) : L('пусто', 'empty')}</span></button>`).join('');
     // условия победы
     const cnt = edCounts();
     let w = '', need = false;
@@ -7100,31 +7218,80 @@ function edRender() {
     $('#edMsg').textContent = ED.msg;
 }
 
+// Клетки с учётом зеркала. Возвращает [r, c, flipV, flipH]
+function edMirrorCells(r, c) {
+    const t = [[r, c, false, false]];
+    if (ED.mirror >= 1) t.push([7 - r, c, true, false]);          // по вертикали: сверху вниз, цвет и владелец меняются
+    if (ED.mirror >= 2) { t.push([r, 7 - c, false, true]); t.push([7 - r, 7 - c, true, true]); }
+    return t;
+}
+function edFixWin() { const cnt = edCounts();['w', 'b'].forEach(sd => { if (cnt[sd].k < 2) ED.win[sd] = null; }); }
+
 // Поставить фигуру (или убрать) с учётом зеркала
 function edPlace(r, c) {
     let ch = ED.tool;
+    if (ch === '.') return edErase(r, c);
     if (ED.rows[r][c] === ch) ch = '.';          // повторное нажатие той же фигурой убирает её
-    const t = [[r, c, ch]];
-    if (ED.mirror >= 1) t.push([7 - r, c, swapCase(ch)]);          // по вертикали: отражается сверху вниз, цвет меняется
-    if (ED.mirror >= 2) { t.push([r, 7 - c, ch]); t.push([7 - r, 7 - c, swapCase(ch)]); }
+    const t = edMirrorCells(r, c).map(([tr, tc, fv]) => [tr, tc, fv ? swapCase(ch) : ch]);
     if ((ch === 'P' || ch === 'p') && t.some(x => x[0] === 0 || x[0] === 7)) {
         ED.msg = L('Пешку нельзя ставить на первую и последнюю горизонталь.', 'A pawn cannot be placed on the first or last rank.');
         edRender(); return;
     }
+    if (ch !== '.' && t.some(([tr, tc]) => { const b = edBaseAt(tr, tc); return b && b.k === 'wall'; })) {
+        ED.msg = L('На стене фигуру ставить нельзя: сначала уберите стену.', 'A piece cannot stand on a wall: remove the wall first.');
+        edRender(); return;
+    }
     t.forEach(([tr, tc, tch]) => { ED.rows[tr][tc] = tch; });
     ED.msg = '';
-    const cnt = edCounts();
-    ['w', 'b'].forEach(sd => { if (cnt[sd].k < 2) ED.win[sd] = null; });
+    edFixWin();
     edRender();
 }
+
+// Ластик: сначала дым, потом фигура, потом плитка
 function edErase(r, c) {
-    const t = [[r, c]];
-    if (ED.mirror >= 1) t.push([7 - r, c]);
-    if (ED.mirror >= 2) { t.push([r, 7 - c]); t.push([7 - r, 7 - c]); }
-    t.forEach(([tr, tc]) => { ED.rows[tr][tc] = '.'; });
+    edMirrorCells(r, c).forEach(([tr, tc]) => {
+        const f = edFogAt(tr, tc);
+        if (f) { ED.tiles = ED.tiles.filter(x => x !== f); return; }
+        if (ED.rows[tr][tc] !== '.') { ED.rows[tr][tc] = '.'; return; }
+        const b = edBaseAt(tr, tc);
+        if (b) ED.tiles = ED.tiles.filter(x => x !== b);
+    });
     ED.msg = '';
-    const cnt = edCounts();
-    ['w', 'b'].forEach(sd => { if (cnt[sd].k < 2) ED.win[sd] = null; });
+    edFixWin();
+    edRender();
+}
+
+// Плитка с учётом отражения
+function edTileFor(item, r, c, fv, fh) {
+    const flip = o => (fv ? (o === 'w' ? 'b' : 'w') : o);
+    const t = { k: item.k, r, c, o: item.pair ? (ED.opt.pair <= 2 ? 'w' : 'b') : (item.own ? flip(ED.opt.o) : 'w') };
+    if (item.dir) { const [dr, dc] = ED.opt.d; t.d = [fv ? -dr : dr, fh ? -dc : dc]; }
+    if (item.s) t.s = item.s;
+    if (item.pair) t.id = ED.opt.pair;
+    return t;
+}
+function edPlaceTile(r, c) {
+    const item = TILE_PALETTE.find(x => x.id === ED.tileId);
+    const cells = item.pair ? [[r, c, false, false]] : edMirrorCells(r, c);
+    const same = (a, b) => a && a.k === b.k && a.o === b.o && a.s === b.s && a.id === b.id && (a.d || []).join() === (b.d || []).join();
+    // нажатие на ту же плитку с теми же настройками убирает её
+    const first = edTileFor(item, r, c, false, false), there = item.k === 'fog' ? edFogAt(r, c) : edBaseAt(r, c);
+    const removing = same(there, first);
+    for (const [tr, tc, fv, fh] of cells) {
+        const t = edTileFor(item, tr, tc, fv, fh);
+        if (item.k === 'fog') {
+            ED.tiles = ED.tiles.filter(x => !(x.r === tr && x.c === tc && x.k === 'fog'));
+            if (!removing) ED.tiles.push(t);
+            continue;
+        }
+        if (t.k === 'wall' && !removing && ED.rows[tr][tc] !== '.') { ED.msg = L('На клетке стоит фигура: стену ставить нельзя.', 'There is a piece on that square: a wall cannot be placed.'); edRender(); return; }
+        if (t.k === 'portal' && !removing && ED.tiles.filter(x => x.k === 'portal' && x.id === t.id && !(x.r === tr && x.c === tc)).length >= 2) {
+            ED.msg = L('У этой пары уже два портала. Уберите лишний или выберите другую пару.', 'This pair already has two portals. Remove one or choose another pair.'); edRender(); return;
+        }
+        ED.tiles = ED.tiles.filter(x => !(x.r === tr && x.c === tc && x.k !== 'fog'));
+        if (!removing) ED.tiles.push(t);
+    }
+    ED.msg = '';
     edRender();
 }
 
@@ -7135,10 +7302,16 @@ function edValidate() {
     for (const sd of ['w', 'b']) {
         if (cnt[sd].k >= 2 && !ED.win[sd]) return L(`Выберите условие победы над ${sd === 'w' ? 'Белыми' : 'Чёрными'}.`, `Choose how to beat ${sd === 'w' ? 'White' : 'Black'}.`);
     }
+    const pairs = {};
+    ED.tiles.filter(t => t.k === 'portal').forEach(t => { pairs[t.id] = (pairs[t.id] || 0) + 1; });
+    for (const id of Object.keys(pairs)) {
+        if (pairs[id] !== 2) return L('У каждого портала должна быть пара: поставьте второй или уберите лишний.', 'Every portal needs a partner: place the second one or remove the extra.');
+    }
     const cfg = edCfg(), saved = G;
     let bad = '';
     try {
         G = newState(boardFromCfg(cfg), { w: 'paladin', b: 'paladin' }, cfg.win);
+        installTiles(G, cfg);
         for (const sd of ['w', 'b']) {
             if (!allMode(sd) && kingAttacked(G.board, sd)) { bad = L(`Королю ${edSideName(sd)} грозит шах: так сохранить нельзя.`, `The ${edSideName(sd)} king is in check: this cannot be saved.`); break; }
         }
@@ -7152,24 +7325,50 @@ function edValidate() {
 $('#edBoard').addEventListener('click', e => {
     const cell = e.target.closest('.cell');
     if (!cell) return;
-    edPlace(+cell.dataset.r, +cell.dataset.c);
+    const r = +cell.dataset.r, c = +cell.dataset.c;
+    if (ED.tool === '.') edErase(r, c);
+    else if (ED.tab === 'tiles') edPlaceTile(r, c);
+    else edPlace(r, c);
 });
-$('#edBoard').addEventListener('contextmenu', e => {          // правая кнопка мыши убирает фигуру
+$('#edBoard').addEventListener('contextmenu', e => {          // правая кнопка мыши убирает (сначала дым, потом фигуру, потом плитку)
     const cell = e.target.closest('.cell');
     if (!cell) return;
     e.preventDefault();
     edErase(+cell.dataset.r, +cell.dataset.c);
 });
+$('.ed-tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]');
+    if (!b) return;
+    ED.tab = b.dataset.tab;
+    if (ED.tab === 'pieces' && !'KQRBNPkqrbnp.'.includes(ED.tool)) ED.tool = 'P';
+    if (ED.tab === 'tiles' && ED.tool !== '.') ED.tool = 'T';
+    edRender();
+});
 $('#edPalette').addEventListener('click', e => { const b = e.target.closest('[data-tool]'); if (b) { ED.tool = b.dataset.tool; edRender(); } });
+$('#edTiles').addEventListener('click', e => {
+    const er = e.target.closest('[data-tool]');
+    if (er) { ED.tool = '.'; edRender(); return; }
+    const b = e.target.closest('[data-tile]');
+    if (b) { ED.tileId = b.dataset.tile; ED.tool = 'T'; edRender(); }
+});
+$('#edTileOpts').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.o) ED.opt.o = b.dataset.o;
+    if (b.dataset.d) ED.opt.d = b.dataset.d.split(',').map(Number);
+    if (b.dataset.pair) ED.opt.pair = +b.dataset.pair;
+    edRender();
+});
 $('#edMirror').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { ED.mirror = +b.dataset.m; edRender(); } });
 $('#edSlots').addEventListener('click', e => { const b = e.target.closest('[data-slot]'); if (b) { ED.slot = +b.dataset.slot; ED.msg = ''; edRender(); } });
 $('#edWin').addEventListener('change', e => { const i = e.target.closest('[data-win]'); if (i) { ED.win[i.dataset.win] = i.value; ED.msg = ''; edRender(); } });
-$('#edClassic').addEventListener('click', () => { ED.rows = CLASSIC_ROWS.map(r => [...r]); ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
-$('#edClear').addEventListener('click', () => { ED.rows = Array.from({ length: 8 }, () => Array(8).fill('.')); ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
+$('#edClassic').addEventListener('click', () => { ED.rows = CLASSIC_ROWS.map(r => [...r]); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
+$('#edClear').addEventListener('click', () => { ED.rows = Array.from({ length: 8 }, () => Array(8).fill('.')); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
 $('#edSave').addEventListener('click', () => {
     const bad = edValidate();
     if (bad) { ED.msg = bad; edRender(); return; }
     const cfg = normCfg(edCfg());
+    if (!cfg) { ED.msg = L('Эту доску сохранить нельзя.', 'This board cannot be saved.'); edRender(); return; }
     ED.slots[ED.slot] = cfg;
     saveSlots(ED.slots);
     ED.msg = L(`Сохранено в слот ${ED.slot + 1}.`, `Saved to slot ${ED.slot + 1}.`);
@@ -7179,6 +7378,7 @@ $('#edLoad').addEventListener('click', () => {
     const cfg = ED.slots[ED.slot];
     if (!cfg) { ED.msg = L('Этот слот пуст.', 'This slot is empty.'); edRender(); return; }
     ED.rows = cfg.rows.map(r => [...r]);
+    ED.tiles = (cfg.tiles || []).map(t => ({ ...t, d: t.d ? [...t.d] : undefined }));
     ED.win = { w: null, b: null };
     const cnt = edCounts();
     ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 2) ED.win[sd] = cfg.win[sd]; });
@@ -7196,6 +7396,7 @@ $('#edUse').addEventListener('click', () => {
     const bad = edValidate();
     if (bad) { ED.msg = bad; edRender(); return; }
     const cfg = normCfg(edCfg());
+    if (!cfg) { ED.msg = L('Эту доску использовать нельзя.', 'This board cannot be used.'); edRender(); return; }
     $('#editor').classList.add('hidden');
     if (ED.onPick) ED.onPick(cfg);
 });
@@ -7219,9 +7420,22 @@ function boardPicker(root, st, allowFischer) {
         edit.classList.toggle('hidden', st.mode !== 'custom');
         info.classList.toggle('hidden', st.mode === 'classic');
         if (st.mode === 'fischer') info.textContent = L('Фигуры на первой и последней горизонталях расставляются случайно, у обеих сторон одинаково. Рокировки нет.', 'Pieces on the first and last ranks are placed randomly, the same for both sides. No castling.');
-        else if (st.mode === 'custom') info.textContent = st.cfg ? L(`Выбрана доска: ${st.cfg.name || 'без названия'} (фигур: ${cfgPieceCount(st.cfg)}).`, `Selected board: ${st.cfg.name || 'untitled'} (${cfgPieceCount(st.cfg)} pieces).`) : L('Доска не выбрана: откройте редактор, соберите или загрузите доску и нажмите «Использовать эту доску».', 'No board selected: open the editor, build or load a board and press “Use this board”.');
+        else if (st.mode === 'custom') info.textContent = st.cfg ? L(`Выбрана доска: ${st.cfg.name || 'без названия'} (фигур: ${cfgPieceCount(st.cfg)}${cfgTileCount(st.cfg) ? ', плиток: ' + cfgTileCount(st.cfg) : ''}).`, `Selected board: ${st.cfg.name || 'untitled'} (${cfgPieceCount(st.cfg)} pieces${cfgTileCount(st.cfg) ? ', ' + cfgTileCount(st.cfg) + ' tiles' : ''}).`) : L('Доска не выбрана: откройте редактор, соберите или загрузите доску и нажмите «Использовать эту доску».', 'No board selected: open the editor, build or load a board and press “Use this board”.');
     };
     Object.entries(btns).forEach(([k, b]) => b.addEventListener('click', () => { st.mode = k; paint(); }));
     edit.addEventListener('click', () => edOpen(cfg => { st.cfg = cfg; paint(); }, st.cfg));
+    paint();
+}
+
+function colorPicker(root, st) {
+    root.textContent = '';
+    root.classList.add('bd-pick');
+    const seg = mkEl('div', 'bd-seg'), btns = {};
+    [['w', L('⬜ Белые', '⬜ White')], ['b', L('⬛ Чёрные', '⬛ Black')], ['r', L('🎲 Случайно', '🎲 Random')]].forEach(([k, name]) => {
+        const b = mkEl('button', '', name, true); b.type = 'button'; seg.appendChild(b); btns[k] = b;
+        b.addEventListener('click', () => { st.v = k; paint(); });
+    });
+    root.append(mkEl('b', '', L('Ваши фигуры', 'Your pieces'), true), seg);
+    const paint = () => Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === st.v));
     paint();
 }
