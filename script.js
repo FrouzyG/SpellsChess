@@ -104,7 +104,7 @@ const ABILITIES = {
     // --- Экстрасенс
     illusion: {
         icon: '🎭', name: 'Иллюзия',
-        desc: 'Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит. Рассеивается, если двойнику или оригиналу что-то грозит, а также если шах даёт оригинал или двойник.'
+        desc: 'Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит. Рассеивается: при шахе оригиналом или двойником, если король встал под шах двойника, при угрозе вражеской пешки оригиналу или двойнику, а также если вражеская фигура пройдёт сквозь двойника или встанет на его клетку (визуально он мешает как настоящая фигура).'
     },
     hypnosis: {
         icon: '🌀', name: 'Гипноз',
@@ -319,6 +319,9 @@ const HEROES = {
     architect: { icon: '🏗️', name: 'Архитектор', tag: 'Перестройка по своим правилам', passive: 'multi', abilities: ['conveyor', 'portals', 'relocate', 'generator'] },
     timelord: { icon: '⏳', name: 'Повелитель времени', tag: 'Похититель темпа', passive: 'timeslow', abilities: ['zawarudo', 'misclick', 'superposition', 'groundhog'] }
 };
+// Служебный «герой» для обычных шахмат (режим «Без героев» в редакторе доски). Не перечисляется, поэтому в выборе героев его нет
+Object.defineProperty(PASSIVES, 'none', { value: { icon: '', name: '', desc: '' }, enumerable: false });
+Object.defineProperty(HEROES, 'none', { value: { icon: '♟', name: 'Без героя', tag: 'Обычные шахматы', passive: 'none', abilities: [], plain: true }, enumerable: false });
 
 HEROES.jester = { icon: '🤡', name: 'Шут', tag: 'Трюки и сюрпризы', passive: 'pretense', abilities: ['blunder', 'banana', 'jaws', 'tomato'] };
 
@@ -710,7 +713,7 @@ function pseudoMoves(b, r, c) {
     };
     // Рубить можно врага, но не короля, не иллюзию, не замороженного, не пару пешек Паладина;
     // король не рубит фигуру под щитом; Некромант рубит свои пешки
-    const passable = t => !t || (t.ghost && t.c === p.c) || (!ghost && supOpen(b, t));   // своя иллюзия и фигура в суперпозиции не мешают
+    const passable = t => !t || (t.ghost && (t.c === p.c || !ghost)) || (!ghost && supOpen(b, t));   // иллюзия (своя и чужая) и фигура в суперпозиции на деле не мешают: ходить можно, иллюзия тогда рассеется
     const canTake = (t, tr, tc) => {
         if (ghost || p.t === 'h' || !t || t.ghost || (t.t === 'k' && !allMode(t.c)) || t.frozen) return false;      // заяц не рубит
         if (p.t === 'k' && t.shield) return false;
@@ -739,7 +742,7 @@ function pseudoMoves(b, r, c) {
         const open1 = inb(r + d, c) && passable(f1);
         if (open1 && !(ghost && r + d === last)) add(r + d, c, { promo: r + d === last });
         // двойной ход: первая клетка свободна ИЛИ на ней прозрачная для нас фигура (призрачная, на Ритуале)
-        if ((open1 || (f1 && passThru(f1, p.c, r + d, c))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c) && !wallAt(r + d, c)) add(r + 2 * d, c, { double: true });
+        if ((open1 || (f1 && (f1.ghost || passThru(f1, p.c, r + d, c)))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c) && !wallAt(r + d, c)) add(r + 2 * d, c, { double: true });
         [-1, 1].forEach(dc => {
             const tr = r + d, tc = wcol(p, c + dc), wr = tc !== c + dc ? { path: [] } : {};
             if (tr < 0 || tr >= N || tc < 0) return;
@@ -801,8 +804,8 @@ function pseudoMoves(b, r, c) {
             dirs.forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
                 if (!t) { add(tr, tc, { path: path.slice() }); return false; }
                 if (t.ghost) {
-                    if (t.c === p.c) add(tr, tc, { path: path.slice() });   // своя иллюзия: можно встать, она рассеется
-                    return false;                                            // чужая иллюзия прозрачна
+                    if (t.c === p.c || !ghost) add(tr, tc, { path: path.slice() });   // иллюзию можно пройти насквозь или встать на её клетку (она рассеется); иллюзия чужую иллюзию не трогает
+                    return false;                                                      // на деле иллюзия не мешает ходу
                 }
                 if (passThru(t, p.c, tr, tc)) {                           // сквозь прозрачную фигуру можно пройти
                     if (t.c !== p.c && canTake(t, tr, tc)) add(tr, tc, { path: path.slice() });   // вражескую фигуру на своём Ритуале можно ещё и срубить
@@ -886,10 +889,10 @@ function pickGuardian(board, vr, vc, victim, exclude, unsafe) {
 function applyMove(board, mv, promo) {
     const p = board[mv.fr][mv.fc];
     const res = { dead: [], thorn: false, burned: false, vanished: [], supBack: [] };
-    // своя иллюзия на пути или на конечной клетке рассеивается
+    // иллюзия (своя или чужая) на пути или на конечной клетке рассеивается; иллюзия чужие иллюзии не трогает
     moveCells(mv).forEach(([r, c]) => {
         const g = board[r][c];
-        if (g && g.ghost && g !== p && g.c === p.c) { res.vanished.push({ r, c, g }); board[r][c] = null; }
+        if (g && g.ghost && g !== p && (g.c === p.c || !p.ghost)) { res.vanished.push({ r, c, g }); board[r][c] = null; }
     });
     // фигуры в суперпозиции на пути или на конечной клетке: не мешают и не гибнут, возвращаются назад
     const supHits = [];
@@ -1296,6 +1299,7 @@ function kingThreat(b, r, c, col) {
 // Иллюзия «грозит» королю (шах или клетки рядом) только внешне: реальные фигуры эти клетки не прикрывают
 // Иллюзия, которая «шахует» короля, рассеивается. Клетки вокруг короля она лишь визуально закрывает (см. ghostBlockers): король может туда встать, и тогда иллюзия рассеется
 function ghostExposed(b, gr, gc, col) {
+    if (allMode(other(col))) return false;
     const k = findKing(b, other(col));
     if (!k || !b[gr][gc]) return false;
     return attackSquares(b, gr, gc).some(([x, y]) => x === k[0] && y === k[1]) && !isAttacked(b, k[0], k[1], col);
@@ -1311,14 +1315,29 @@ function ghostBlockers(b, col, r, c) {
     return out;
 }
 
-// Любая настоящая угроза двойнику или оригиналу рассеивает иллюзию
-function ghostThreatened(b, gr, gc, or, oc, col) {
+// Почему иллюзия рассеивается прямо сейчас (или null), почти как у невидимости:
+// шах оригиналом или двойником, угроза вражеской пешки оригиналу или двойнику.
+// (Король, вставший под шах двойника, и фигуры, прошедшие сквозь двойника, рассеивают его в момент хода.)
+function ghostReason(b, gr, gc, or, oc, col) {
     const enemy = other(col);
-    return isAttacked(b, gr, gc, enemy, true) || isAttacked(b, or, oc, enemy, true) ||
-        pawnFrontThreat(b, gr, gc, enemy) ||
-        kingThreat(b, gr, gc, col) || kingThreat(b, or, oc, col) ||
-        ghostExposed(b, gr, gc, col);
+    const pawnHits = (r, c) => {
+        for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+            const q = b[i][j];
+            if (q && q.c === enemy && q.t === 'p' && !q.ghost && !(q.frozen > 0) && !(q.snared > 0) &&
+                attackSquares(b, i, j).some(([x, y]) => x === r && y === c)) return true;
+        }
+        return false;
+    };
+    if (pawnHits(gr, gc)) return 'пешка угрожает двойнику';
+    if (pawnHits(or, oc)) return 'пешка угрожает оригиналу';
+    if (!allMode(enemy)) {
+        const k = findKing(b, enemy), og = b[or][oc];
+        if (k && og && !(og.frozen > 0) && !(og.snared > 0) && attackSquares(b, or, oc).some(([x, y]) => x === k[0] && y === k[1])) return 'оригинал даёт шах';
+        if (ghostExposed(b, gr, gc, col)) return 'двойник даёт шах';
+    }
+    return null;
 }
+const ghostThreatened = (b, gr, gc, or, oc, col) => !!ghostReason(b, gr, gc, or, oc, col);
 
 // Можно ли поставить иллюзию фигуры p на клетку (br, bc), если оригинал стоит на (or, oc)
 function ghostViable(b, br, bc, p, or, oc) {
@@ -1339,7 +1358,7 @@ function vanishGhost(r, c, reason, silent) {
     if (!silent) addLog('n', `🎭 Иллюзия на ${sqName(r, c)} рассеялась (${reason})`);
 }
 
-// Любая угроза двойнику или оригиналу (или потеря оригинала) — двойник исчезает
+// Двойник исчезает, если оригинал пропал или сработало одно из условий рассеивания (см. ghostReason)
 function checkIllusions() {
     // две иллюзии разных цветов: если одна угрожает другой, рассеиваются обе
     const gs = [];
@@ -1360,7 +1379,7 @@ function checkIllusions() {
         if (!g || !g.ghost || g.fake) continue;
         const o = findOriginal(g.pair);
         if (!o || o.p.c !== g.c) vanishGhost(r, c, 'оригинал исчез');
-        else if (ghostThreatened(G.board, r, c, o.r, o.c, g.c)) vanishGhost(r, c, 'ей что-то угрожало');
+        else { const why = ghostReason(G.board, r, c, o.r, o.c, g.c); if (why) vanishGhost(r, c, why); }
     }
 }
 
@@ -1417,9 +1436,9 @@ function selectableMoves(r, c) {
     if (G.bonus && G.bonus.kind === 'zw' && G.bonus.step === 1) mv = mv.filter(m => !givesCheck(G.board, m) && !zwCapture(G.board, m));
     // доп. ход от Жатвы: цепочки из жатвы нет
     if (G.bonus) mv = mv.filter(m => { const t = G.board[m.tr][m.tc]; return !(t && t.c === G.turn); });
-    // ходы сквозь свою иллюзию доступны, но не подсвечиваются (чтобы иллюзию нельзя было вычислить по подсказкам)
+    // ходы сквозь иллюзию (свою или чужую) и на её клетку доступны, но не подсвечиваются: визуально иллюзия мешает как настоящая фигура
     mv.forEach(m => {
-        m.hidden = moveCells(m).some(([rr, cc]) => { const g = G.board[rr][cc]; return g && g.ghost && g.c === p.c && g !== p; });
+        m.hidden = moveCells(m).some(([rr, cc]) => { const g = G.board[rr][cc]; return g && g.ghost && g !== p && (g.c === p.c || !p.ghost); });
     });
     // король: клетки под визуальной угрозой вражеской иллюзии не подсвечиваются (выглядят закрытыми), но встать туда можно: иллюзия тогда рассеется
     if (p.t === 'k' && !p.ghost) mv.forEach(m => { if (!m.castle && ghostBlockers(G.board, other(p.c), m.tr, m.tc).length) m.hidden = true; });
@@ -1972,7 +1991,7 @@ function startGame() {
     N = cfg && cfg.size ? cfg.size : 8;
     document.documentElement.style.setProperty('--n', N);
     const fischer = !cfg && _seed < 0;      // отрицательное общее число = шахматы Фишера (так режим сам доезжает до соперника и в повтор партии)
-    G = newState(cfg ? boardFromCfg(cfg) : initialBoard(fischer), { ...selectedHeroes }, cfg ? { ...cfg.win } : { w: 'mate', b: 'mate' });
+    G = newState(cfg ? boardFromCfg(cfg) : initialBoard(fischer), cfg && cfg.plain ? { w: 'none', b: 'none' } : { ...selectedHeroes }, cfg ? { ...cfg.win } : { w: 'mate', b: 'mate' });
     if (cfg) { installTiles(G, cfg); if (cfg.tiles && cfg.tiles.some(t => t.k === 'fog')) syncFog(); }      // плитки из редактора
     HIST = [];
     ['w', 'b'].forEach(c => {
@@ -1981,7 +2000,7 @@ function startGame() {
         if (CONFIG.cooldown[h.passive] !== undefined) G.cd[c][h.passive] = CONFIG.startCooldown;
         if (G.hero[c] === 'jester') G.pretense[c] = 'pending';      // Притворство: выбор предателя перед первым ходом Шута
     });
-    addLog('n', `Партия началась: Белые — ${HEROES[G.hero.w].name}, Чёрные — ${HEROES[G.hero.b].name}`);
+    addLog('n', cfg && cfg.plain ? 'Партия началась: обычные шахматы, без героев' : `Партия началась: Белые — ${HEROES[G.hero.w].name}, Чёрные — ${HEROES[G.hero.b].name}`);
     if (fischer) addLog('n', '🎲 Шахматы Фишера: случайная расстановка фигур, рокировки нет');
     if (cfg) {
         const need = ['w', 'b'].filter(x => cfg.win[x] === 'all').map(x => `над ${x === 'w' ? 'Белыми' : 'Чёрными'} нужно срубить все их фигуры`);
@@ -2438,7 +2457,7 @@ function executeMove(mv, promo, ctx) {
         if (o) delete o.p.pair;
         G.fx.push({ r, c, type: 'poof' });
         sfx('poof');
-        addLog('n', `🎭 Иллюзия на ${sqName(r, c)} рассеялась (своя фигура)`);
+        addLog('n', `🎭 Иллюзия на ${sqName(r, c)} рассеялась (${g.c === col ? 'своя фигура' : 'сквозь неё прошла фигура'})`);
     });
 
     // Иллюзии: двойник больше не повторяет ходы, но превращение оригинала его рассеивает
@@ -3662,7 +3681,7 @@ function panelHTML(col) {
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
     <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div></div>
     ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}</div>`;
-    h += `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b></div><div class="abilities">`;
+    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b></div><div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
     const tomMode = !G.over && G.mode && G.mode.type === 'tomato' && col !== G.turn && isActor();
@@ -4377,7 +4396,7 @@ const EN = {
     "Зеркало": "Mirror",
     "Повторяет последнюю способность врага.": "Repeats the enemy's last ability.",
     "Иллюзия": "Illusion",
-    "Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит. Рассеивается, если двойнику или оригиналу что-то грозит, а также если шах даёт оригинал или двойник.": "Creates a double of a piece. They move only together; the double captures nothing. It fades if it or the original is threatened, or if the original or the double gives check.",
+    "Создаёт двойника фигуры. Они ходят только вместе, двойник никого не рубит. Рассеивается: при шахе оригиналом или двойником, если король встал под шах двойника, при угрозе вражеской пешки оригиналу или двойнику, а также если вражеская фигура пройдёт сквозь двойника или встанет на его клетку (визуально он мешает как настоящая фигура).": "Creates a double of a piece. They move only together; the double captures nothing. It fades when the original or the double gives check, when a king steps into the double's check, when an enemy pawn threatens the original or the double, or when an enemy piece passes through it or lands on its square (visually it blocks like a real piece).",
     "Гипноз": "Hypnosis",
     "Вражеская фигура в радиусе 3×3 от вашей фигуры ходит за вас ": "An enemy piece within 3×3 of one of your pieces moves for you for ",
     " ваших хода или пока не срубит фигуру. Короля нельзя.": " of your turns, or until it captures a piece. Kings are immune.",
@@ -4822,6 +4841,15 @@ const EN = {
     "🎲 Случайный герой": "🎲 Random hero",
     " (две иллюзии столкнулись": " (two illusions collided",
     "две иллюзии столкнулись": "two illusions collided",
+    "пешка угрожает двойнику": "a pawn threatens the double",
+    "Без героев (обычные шахматы, способностей нет)": "No heroes (plain chess, no abilities)",
+    "Без героя": "No hero",
+    "Размер доски": "Board size",
+    "Партия началась: обычные шахматы, без героев": "The game has started: plain chess, no heroes",
+    "пешка угрожает оригиналу": "a pawn threatens the original",
+    "оригинал даёт шах": "the original gives check",
+    "двойник даёт шах": "the double gives check",
+    "сквозь неё прошла фигура": "a piece passed through it",
     "на её клетку попытались встать": "someone tried to stand on its square",
     "ей встали под угрозу": "someone stepped under its threat",
     "Время партии": "Game time",
@@ -7092,7 +7120,7 @@ function normCfg(x) {
         const k = n['k' + sd];
         win[sd] = k === 0 ? 'all' : (x.win && x.win[sd] === 'all' ? 'all' : 'mate');
     });
-    return { v: 2, size: sz, name: String(x.name || '').slice(0, 20), rows, tiles, win };
+    return { v: 2, size: sz, plain: !!x.plain, name: String(x.name || '').slice(0, 20), rows, tiles, win };
 }
 
 function boardFromCfg(cfg) {
@@ -7140,7 +7168,7 @@ const cfgPieceCount = cfg => cfg.rows.join('').replace(/\./g, '').length;
 const cfgTileCount = cfg => (cfg.tiles || []).length;
 
 // ---------- состояние редактора ----------
-const ED = { n: 8, rows: null, tiles: [], tool: 'P', tab: 'pieces', tileId: 'wall', opt: { o: 'w', d: [1, 0], pair: 1 }, mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
+const ED = { n: 8, plain: false, rows: null, tiles: [], tool: 'P', tab: 'pieces', tileId: 'wall', opt: { o: 'w', d: [1, 0], pair: 1 }, mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
 const edSideName = sd => (sd === 'w' ? L('белых', 'White') : L('чёрных', 'Black'));
 const edBaseAt = (r, c) => ED.tiles.find(t => t.r === r && t.c === c && t.k !== 'fog');
 const edFogAt = (r, c) => ED.tiles.find(t => t.r === r && t.c === c && t.k === 'fog');
@@ -7158,12 +7186,13 @@ function edCounts() {
 function edCfg() {
     const cnt = edCounts(), win = {};
     ['w', 'b'].forEach(sd => { win[sd] = cnt[sd].k === 0 ? 'all' : (ED.win[sd] === 'all' ? 'all' : 'mate'); });
-    return { v: 2, size: ED.n, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), tiles: ED.tiles.map(t => ({ ...t, d: t.d ? [...t.d] : undefined })), win };
+    return { v: 2, size: ED.n, plain: !!ED.plain, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), tiles: ED.tiles.map(t => ({ ...t, d: t.d ? [...t.d] : undefined })), win };
 }
 
 function edOpen(onPick, cfg) {
     const base = cfg || { rows: CLASSIC_ROWS, tiles: [], win: { w: null, b: null }, name: '' };
     ED.n = base.rows.length;
+    ED.plain = !!base.plain;
     ED.rows = base.rows.map(r => [...r]);
     ED.tiles = (base.tiles || []).map(t => ({ ...t, d: t.d ? [...t.d] : undefined }));
     ED.win = { w: null, b: null };
@@ -7214,6 +7243,7 @@ function edResize(nn) {
 }
 function edRender() {
     $('#edBoard').style.setProperty('--en', ED.n);
+    $('#edPlain').checked = !!ED.plain;
     $('#edSize').innerHTML = [8, 10, 12, 14, 16].map(v => `<button data-sz="${v}" class="${ED.n === v ? 'on' : ''}">${v}×${v}</button>`).join('');
     // доска
     let h = '';
@@ -7369,7 +7399,7 @@ function edValidate() {
     let bad = '';
     try {
         N = ED.n;
-        G = newState(boardFromCfg(cfg), { w: 'paladin', b: 'paladin' }, cfg.win);
+        G = newState(boardFromCfg(cfg), cfg.plain ? { w: 'none', b: 'none' } : { w: 'paladin', b: 'paladin' }, cfg.win);
         installTiles(G, cfg);
         for (const sd of ['w', 'b']) {
             if (!allMode(sd) && kingAttacked(G.board, sd)) { bad = L(`Королю ${edSideName(sd)} грозит шах: так сохранить нельзя.`, `The ${edSideName(sd)} king is in check: this cannot be saved.`); break; }
@@ -7420,6 +7450,7 @@ $('#edTileOpts').addEventListener('click', e => {
 });
 $('#edMirror').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) { ED.mirror = +b.dataset.m; edRender(); } });
 $('#edSlots').addEventListener('click', e => { const b = e.target.closest('[data-slot]'); if (b) { ED.slot = +b.dataset.slot; ED.msg = ''; edRender(); } });
+$('#edPlain').addEventListener('change', e => { ED.plain = e.target.checked; });
 $('#edSize').addEventListener('click', e => { const b = e.target.closest('[data-sz]'); if (b) edResize(+b.dataset.sz); });
 $('#edWin').addEventListener('change', e => { const i = e.target.closest('[data-win]'); if (i) { ED.win[i.dataset.win] = i.value; ED.msg = ''; edRender(); } });
 $('#edClassic').addEventListener('click', () => { ED.n = 8; ED.rows = CLASSIC_ROWS.map(r => [...r]); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
@@ -7438,6 +7469,7 @@ $('#edLoad').addEventListener('click', () => {
     const cfg = ED.slots[ED.slot];
     if (!cfg) { ED.msg = L('Этот слот пуст.', 'This slot is empty.'); edRender(); return; }
     ED.n = cfg.rows.length;
+    ED.plain = !!cfg.plain;
     ED.rows = cfg.rows.map(r => [...r]);
     ED.tiles = (cfg.tiles || []).map(t => ({ ...t, d: t.d ? [...t.d] : undefined }));
     ED.win = { w: null, b: null };
