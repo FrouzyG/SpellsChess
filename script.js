@@ -13,7 +13,7 @@ const CONFIG = {
     cooldown: {
         resurrect: 11, shield: 5, rescue: 9,         // Паладин
         fireball: 7, freeze: 5, copy: 15,            // Маг
-        illusion: 6, hypnosis: 8, confusion: 7,      // Экстрасенс
+        illusion: 7, hypnosis: 8, confusion: 7,      // Экстрасенс
         raise: 8, frankenstein: 3, apocalypse: 8,    // Некромант
         trap: 4, arrow: 4, lure: 7,                  // Охотник
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
@@ -24,7 +24,7 @@ const CONFIG = {
         zawarudo: 10, misclick: 12, superposition: 6,  // Повелитель времени
         groundhog: 6,                                // Ход сурка
         timeslow: 4,                                 // пассивка Повелителя времени
-        guardian: 5, purify: 10, lie: 10, virus: 3,  // новые способности
+        guardian: 5, purify: 10, lie: 9, virus: 3,  // новые способности
         vine: 5, ritual: 5, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
         fog: 5, hatch: 3, hocus: 7, assistant: 6         // Фокусник
