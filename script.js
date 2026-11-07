@@ -2891,16 +2891,72 @@ function doRescue(from, to) {
     finishAbility('rescue', `🪂 Спасение: ${sym} ${sqName(from[0], from[1])} → ${sqName(to[0], to[1])}`);
 }
 
+// Замешательство: вражеская фигура делает два настоящих хода подряд. После первого хода на её клетке срабатывают ловушки:
+// капкан (второго хода нет) и «Ход сурка» (фигура возвращается, откуда пришла, и второй ход выбирается заново уже оттуда).
+// Остальные плитки действуют, как обычно, в конце хода, на клетке, где фигура остановилась.
+function confusionSeconds(from, col) {
+    const b = G.board;
+    return pseudoMoves(b, from[0], from[1])
+        .filter(m => !m.promo && !m.castle && !m.ep && !b[m.tr][m.tc])
+        .filter(m2 => { const nb2 = cloneBoard(b); if (applyMove(nb2, m2, 'q').burned) return false; return safeAfter(nb2, col); });
+}
+
+function confusionLanding(p, r, c) {
+    const b = G.board;
+    if (p.ghost || kSafe(p)) return null;
+    if (G.traps.some(t => t.r === r && t.c === c)) {
+        sweepTraps();                                  // капкан срабатывает сразу: фигура застревает
+        if (p.snared > 0) return 'snared';
+    }
+    const h = G.hogs.find(x => x.r === r && x.c === c);
+    const pv = p.prev;
+    if (h && !(h.exempt && p.uid === h.exempt) && pv && !b[pv[0]][pv[1]]) {
+        b[pv[0]][pv[1]] = p;
+        b[r][c] = null;
+        if (CONFIG.hogOnce) G.hogs = G.hogs.filter(x => x !== h);
+        G.fx.push({ r, c, type: 'poof' }, { r: pv[0], c: pv[1], type: 'ghost' });
+        addLog('n', p.invis ? '⏳ Ход сурка: невидимая фигура вернулась назад' : `⏳ Ход сурка: ${pieceSym(p)} возвращается с ${sqName(r, c)} на ${sqName(pv[0], pv[1])}`);
+        return 'back';
+    }
+    return null;
+}
+
 function doConfusion(from, m1, m2) {
-    const b = G.board, p = b[from[0]][from[1]];
+    const b = G.board, p = b[from[0]][from[1]], col = G.turn;
     const note = p.t === 'p' ? '' : pieceSym(p);
-    applyMove(b, m1, 'q');
-    applyMove(b, m2, 'q');
+    const fs = sqName(from[0], from[1]), s1 = sqName(m1.tr, m1.tc);
+    applyMove(b, m1, 'q');                             // первый ход: настоящее перемещение фигуры
+    G.fx.push({ r: m1.tr, c: m1.tc, type: 'land' });
+    sfx('move');
+    const out = confusionLanding(p, m1.tr, m1.tc);
+    G.last = { fr: from[0], fc: from[1], tr: m1.tr, tc: m1.tc };
+    if (out === 'snared') {
+        finishAbility('confusion', `💫 Замешательство: ${note}${fs} → ${s1}, фигура в капкане, второго хода нет`);
+        return;
+    }
+    if (out === 'back') {
+        const seconds = confusionSeconds(from, col);
+        if (!seconds.length) {
+            finishAbility('confusion', `💫 Замешательство: ${note}${fs} → ${s1}, возврат на ${fs}, второго хода нет`);
+            return;
+        }
+        Object.assign(G.mode, { stage: 'C', locked: true, from, first: m1, note, seconds, cells: seconds.map(x => [x.tr, x.tc]) });
+        G.sel = { r: from[0], c: from[1] };
+        render();
+        return;
+    }
+    confusionSecond(from, m1, m2, note, false);
+}
+
+function confusionSecond(from, m1, m2, note, back) {
+    applyMove(G.board, m2, 'q');
     G.fx.push({ r: m2.tr, c: m2.tc, type: 'hypno' });
     sfx('hypno');
     G.last = { fr: from[0], fc: from[1], tr: m2.tr, tc: m2.tc };
+    const fs = sqName(from[0], from[1]);
     finishAbility('confusion',
-        `💫 Замешательство: ${note}${sqName(from[0], from[1])} → ${sqName(m1.tr, m1.tc)} → ${sqName(m2.tr, m2.tc)}`);
+        back ? `💫 Замешательство: ${note}${fs} → ${sqName(m1.tr, m1.tc)}, возврат на ${fs}, затем → ${sqName(m2.tr, m2.tc)}`
+            : `💫 Замешательство: ${note}${fs} → ${sqName(m1.tr, m1.tc)} → ${sqName(m2.tr, m2.tc)}`);
 }
 
 function doConveyor(at, dir) {
@@ -3240,6 +3296,10 @@ function onModeCell(r, c) {
             m.choice = m.opts.find(o => o.m1.tr === r && o.m1.tc === c);
             m.stage = 'B';
             m.cells = m.choice.seconds.map(x => [x.tr, x.tc]);
+        } else if (m.stage === 'C') {
+            const m2 = m.seconds.find(x => x.tr === r && x.tc === c);
+            if (m2) confusionSecond(m.from, m.first, m2, m.note, true);
+            return;
         } else {
             const m2 = m.choice.seconds.find(x => x.tr === r && x.tc === c);
             doConfusion(m.from, m.choice.m1, m2);
@@ -3796,7 +3856,7 @@ function renderStatus() {
         else if (t === 'illusion') h = m.stage === 'piece' ? 'Выберите фигуру, которая сходит и создаст двойника.'
             : m.stage === 'A' ? 'Куда пойдёт фигура?' : 'На какую клетку встанет двойник?';
         else if (t === 'confusion') h = m.stage === 'piece' ? 'Выберите вражескую фигуру (не короля).'
-            : m.stage === 'A' ? 'Первый ход этой фигуры (без рубки).' : 'Второй ход этой фигуры (без рубки).';
+            : m.stage === 'A' ? 'Первый ход этой фигуры (без рубки).' : m.stage === 'C' ? 'Ход сурка вернул фигуру назад: выберите её второй ход (без рубки).' : 'Второй ход этой фигуры (без рубки).';
         else if (t === 'frankenstein') h = m.stage === 'piece' ? 'Выберите свою фигуру, которая поглотит другую.' : 'Выберите свою фигуру, которую она поглотит.';
         else if (t === 'apocalypse') h = m.stage === 'piece' ? 'Выберите своего зомби для дополнительного хода.' : 'Куда пойдёт зомби? Рубить не обязательно.';
         else if (t === 'conveyor') h = m.stage === 'piece' ? 'Выберите свободную клетку для конвейера.' : 'В какую сторону он толкает? Выберите соседнюю клетку в этом направлении.';
@@ -4683,6 +4743,7 @@ const EN = {
     "Куда пойдёт фигура?": "Where will the piece go?",
     "На какую клетку встанет двойник?": "Which square will the double stand on?",
     "Выберите вражескую фигуру (не короля).": "Choose an enemy piece (not the king).",
+    "Ход сурка вернул фигуру назад: выберите её второй ход (без рубки).": "Groundhog Move sent the piece back: choose its second move (no captures).",
     "Первый ход этой фигуры (без рубки).": "This piece's first move (no capture).",
     "Второй ход этой фигуры (без рубки).": "This piece's second move (no capture).",
     "Выберите свою фигуру, которая поглотит другую.": "Choose your piece that will absorb another.",
