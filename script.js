@@ -485,7 +485,7 @@ const isPhase = t => !!t && !t.ghost && (t.phase || (t.t === 'k' && G.hero[t.c] 
 const vineAt = (r, c) => G.vines.some(v => v.r === r && v.c === c);
 const ritualAt = (r, c) => G.rituals.find(x => x.r === r && x.c === c);
 // Можно ли пройти сквозь фигуру t на клетке (r, c) фигурой цвета col: прозрачность или призрачная плитка Ритуала
-const passThru = (t, col, r, c) => !!t && !t.ghost && ((t.c === col && isPhase(t)) || (!!ritualAt(r, c) && ritualAt(r, c).owner === col));
+const passThru = (t, col, r, c) => !!t && !t.ghost && ((t.c === col && isPhase(t)) || (!!ritualAt(r, c) && (ritualAt(r, c).owner === col || (ritualAt(r, c).owner === 'n' && t.c === col))));      // нейтральный ритуал помогает фигуре, которая на нём стоит
 const supOpen = (b, t) => !!t && !!t.sup && !t.ghost && !!t.prev && !b[t.prev[0]][t.prev[1]];
 const scaredDirs = tp => ((tp === 'r' || tp === 'j') ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
 
@@ -1070,7 +1070,7 @@ function safeAfter(nb, col) {
 // Шут знает свои банановые кожуры: фигура, вставшая на неё, съедет на соседнюю клетку (для проверки шаха)
 function bananaSlideOnBoard(nb, r, c, col) {
     if (typeof G === 'undefined' || !G || !G.bananas || !G.bananas.length) return;
-    const bn = G.bananas.find(x => x.r === r && x.c === c && x.owner === col);
+    const bn = G.bananas.find(x => x.r === r && x.c === c && (x.owner === col || x.owner === 'n'));
     const q = nb[r][c];
     if (!bn || !q || q.c !== col || kSafe(q) || q.ghost || q.warded > 0) return;
     const tr = r + bn.dir[0], tc = c + bn.dir[1];
@@ -1675,6 +1675,28 @@ function guardPlacement(col, r, c, build, isKing) {
     }
     return true;          // небезопасное действие не выполняем в любом случае
 }
+// Иллюзия для способностей считается той же фигурой: цель-оригинал получает эффект, а его двойник рассеивается; цель-двойник тратит способность и просто рассеивается
+function dropGhostOn(nb, r, c) {
+    const p = nb[r][c];
+    if (!p || !p.pair || p.ghost) return;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { const g = nb[i][j]; if (g && g.ghost && g.pair === p.pair) nb[i][j] = null; }
+    delete p.pair;
+}
+function withBoardTemp(nb, fn) { const sv = G.board; G.board = nb; try { return fn(); } finally { G.board = sv; } }
+const GHOST_TARGET_KEYS = ['shield', 'rescue', 'guardian', 'purify', 'bumpuku', 'phase', 'fukashi', 'superposition', 'scream', 'freeze', 'hypnosis', 'confusion', 'assistant', 'hocus', 'soulmates', 'lie'];
+function ghostIntercept(r, c) {
+    const m = G.mode, t = m.type, p = G.board[r][c];
+    if (!p || !GHOST_TARGET_KEYS.includes(t)) return false;
+    if (m.stage && m.stage !== 'piece' && !(t === 'hocus' || t === 'soulmates')) return false;      // клетка назначения, а не цель
+    if (p.ghost) {
+        vanishGhost(r, c, 'это была иллюзия', true);
+        const A = ABILITIES[t];
+        finishAbility(t, `${A.icon} ${A.name} по ${sqName(r, c)}: цель оказалась иллюзией и рассеялась`);
+        return true;
+    }
+    if (p.pair) { const gi = findGhost(p.pair); if (gi) vanishGhost(gi.r, gi.c, 'способность подействовала на оригинал'); }
+    return false;
+}
 function cancelAbilityMode() { G.mode = null; G.sel = null; G.moves = []; render(); }
 
 // t — запись из сброса {t, x} для воскрешения и зомби; first — достаточно найти одну цель
@@ -1701,14 +1723,14 @@ function abilityCellsRaw(key, col, t, first) {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && !p.ghost && !kSafe(p) && !p.shield) cells.push([r, c]);
+            if (p && p.c === col && !kSafe(p) && !p.shield) cells.push([r, c]);
         }
     } else if (key === 'rescue') {
         const far = ownHalf(enemy);
         far.forEach(r => {
             for (let c = 0; c < N; c++) {
                 const p = b[r][c];
-                if (p && p.c === col && !p.ghost && rescueDests(r, c).length) cells.push([r, c]);
+                if (p && p.c === col && (p.ghost || rescueDests(r, c).length)) cells.push([r, c]);
             }
         });
     } else if (key === 'fireball') {
@@ -1724,10 +1746,11 @@ function abilityCellsRaw(key, col, t, first) {
             const p = b[r][c];
             if (!p || kSafe(p) || p.frozen > 0) continue;
             const own = p.c === col;
-            if (own ? p.ghost : p.invis) continue;
+            if (!own && p.invis) continue;
             if (magicProof(b, r, c, col)) continue;
             if (p.ghost) { if (safeNow) cells.push([r, c]); continue; }
             const nb = cloneBoard(b);
+            dropGhostOn(nb, r, c);
             nb[r][c].frozen = CONFIG.freezeTurns + (own ? 1 : 0);
             if (safeAfter(nb, col)) cells.push([r, c]);
         }
@@ -1739,6 +1762,7 @@ function abilityCellsRaw(key, col, t, first) {
             if (!nearOwn(b, r, c, col)) continue;
             if (p.ghost) { if (safeNow) cells.push([r, c]); continue; }
             const nb = cloneBoard(b);
+            dropGhostOn(nb, r, c);
             const q = nb[r][c];
             q.orig = q.c; q.c = col; q.hypno = CONFIG.hypnoTurns; q.fresh = true;
             if (safeAfter(nb, col)) cells.push([r, c]);
@@ -1749,7 +1773,7 @@ function abilityCellsRaw(key, col, t, first) {
             if (!p || p.c !== enemy || kSafe(p) || p.frozen || p.invis) continue;
             if (magicProof(b, r, c, col)) continue;
             if (p.ghost) { if (safeNow) cells.push([r, c]); continue; }
-            if (confusionOptions(r, c, true).length) cells.push([r, c]);
+            if (p.pair ? withBoardTemp((() => { const nb = cloneBoard(b); dropGhostOn(nb, r, c); return nb; })(), () => confusionOptions(r, c, true).length) : confusionOptions(r, c, true).length) cells.push([r, c]);
         }
     } else if (key === 'illusion') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
@@ -1773,14 +1797,14 @@ function abilityCellsRaw(key, col, t, first) {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && !kSafe(p) && !p.ghost && !p.phase && !p.orig) cells.push([r, c]);
+            if (p && p.c === col && !kSafe(p) && !p.phase && !p.orig) cells.push([r, c]);
         }
     } else if (key === 'soulmates') {
         if (!safeNow) return [];
         const el = [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && !p.ghost && !kSafe(p) && !p.soul && !magicProof(b, r, c) && !(p.invis && p.c !== col)) el.push([r, c]);
+            if (p && !kSafe(p) && !p.soul && !magicProof(b, r, c) && !(p.invis && p.c !== col)) el.push([r, c]);
         }
         if (el.length >= 2) return el;
     } else if (key === 'scream') {
@@ -1789,6 +1813,7 @@ function abilityCellsRaw(key, col, t, first) {
             if (!p || p.c !== enemy || kSafe(p) || p.scared || p.invis || magicProof(b, r, c)) continue;
             if (p.ghost) { if (safeNow) cells.push([r, c]); continue; }
             const nb = cloneBoard(b);
+            dropGhostOn(nb, r, c);
             nb[r][c].scared = true;
             if (safeAfter(nb, col)) cells.push([r, c]);
         }
@@ -1799,7 +1824,7 @@ function abilityCellsRaw(key, col, t, first) {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && !kSafe(p) && !p.ghost && !p.invis && !p.pair && !p.orig && !invisReason(b, r, c)) cells.push([r, c]);
+            if (p && p.c === col && !kSafe(p) && !p.invis && !p.orig && (p.ghost || !invisReason(p.pair ? (() => { const nb = cloneBoard(b); dropGhostOn(nb, r, c); return nb; })() : b, r, c))) cells.push([r, c]);
         }
     } else if (key === 'fenyan') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) cells.push([r, c]);
@@ -1832,7 +1857,7 @@ function abilityCellsRaw(key, col, t, first) {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (!p || kSafe(p) || p.ghost) continue;
+            if (!p || kSafe(p)) continue;
             if (key === 'purify' ? (p.invis && p.c !== col) : p.c !== col) continue;
             if (key === 'guardian' && p.altruist > 0) continue;
             if (key === 'bumpuku' && p.bomb) continue;
@@ -1849,7 +1874,7 @@ function abilityCellsRaw(key, col, t, first) {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && lieOptions(r, c, true).length) cells.push([r, c]);
+            if (p && p.c === col && (p.ghost || (p.pair ? withBoardTemp((() => { const nb = cloneBoard(b); dropGhostOn(nb, r, c); return nb; })(), () => lieOptions(r, c, true).length) : lieOptions(r, c, true).length))) cells.push([r, c]);
         }
     } else if (key === 'groundhog') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
@@ -1862,7 +1887,7 @@ function abilityCellsRaw(key, col, t, first) {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && !kSafe(p) && !p.ghost && !p.sup && !(p.invis && p.c !== col)) cells.push([r, c]);
+            if (p && !kSafe(p) && !p.sup && !(p.invis && p.c !== col)) cells.push([r, c]);
         }
     } else if (key === 'zawarudo') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
@@ -2278,7 +2303,7 @@ function sweepLures() {
     G.lureCells = G.lureCells.filter(l => {
         const p = G.board[l.r][l.c];
         if (!p || p.ghost) return true;
-        if (p.c === l.owner && !p.orig && !kSafe(p)) p.lure = l.owner;
+        if ((p.c === l.owner || l.owner === 'n') && !p.orig && !kSafe(p)) p.lure = p.c;      // нейтральная приманка работает на любую фигуру, вставшую на неё
         return false;
     });
 }
@@ -3169,6 +3194,7 @@ function onModeCell(r, c) {
         cancelAbilityMode();
         return;
     }
+    if (ghostIntercept(r, c)) return;
     if (t === 'fog') { doFog(r, c); return; }
     if (t === 'hatch') {
         if (m.need === 2 && m.stage === 'piece') {          // первый люк из двух
@@ -3655,10 +3681,10 @@ function renderBoard() {
             const ptm = G.portals.find(x => x.r === r && x.c === c);
             if (ptm) html += `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
-            if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me))) html += '<div class="trap-mark">🪤</div>';
+            if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me || x.owner === 'n'))) html += '<div class="trap-mark">🪤</div>';
             {
                 const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
-                if (bn && jesterSees(bn.owner)) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
+                if (bn && (bn.owner === 'n' || jesterSees(bn.owner))) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
             }
             if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${Number.isFinite(vn.left) ? vn.left : '∞'}</i></div>`; }
             if (G.virus.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark virus-mark">☣️</div>';
@@ -3667,7 +3693,7 @@ function renderBoard() {
                 if (rt) {
                     // онлайн: чужие плитки красные. За одним экраном обычный цвет у того, кто поставил ритуал первым
                     const mine = NET.on ? rt.owner === NET.me : rt.owner === G.rituals[0].owner;
-                    html += `<div class="tile-mark ritual-mark${mine ? '' : ' enemy'}">🕯️</div>`;
+                    html += `<div class="tile-mark ritual-mark${rt.owner === 'n' ? ' neutral' : mine ? '' : ' enemy'}">🕯️</div>`;
                 }
             }
             const gm = G.gens.find(x => x.r === r && x.c === c);
@@ -3717,7 +3743,7 @@ function renderBoard() {
             }
 
             if (G.fogs && G.fogs.some(x => x.r === r && x.c === c)) html += '<div class="fog-mark"></div>';
-            G.fx.filter(x => x.r === r && x.c === c && x.type !== 'land' && (!x.only || !NET.on || x.only === NET.me))
+            G.fx.filter(x => x.r === r && x.c === c && x.type !== 'land' && (!x.only || !NET.on || x.only === NET.me) && !fxHidden(x, r, c))
                 .forEach(x => {
                     if (x.delay > 0) ANIMQ.push({ k: 'lateFx', r, c, type: x.type, delay: x.delay });      // эффект появится, когда долетит снаряд
                     else html += `<div class="fx fx-${x.type}"></div>`;
@@ -4908,6 +4934,7 @@ const EN = {
     " (две иллюзии столкнулись": " (two illusions collided",
     "две иллюзии столкнулись": "two illusions collided",
     "пешка угрожает двойнику": "a pawn threatens the double",
+    "⚪ Нейтральная": "⚪ Neutral",
     "Без героев (обычные шахматы, способностей нет)": "No heroes (plain chess, no abilities)",
     "Без героя": "No hero",
     "Размер доски": "Board size",
@@ -5943,6 +5970,15 @@ function doHatch(r, c, first) {
 const hatchExits = (r, c) => (G.hatches || []).filter(h => !(h.r === r && h.c === c) && !G.board[h.r][h.c]);
 
 // Фигура провалилась в люк from и вылезла из люка to
+// Эффекты появления, исчезновения и перемещения не выдают фигуру в тумане или невидимку (онлайн: их видит только владелец фигуры)
+const FOG_HIDDEN_FX = ['ghost', 'poof', 'hypno', 'revive', 'raise', 'trap', 'shield', 'cast'];
+function fxHidden(x, r, c) {
+    if (!NET.on || !FOG_HIDDEN_FX.includes(x.type)) return false;
+    const q = G.board[r][c];
+    if (q && q.invis && !q.ghost) return q.c !== NET.me;
+    return fogAt(r, c) && !(q && q.c === NET.me);
+}
+
 function hatchFall(from, to) {
     const p = G.board[from[0]][from[1]];
     if (!p) return;
@@ -5950,10 +5986,9 @@ function hatchFall(from, to) {
     G.board[to[0]][to[1]] = p;
     p.prev = [from[0], from[1]];
     G.fx.push({ r: to[0], c: to[1], type: 'ghost' });
-    queueAnim({ k: 'hatch', from: [from[0], from[1]], to: [to[0], to[1]] });
-    sfx('poof');
-    G.last = null;
     const hid = p.invis || fogAt(from[0], from[1]) || fogAt(to[0], to[1]);
+    if (!hid) { queueAnim({ k: 'hatch', from: [from[0], from[1]], to: [to[0], to[1]] }); sfx('poof'); }      // в тумане ни анимации, ни звука
+    G.last = null;
     if (hid) addLog('n', '🪵 Фигура проваливается в потайной люк и вылезает из другого');
     else addLog('n', `🪵 ${pieceSym(p)} проваливается в люк на ${sqName(from[0], from[1])} и вылезает на ${sqName(to[0], to[1])}`);
     syncFog();
@@ -5978,15 +6013,22 @@ function hatchTrigger(p, mv, cont) {
 }
 
 // Фокус-Покус: две фигуры в квадрате 5×5 вокруг первой
-const hocusPiece = (p, col) => !!p && !kSafe(p) && p.t !== 'j' && !p.pair && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col) && !(p.ghost && p.c === col);
+const hocusPiece = (p, col) => !!p && !kSafe(p) && p.t !== 'j' && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col);
 function hocusOk(a, b2, col) {
     const b = G.board, p = b[a[0]][a[1]], q = b[b2[0]][b2[1]];
     if (!hocusPiece(p, col) || !hocusPiece(q, col)) return false;
+    if (p.ghost || q.ghost) {      // иллюзия среди целей: она просто рассеется
+        const nb0 = cloneBoard(b);
+        [a, b2].forEach(([rr, cc]) => { if (nb0[rr][cc].ghost) nb0[rr][cc] = null; });
+        return safeAfter(nb0, col);
+    }
     const promoRow = c => (c === 'w' ? 0 : N - 1);
     if ((p.t === 'p' && b2[0] === promoRow(p.c)) || (q.t === 'p' && a[0] === promoRow(q.c))) return false;      // пешка не должна оказаться на горизонтали превращения (на своей первой можно)
     const nb = cloneBoard(b);
-    nb[a[0]][a[1]] = { ...q };
-    nb[b2[0]][b2[1]] = { ...p };
+    dropGhostOn(nb, a[0], a[1]); dropGhostOn(nb, b2[0], b2[1]);      // двойники этих фигур рассеются
+    const pa = { ...nb[a[0]][a[1]] }, pb = { ...nb[b2[0]][b2[1]] };
+    nb[a[0]][a[1]] = pb;
+    nb[b2[0]][b2[1]] = pa;
     return safeAfter(nb, col);
 }
 function hocusCells(col, a, first) {
@@ -6002,9 +6044,10 @@ function hocusCells(col, a, first) {
 // Ассистент: фигура может стать зайцем, если после этого ваш король в безопасности
 function assistantOk(r, c, col) {
     const b = G.board, p = b[r][c];
-    if (!p || kSafe(p) || p.t === 'j' || p.t === 'h' || p.pair || p.soul || p.sup || p.lie || hiddenFor(p, col) || (p.ghost && p.c === col)) return false;
+    if (!p || kSafe(p) || p.t === 'j' || p.t === 'h' || p.soul || p.sup || p.lie || hiddenFor(p, col)) return false;
     if (p.c !== col && !p.ghost && magicProof(b, r, c)) return false;
     const nb = cloneBoard(b);
+    dropGhostOn(nb, r, c);
     nb[r][c] = { ...nb[r][c], t: 'h', x: undefined };
     return safeAfter(nb, col);
 }
@@ -7129,11 +7172,11 @@ const TILE_PALETTE = [
     { id: 'gen-', k: 'gen', s: '-', ico: '－', ru: 'Генератор −', en: 'Generator −', own: true },
     { id: 'virus', k: 'virus', ico: '☣️', ru: 'Заражённая плитка', en: 'Infected tile', own: true },
     { id: 'vine', k: 'vine', ico: '🌿', ru: 'Лоза', en: 'Vine', own: true },
-    { id: 'ritual', k: 'ritual', ico: '🕯️', ru: 'Ритуал', en: 'Ritual', own: true },
+    { id: 'ritual', k: 'ritual', ico: '🕯️', ru: 'Ритуал', en: 'Ritual', own: true, neu: true },
     { id: 'hatch', k: 'hatch', ico: '🪵', ru: 'Потайной люк', en: 'Trapdoor', own: true },
-    { id: 'trap', k: 'trap', ico: '🪤', ru: 'Капкан', en: 'Snare', own: true },
-    { id: 'lure', k: 'lure', ico: '🎣', ru: 'Приманка', en: 'Lure', own: true },
-    { id: 'banana', k: 'banana', ico: '🍌', ru: 'Банан', en: 'Banana', own: true, dir: true },
+    { id: 'trap', k: 'trap', ico: '🪤', ru: 'Капкан', en: 'Snare', own: true, neu: true },
+    { id: 'lure', k: 'lure', ico: '🎣', ru: 'Приманка', en: 'Lure', own: true, neu: true },
+    { id: 'banana', k: 'banana', ico: '🍌', ru: 'Банан', en: 'Banana', own: true, neu: true, dir: true },
     { id: 'burn', k: 'burn', ico: '🔥', ru: 'Горящая клетка', en: 'Burning square', own: true },
     { id: 'hog', k: 'hog', ico: '⏳', ru: 'Ход сурка', en: 'Groundhog tile', own: true },
     { id: 'fog', k: 'fog', ico: '🌫️', ru: 'Дым (поверх всего)', en: 'Smoke (over anything)', own: true }
@@ -7163,7 +7206,7 @@ function normCfg(x) {
     const tiles = [], base = new Set(), fogs = new Set(), pairs = {};
     for (const t of (Array.isArray(x.tiles) ? x.tiles.slice(0, 200) : [])) {
         if (!t || !TILE_KINDS.includes(t.k) || !Number.isInteger(t.r) || !Number.isInteger(t.c) || t.r < 0 || t.r >= sz || t.c < 0 || t.c >= sz) return null;
-        const key = t.r + ',' + t.c, o = t.o === 'b' ? 'b' : 'w', nt = { k: t.k, r: t.r, c: t.c, o };
+        const key = t.r + ',' + t.c, o = t.o === 'b' ? 'b' : (t.o === 'n' && ['ritual', 'trap', 'lure', 'banana'].includes(t.k)) ? 'n' : 'w', nt = { k: t.k, r: t.r, c: t.c, o };
         if (t.k === 'fog') { if (fogs.has(key)) return null; fogs.add(key); tiles.push(nt); continue; }
         if (base.has(key)) return null;
         base.add(key);
@@ -7280,7 +7323,7 @@ function edTileHtml(t) {
         case 'gen': return `<div class="tile-mark gen-mark ${t.s === '+' ? 'plus' : 'minus'}">${t.s === '+' ? '＋' : '－'}</div><span class="ed-own ${t.o}"></span>`;
         case 'virus': return `<div class="tile-mark virus-mark">☣️</div><span class="ed-own ${t.o}"></span>`;
         case 'vine': return `<div class="tile-mark vine-mark">🌿<i class="vine-t">∞</i></div><span class="ed-own ${t.o}"></span>`;
-        case 'ritual': return `<div class="tile-mark ritual-mark${t.o === 'b' ? ' enemy' : ''}">🕯️</div><span class="ed-own ${t.o}"></span>`;
+        case 'ritual': return `<div class="tile-mark ritual-mark${t.o === 'b' ? ' enemy' : t.o === 'n' ? ' neutral' : ''}">🕯️</div><span class="ed-own ${t.o}"></span>`;
         case 'hatch': return `<div class="tile-mark hatch-mark"><span></span></div><span class="ed-own ${t.o}"></span>`;
         case 'trap': return `<div class="trap-mark">🪤</div><span class="ed-own ${t.o}"></span>`;
         case 'lure': return `<div class="lure-mark">🎣</div><span class="ed-own ${t.o}"></span>`;
@@ -7344,7 +7387,7 @@ function edRender() {
     tp += `<button class="ed-tile erase${ED.tool === '.' ? ' on' : ''}" data-tool="." title="${L('Ластик', 'Eraser')}"><span>✖</span><b>${L('Ластик', 'Eraser')}</b></button>`;
     $('#edTiles').innerHTML = tp;
     let op = '';
-    if (cur.own && !cur.pair) op += `<div class="ed-optrow"><span>${L('Владелец:', 'Owner:')}</span>` + ['w', 'b'].map(o => `<button class="${ED.opt.o === o ? 'on' : ''}" data-o="${o}">${o === 'w' ? L('⬜ Белые', '⬜ White') : L('⬛ Чёрные', '⬛ Black')}</button>`).join('') + '</div>';
+    if (cur.own && !cur.pair) op += `<div class="ed-optrow"><span>${L('Владелец:', 'Owner:')}</span>` + (cur.neu ? ['w', 'b', 'n'] : ['w', 'b']).map(o => `<button class="${(ED.opt.o === 'n' && !cur.neu ? 'w' : ED.opt.o) === o ? 'on' : ''}" data-o="${o}">${o === 'w' ? L('⬜ Белые', '⬜ White') : o === 'b' ? L('⬛ Чёрные', '⬛ Black') : L('⚪ Нейтральная', '⚪ Neutral')}</button>`).join('') + '</div>';
     if (cur.dir) op += `<div class="ed-optrow"><span>${L('Направление:', 'Direction:')}</span>` + Object.entries(TILE_DIRS).map(([k, a]) => `<button class="${ED.opt.d.join(',') === k ? 'on' : ''}" data-d="${k}">${a}</button>`).join('') + '</div>';
     if (cur.pair) {
         op += `<div class="ed-optrow"><span>${L('Пара:', 'Pair:')}</span>` + [1, 2, 3, 4].map(i => `<button class="${ED.opt.pair === i ? 'on' : ''}" data-pair="${i}">${i <= 2 ? '⬜' : '⬛'}${i <= 2 ? i : i - 2}</button>`).join('') + '</div>';
@@ -7418,8 +7461,8 @@ function edErase(r, c) {
 
 // Плитка с учётом отражения
 function edTileFor(item, r, c, fv, fh) {
-    const flip = o => (fv ? (o === 'w' ? 'b' : 'w') : o);
-    const t = { k: item.k, r, c, o: item.pair ? (ED.opt.pair <= 2 ? 'w' : 'b') : (item.own ? flip(ED.opt.o) : 'w') };
+    const flip = o => (fv ? (o === 'w' ? 'b' : o === 'b' ? 'w' : o) : o);
+    const t = { k: item.k, r, c, o: item.pair ? (ED.opt.pair <= 2 ? 'w' : 'b') : (item.own ? flip(ED.opt.o === 'n' && !item.neu ? 'w' : ED.opt.o) : 'w') };
     if (item.dir) { const [dr, dc] = ED.opt.d; t.d = [fv ? -dr : dr, fh ? -dc : dc]; }
     if (item.s) t.s = item.s;
     if (item.pair) t.id = ED.opt.pair;

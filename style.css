@@ -5226,3 +5226,17 @@ button {
     .ed-plainbox label {
         margin-left: 0;
     }
+
+/* Редактор доски поверх окна создания комнаты и окна партии на одном экране */
+#editor {
+    z-index: 60;
+}
+
+.ed-own.n {
+    background: #9aa3ad;
+    border-color: #333;
+}
+
+.ritual-mark.neutral {
+    filter: grayscale(1) brightness(1.15);
+}
