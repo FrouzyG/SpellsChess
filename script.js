@@ -61,8 +61,9 @@ const ANIM = { banner: true, board: true };
 try { const sa = JSON.parse(localStorage.getItem('sc_anim') || '{}'); if (sa.banner === false) ANIM.banner = false; if (sa.board === false) ANIM.board = false; } catch (e) { }
 const ANIMQ = [];        // очередь анимаций, которую запускает renderBoard после перерисовки доски
 const ANIM_HIDE = [];    // клетки, где настоящая фигура временно скрыта, пока по экрану летит её копия
-const queueAnim = a => { if (ANIM.board) ANIMQ.push(a); };
-const sfxLater = (k, sec) => { if (sec > 0) setTimeout(() => sfx(k), sec * 1000); else sfx(k); };
+let REPLAY_REC = null;    // пока партия для повтора проматывается в памяти, сюда пишутся звуки, анимации и баннеры каждого хода
+const queueAnim = a => { if (REPLAY_REC) { REPLAY_REC.push({ k: 'anim', a }); return; } if (ANIM.board) ANIMQ.push(a); };
+const sfxLater = (k, sec) => { if (REPLAY_REC) { REPLAY_REC.push({ k: 'sfx', key: k, delay: sec > 0 ? sec : 0 }); return; } if (sec > 0) setTimeout(() => sfx(k), sec * 1000); else sfx(k); };
 
 /* =====================================================================
    ДАННЫЕ
@@ -434,7 +435,7 @@ const SFX = {
     drumroll: () => { for (let i = 0; i < 16; i++) tone(i % 2 ? 150 : 120, 0.05, 'triangle', 0.05, i * 0.045); tone(90, 0.22, 'triangle', 0.07, 16 * 0.045); },
     harvest: () => { tone(250, 0.1, 'triangle', 0.05); tone(330, 0.12, 'triangle', 0.05, 0.07); tone(420, 0.16, 'triangle', 0.05, 0.14); }
 };
-const sfx = k => SFX[k] && SFX[k]();
+const sfx = k => { if (REPLAY_REC) { REPLAY_REC.push({ k: 'sfx', key: k, delay: 0 }); return; } return SFX[k] && SFX[k](); };
 
 /* =====================================================================
    ШАХМАТНАЯ ЛОГИКА
@@ -5273,11 +5274,13 @@ function takeSnap() {
         REW.undo = false;
     }
     if (G.log.length === REW.lastLen) return;
+    if (REPLAY_REC) REPLAY.pfx.push(...(G.fx || []).map(x => ({ ...x })));      // эффекты на клетках (взрыв, воскрешение, дым) для повтора
     try {
         const { log, ...rest } = G;
         const snap = structuredClone(rest);
         snap.log = log.slice();
         snap.sel = null; snap.moves = []; snap.mode = null; snap.fx = [];
+        if (REPLAY_REC) { snap.rfx = REPLAY.pfx; REPLAY.pfx = []; }
         REW.snaps.push(snap);
         REW.lastLen = G.log.length;
         if (REW.idx >= 0) REW.fresh = true;      // пока смотрели прошлое, в партии появился новый ход
@@ -5309,10 +5312,28 @@ updateEndBtn = viewWrap(updateEndBtn);
 function rewindTo(i) {
     const last = REW.snaps.length - 1;
     if (last < 0) return;
+    const cur = REW.idx < 0 ? last : REW.idx;
     i = Math.max(0, Math.min(last, i));
+    const ev = REPLAY.on && i === cur + 1 && REPLAY.ev[i] ? REPLAY.ev[i] : null;      // шаг на один ход вперёд: показываем звуки и анимации этого хода
+    let tomato = null;
+    if (ev) {
+        const tgt = i === last ? G : REW.snaps[i];
+        tgt.fx = (REW.snaps[i].rfx || []).map(x => ({ ...x }));
+        ev.forEach(e => {
+            if (e.k === 'anim') { if (ANIM.board) ANIMQ.push({ ...e.a }); }
+            else if (e.k === 'tomato' && ANIM.board) tomato = tomatoPrepare(e.col, e.en, e.key);
+        });
+    }
     REW.idx = i === last ? -1 : i;
     if (REW.idx < 0) REW.fresh = false;
     render();
+    if (ev) {
+        ev.forEach(e => {
+            if (e.k === 'sfx') { if (e.delay > 0) setTimeout(() => sfx(e.key), e.delay * 1000); else sfx(e.key); }
+            else if (e.k === 'banner') abilityBanner(e.key);
+        });
+        if (tomato) tomatoFly(tomato);
+    }
 }
 function rewindStep(d) {
     const last = REW.snaps.length - 1;
@@ -5988,6 +6009,7 @@ function revertHare(r, c, p) {
 // Полоска с названием способности: быстро влетает слева в центр доски, медленно плывёт, быстро улетает вправо
 const BANNER_SKIP = ['lie'];      // секретные способности не показываем, чтобы не выдавать их применение
 function abilityBanner(key) {
+    if (REPLAY_REC && !BANNER_SKIP.includes(key)) { REPLAY_REC.push({ k: 'banner', key }); return; }
     try {
         if (typeof document === 'undefined' || !ANIM.banner || BANNER_SKIP.includes(key)) return;
         const A = ABILITIES[key] || PASSIVES[key], board = $('#board');
@@ -6015,6 +6037,7 @@ function abilityBanner(key) {
 
 // Помидор: вылетает из панели Шута, падает на кнопку способности врага и размазывается по ней
 function tomatoPrepare(col, en, k) {
+    if (REPLAY_REC) return null;
     try {
         if (!ANIM.board) return null;
         const pan = document.querySelector('#panel-' + col);
@@ -6074,7 +6097,7 @@ function queueFlight(owner, f, kind, piece) {
     const dist = kp ? Math.hypot(kp[0] - f.r, kp[1] - f.c) : 6;
     const dur = clampN(0.35 + dist * 0.06, 0.45, 0.9) * (kind === 'arrow' ? 0.8 : 1);
     const pc = piece && !piece.invis && !piece.ghost ? { c: piece.c, t: piece.t } : null;
-    ANIMQ.push({ k: 'flight', kind, from: kp ? [kp[0], kp[1]] : null, to: [f.r, f.c], dur, piece: pc });
+    queueAnim({ k: 'flight', kind, from: kp ? [kp[0], kp[1]] : null, to: [f.r, f.c], dur, piece: pc });
     return dur;
 }
 
@@ -6120,6 +6143,7 @@ function pieceClone(realPiece, cellRect) {
 }
 
 function runAnimQueue() {
+    if (REPLAY_REC) { ANIMQ.length = 0; return; }
     if (!ANIMQ.length) return;
     const q = ANIMQ.splice(0);
     if (!ANIM.board && !q.every(a => a.k === 'lateFx')) return;
@@ -6305,6 +6329,7 @@ function doTomato(k) {
     if (!HEROES[G.hero[en]].abilities.includes(k)) return;
     if (G.disabled[en][k] > 0) return;      // в уже отключённую способность помидор не бросить
     const cdKey = G.mode.via || 'tomato';
+    if (REPLAY_REC) REPLAY_REC.push({ k: 'tomato', col, en, key: k });
     const flight = tomatoPrepare(col, en, k);      // откуда и куда лететь (до перерисовки панелей)
     G.disabled[en][k] = CONFIG.tomatoTurns;
     G.cd[col][cdKey] = cdOf(col, cdKey);
@@ -6704,7 +6729,7 @@ $('#setupLeave').classList.remove('hidden');      // кнопка «Выйти»
    ПОВТОР ПАРТИИ: берём записанные действия игроков и проигрываем их заново на том же «зерне».
    Игра полностью детерминирована (так же работает онлайн), поэтому получается точная копия партии.
    ===================================================================== */
-const REPLAY = { on: false, timer: null };
+const REPLAY = { on: false, timer: null, ev: [], pfx: [] };      // ev[i]: звуки, анимации и баннеры хода, после которого получился снимок i
 
 async function watchReplay(gid, title) {
     if (NET.on) { uiAlert('Сначала выйдите из онлайн-партии.'); return; }
@@ -6726,18 +6751,23 @@ function startReplay(d, title) {
     CUSTOM = null;
     startGame();
     CLOCK.on = false;
-    const soundWas = CONFIG.sound, animWas = { ...ANIM };
-    CONFIG.sound = false;           // партия проматывается мгновенно, звуки на этом этапе не нужны
-    ANIM.board = false; ANIM.banner = false;      // и анимации тоже: иначе все взрывы и полёты всей партии сыграют разом в начале
+    const animWas = { ...ANIM };
+    ANIM.board = true; ANIM.banner = true;      // для записи нужны настоящие эффекты; проигрываться они будут по одному, при перемотке вперёд
+    REPLAY.ev = []; REPLAY.pfx = [];
+    REPLAY_REC = [];      // пока идёт промотка, звуки и анимации не играются, а записываются по ходам
+    let carry = [];
     try {
         for (const m of d.log) {
             if (!G || G.over) break;
+            const before = REW.snaps.length;
             try { applyInput(m); } catch (e) { break; }
+            carry = carry.concat(REPLAY_REC); REPLAY_REC = [];
+            if (REW.snaps.length > before && carry.length) { REPLAY.ev[before] = carry; carry = []; }
         }
     } finally {
-        CONFIG.sound = soundWas;
+        REPLAY_REC = null;
         Object.assign(ANIM, animWas);
-        ANIMQ.length = 0; ANIM_HIDE.length = 0;      // накопленные при промотке анимации выбрасываем
+        ANIMQ.length = 0; ANIM_HIDE.length = 0;
         if (G) G.fx = [];
     }
     $('#app').classList.add('replaying');
@@ -6750,13 +6780,17 @@ function startReplay(d, title) {
 
 function replayAuto() {
     const btn = $('#rwPlay');
-    if (REPLAY.timer) { clearInterval(REPLAY.timer); REPLAY.timer = null; btn.textContent = '▶▶'; return; }
+    if (REPLAY.timer) { clearTimeout(REPLAY.timer); REPLAY.timer = null; btn.textContent = '▶▶'; return; }
     btn.textContent = '⏸';
-    REPLAY.timer = setInterval(() => {
+    const tick = () => {
         const last = REW.snaps.length - 1, cur = REW.idx < 0 ? last : REW.idx;
         if (cur >= last) { replayAuto(); return; }
         rewindTo(cur + 1);
-    }, 800);
+        const ev = REPLAY.ev[cur + 1] || [];      // на ходах со способностями и полётами ждём подольше, чтобы анимация успела доиграть
+        const wait = ev.some(e => e.k === 'banner') ? 2000 : ev.some(e => e.k === 'anim' || e.k === 'tomato') ? 1300 : 800;
+        REPLAY.timer = setTimeout(tick, wait);
+    };
+    REPLAY.timer = setTimeout(tick, 0);
 }
 $('#rwPlay').addEventListener('click', replayAuto);
 $('#rpExit').addEventListener('click', () => location.reload());
