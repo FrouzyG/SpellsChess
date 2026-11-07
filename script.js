@@ -13,7 +13,7 @@ const CONFIG = {
     cooldown: {
         resurrect: 11, shield: 5, rescue: 9,         // Паладин
         fireball: 7, freeze: 5, copy: 15,            // Маг
-        illusion: 3, hypnosis: 8, confusion: 7,      // Экстрасенс
+        illusion: 6, hypnosis: 8, confusion: 7,      // Экстрасенс
         raise: 8, frankenstein: 3, apocalypse: 8,    // Некромант
         trap: 4, arrow: 4, lure: 7,                  // Охотник
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
@@ -271,7 +271,7 @@ const PASSIVES = {
     },
     doubleVision: {
         icon: '👀', name: 'Двоится в глазах',
-        desc: 'Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит с королём как обычная.'
+        desc: 'Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит с королём как обычная, но в партии с матом рассеивается при любой угрозе ей или королю.'
     },
     harvest: {
         icon: '🌾', name: 'Жатва',
@@ -1180,7 +1180,7 @@ function findOriginal(pair) {
 
 // Вражеская пешка упирается в клетку (или может прыгнуть на неё двойным ходом)
 function pawnFrontThreat(b, r, c, enemy) {
-    const d = enemy === 'w' ? -1 : 1, start = enemy === 'w' ? 6 : 1;
+    const d = enemy === 'w' ? -1 : 1, start = enemy === 'w' ? N - 2 : 1;
     const p1 = inb(r - d, c) ? b[r - d][c] : null;
     if (p1 && p1.t === 'p' && p1.c === enemy && !p1.frozen && !p1.ghost) return true;
     if (inb(r - 2 * d, c)) {
@@ -1330,6 +1330,11 @@ function ghostReason(b, gr, gc, or, oc, col) {
     };
     if (pawnHits(gr, gc)) return 'пешка угрожает двойнику';
     if (pawnHits(or, oc)) return 'пешка угрожает оригиналу';
+    const og0 = b[or][oc];
+    // Иллюзия короля (Двойное зрение) в партии с матом: если королю нет шаха, значит, это копия, поэтому она рассеивается при любой угрозе ей или королю
+    if (og0 && og0.t === 'k' && !allMode(col)) {
+        if (isAttacked(b, gr, gc, enemy, true) || isAttacked(b, or, oc, enemy, true) || pawnFrontThreat(b, gr, gc, enemy) || kingThreat(b, gr, gc, col) || kingThreat(b, or, oc, col)) return 'ей что-то угрожало';
+    }
     if (!allMode(enemy)) {
         const k = findKing(b, enemy), og = b[or][oc];
         if (k && og && !(og.frozen > 0) && !(og.snared > 0) && attackSquares(b, or, oc).some(([x, y]) => x === k[0] && y === k[1])) return 'оригинал даёт шах';
@@ -5053,7 +5058,7 @@ const EN = {
     "Отключает способность врага на ": "Disables an enemy ability for ",
     " ходов (перезарядка идёт). Ход не тратится.": " turns (its cooldown keeps running). Costs no turn.",
     "Король прозрачен для ваших фигур и может «вселиться» в цепочку ваших фигур (каждая в 3×3 от предыдущей), появившись рядом с любой из них.": "The king is transparent to your pieces and can \"possess\" a chain of your pieces (each within 3×3 of the previous one), appearing next to any of them.",
-    "Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит с королём как обычная.": "A king that escapes check leaves an illusion on another square it could have gone to. Afterwards it moves with the king like a normal illusion.",
+    "Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит с королём как обычная, но в партии с матом рассеивается при любой угрозе ей или королю.": "A king that escapes check leaves an illusion on another square it could have gone to. Afterwards it moves with the king like a normal illusion, but in a checkmate game it fades at any threat to it or to the king.",
     "В начале партии тайно выберите вражеского слона или коня. После ": "At the start, secretly choose an enemy bishop or knight. After the enemy's ",
     "-го хода врага можно потратить ход и дважды нажать на неё: она навсегда перейдёт к вам.": "th turn you can spend a turn and click it twice: it joins you for good.",
     "Найти игрока по нику": "Find a player by nick",
