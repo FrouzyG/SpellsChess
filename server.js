@@ -13,7 +13,7 @@ const rooms = {};   // код -> комната (см. makeRoom)
 const SUPA_URL = process.env.SUPABASE_URL || 'https://fuqopbjpxeugdvnlxanb.supabase.co';
 const SUPA_PUB = process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_xVvPSDswx_P2D-kguqgznQ_5cjBAcMN';
 const SUPA_SECRET = process.env.SUPABASE_SECRET_KEY || '';   // секретный ключ: ТОЛЬКО в переменных окружения Render, не в коде
-const GRACE = 30000; // сколько секунд ждём, пока оборвавшийся игрок переподключится
+const GRACE = 60000; // сколько миллисекунд ждём, пока оборвавшийся игрок переподключится (потом оставшемуся засчитывается победа)
 let waitList = [];  // комнаты, где кто-то ждёт соперника в «Быстрой игре»: { code, tc } (tc: 'any', 'inf' или число минут)
 const unwait = code => { waitList = waitList.filter(w => w.code !== code); };
 
@@ -28,7 +28,7 @@ const makeRoom = () => ({ quickMode: null, incv: 0, chatLog: [], lastReport: { h
 const deliver = (r, to, data) => {
     const id = ++r.seq[to];
     r.log[to].push({ id, data });
-    if (r.log[to].length > 400) r.log[to].shift();
+    if (r.log[to].length > 2000) r.log[to].shift();
     if (r[to]) r[to].write('id: ' + id + '\ndata: ' + data + '\n\n');
 };
 
@@ -263,10 +263,18 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // Состояние идущей партии: нужно, чтобы игрок, у которого приложение закрылось или перезагрузилось, мог вернуться в партию
+    if (url.pathname === '/state') {
+        const r = rooms[room], sid = (url.searchParams.get('sid') || '').slice(0, 24);
+        if (!r || (role !== 'host' && role !== 'guest') || !r.gid || !r.startMsg || (r.sid[role] && r.sid[role] !== sid)) { sendJson(res, 404, { error: 'gone' }); return; }
+        sendJson(res, 200, { start: r.startMsg, inputs: r.inlog, seq: r.seq[role], result: r.rep.host || r.rep.guest || null, reason: r.meta ? r.meta.reason : null });
+        return;
+    }
+
     if (url.pathname === '/events') {
         if (role !== 'host' && role !== 'guest') { res.writeHead(400); res.end(); return; }
         const sid = (url.searchParams.get('sid') || '').slice(0, 24);
-        const lastId = parseInt(req.headers['last-event-id'] || '0', 10) || 0;
+        const lastId = parseInt(req.headers['last-event-id'] || url.searchParams.get('last') || '0', 10) || 0;
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         res.write('retry: 1500\n: ok\n\n');
         let r = rooms[room];
@@ -295,11 +303,20 @@ const server = http.createServer((req, res) => {
             r[role] = null;
             r.timer[role] = setTimeout(() => {  // даём время переподключиться
                 if (r[role] || rooms[room] !== r) return;
-                r.sid[role] = null; r.user[role] = null; r.peer[role] = null;
                 const o = other(role);
+                if (r.gid && r.recorded !== r.gid && !r.rep.host && !r.rep.guest && r.opened) {      // партия шла и итога нет: победа достаётся тому, кто остался
+                    const hc = r.hostColor === 'b' ? 'b' : 'w';
+                    r.rep[o] = o === 'host' ? hc : (hc === 'w' ? 'b' : 'w');
+                    r.meta = { reason: 'Отключение', moves: 0 };
+                    recordGame(r);
+                }
+                r.sid[role] = null; r.user[role] = null; r.peer[role] = null;
                 if (r[o]) push(r[o], { t: '__close' });
-                if (role === 'host' || (!r.host && !r.guest)) { delete rooms[room]; unwait(room); }
-                else r.opened = false;
+                if (role === 'host' || (!r.host && !r.guest)) {
+                    unwait(room);
+                    if (r.gid) setTimeout(() => { if (rooms[room] === r && !r.host && !r.guest) delete rooms[room]; }, 300000);      // вернувшийся игрок ещё сможет увидеть итог
+                    else delete rooms[room];
+                } else r.opened = false;
             }, GRACE);
         });
         return;
@@ -319,7 +336,7 @@ const server = http.createServer((req, res) => {
                 if (msg && msg.t === 'auth') handleAuth(room, r, role, msg.token);
                 else if (msg && msg.t === 'result') handleResult(r, role, msg.res, msg);
                 else {
-                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; r.rated = !!r.quickMode; r.incv = Math.max(0, Math.min(60, msg.inc | 0)); r.inlog = msg.custom ? null : []; r.hostColor = msg.hostColor === 'b' ? 'b' : 'w'; r.seed = msg.seed | 0; r.tcv = msg.tc | 0; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
+                    if (msg && msg.t === 'start' && role === 'host') { r.gid = room + '-' + msg.seed; r.rep = { host: null, guest: null }; r.meta = null; r.rated = !!r.quickMode; r.incv = Math.max(0, Math.min(60, msg.inc | 0)); r.inlog = msg.custom ? (JSON.stringify(msg.custom).length < 30000 ? [{ t: 'cfg', c: msg.custom }] : null) : []; r.startMsg = msg; r.hostColor = msg.hostColor === 'b' ? 'b' : 'w'; r.seed = msg.seed | 0; r.tcv = msg.tc | 0; const hh = msg.heroes || {}; r.heroes = { w: String(hh.w || '').slice(0, 20), b: String(hh.b || '').slice(0, 20) }; clearTimeout(r.repTimer); }
                     if (msg && msg.t === 'in' && r.inlog) {          // все действия игроков по порядку: из них собирается повтор партии
                         if (r.inlog.length >= 5000 || !msg.m || JSON.stringify(msg.m).length > 300) r.inlog = null;
                         else r.inlog.push(msg.m);

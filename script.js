@@ -470,7 +470,6 @@ function initialBoard(fischer) {
         b[1][c] = mk('p', 'b');
         b[6][c] = mk('p', 'w');
         b[7][c] = mk(back[c], 'w');
-        if (fischer) { if (back[c] === 'k' || back[c] === 'r') { b[0][c].moved = true; b[7][c].moved = true; } }      // рокировки в этом режиме нет
     }
     return b;
 }
@@ -490,7 +489,7 @@ const supOpen = (b, t) => !!t && !!t.sup && !t.ghost && !!t.prev && !b[t.prev[0]
 const scaredDirs = tp => ((tp === 'r' || tp === 'j') ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
 
 // Распиливание доски (Фокусник): левый и правый край доски соединены для его фигур
-const wrapsOf = p => !!p && !kSafe(p) && !!G && !!G.hero && G.hero[p.c] === 'magician' && !(G.cd && G.cd[p.c] && G.cd[p.c].sawing > 0);
+const wrapsOf = p => { const o = p && (p.orig || p.c); return !!p && !kSafe(p) && !!G && !!G.hero && G.hero[o] === 'magician' && !(G.cd && G.cd[o] && G.cd[o].sawing > 0); };      // фигура Фокусника, даже взятая под контроль врагом (гипноз, замешательство), проходит через край, и перезарядка уходит Фокуснику
 // Ход прошёл сквозь левый/правый край доски? (клетки пути соседние, поэтому скачок по столбцам больше 2 может быть только через край)
 function crossedEdge(mv) {
     const pts = [[mv.fr, mv.fc], ...(mv.path || []), [mv.tr, mv.tc]];
@@ -785,19 +784,14 @@ function pseudoMoves(b, r, c) {
             if (p.t === 'k' && !ghost && G.hero[p.c] === 'phantom') {
                 possessCells(b, r, c).forEach(([tr, tc]) => add(tr, tc, { path: [], possess: true }));
             }
-            // Рокировка
-            if (!p.moved && !ghost && !isAttacked(b, r, c, other(p.c))) {
-                [
-                    { rc: 7, between: [5, 6], path: [5, 6], kt: 6, rt: 5, dest: [5, 6] },
-                    { rc: 0, between: [1, 2, 3], path: [3, 2], kt: 2, rt: 3, dest: [2, 3] }
-                ].forEach(o => {
-                    const rk = b[r][o.rc];
-                    if (rk && rk.t === 'r' && rk.c === p.c && !rk.moved && !rk.frozen && !rk.snared && !rk.ghost &&
-                        o.between.every(x => (!b[r][x] || (!o.dest.includes(x) && b[r][x].c === p.c && isPhase(b[r][x]))) && !burnAt(r, x) && !vineAt(r, x) && !wallAt(r, x)) &&
-                        o.path.every(x => !isAttacked(b, r, x, other(p.c)))) {
-                        add(r, o.kt, { castle: true, rc: o.rc, rt: o.rt });
-                    }
-                });
+            // Рокировка по правилам Chess960 (в обычных шахматах те же правила: король на g/c, ладья на f/d)
+            if (!p.moved && !ghost && N === 8 && !isAttacked(b, r, c, other(p.c))) {
+                for (let rc = 0; rc < 8; rc++) {
+                    const rk = b[r][rc];
+                    if (rc === c || !rk || rk.t !== 'r' || rk.c !== p.c || rk.moved || rk.frozen || rk.snared || rk.ghost) continue;
+                    const info = castleInfo(b, r, c, rc);
+                    if (info) add(r, info.kt, { castle: true, rc, rt: info.rt, click: [r, rc] });
+                }
             }
         } else {
             const dirs = tp === 'b' ? DIAG : tp === 'r' ? ORTH : [...DIAG, ...ORTH];
@@ -886,6 +880,50 @@ function pickGuardian(board, vr, vc, victim, exclude, unsafe) {
     return cands[h % cands.length];
 }
 
+/* ---------- Рокировка (Chess960) ---------- */
+// Король встаёт на g (в сторону ладьи справа) или c (ладьи слева), ладья на f или d. Так же и в обычных шахматах.
+// Проверяет всё, кроме флагов «ходил» и шаха на самом короле: свободный путь короля и ладьи и неатакованный путь короля.
+function castleInfo(b, r, kc, rc) {
+    const king = b[r][kc], rook = b[r][rc];
+    if (!king || !rook) return null;
+    const enemy = other(king.c);
+    const kt = rc > kc ? 6 : 2, rt = rc > kc ? 5 : 3;
+    // Свободные поля: между началом и концом короля и между началом и концом ладьи (включительно).
+    // Король и ладья, которые рокируются, друг другу не мешают; свои фигуры-призраки не мешают, кроме как на конечных полях
+    const clear = (from, to) => {
+        for (let x = Math.min(from, to); x <= Math.max(from, to); x++) {
+            if (x === kc || x === rc) continue;
+            const q = b[r][x];
+            if (q && !((x !== kt && x !== rt) && q.c === king.c && isPhase(q))) return false;
+            if (burnAt(r, x) || vineAt(r, x) || wallAt(r, x)) return false;
+        }
+        return true;
+    };
+    if (!clear(kc, kt) || !clear(rc, rt)) return null;
+    // Поля пути короля (включая начальное и конечное) не должны атаковаться; король и ладья на время проверки убираются с доски
+    const nb = cloneBoard(b);
+    nb[r][kc] = null; nb[r][rc] = null;
+    for (let x = Math.min(kc, kt); x <= Math.max(kc, kt); x++) if (isAttacked(nb, r, x, enemy)) return null;
+    return { kt, rt };
+}
+
+// castle960(board, fromKing, fromRook): возвращает новую доску после рокировки или null, если рокироваться нельзя
+function castle960(board, fromKing, fromRook) {
+    const [kr, kc] = fromKing, [rr, rc] = fromRook;
+    const king = board[kr] && board[kr][kc], rook = board[rr] && board[rr][rc];
+    if (!king || !rook || kr !== rr || king.t !== 'k' || rook.t !== 'r' || king.c !== rook.c) return null;
+    if (king.moved || rook.moved) return null;                      // король и ладья ещё не ходили
+    if (isAttacked(board, kr, kc, other(king.c))) return null;     // король не под шахом
+    const info = castleInfo(board, kr, kc, rc);
+    if (!info) return null;
+    const nb = cloneBoard(board);
+    const k2 = nb[kr][kc], r2 = nb[kr][rc];
+    nb[kr][kc] = null; nb[kr][rc] = null;                           // старые поля очищаются (если новые их не занимают)
+    nb[kr][info.kt] = k2; nb[kr][info.rt] = r2;
+    k2.moved = true; r2.moved = true;                               // права на рокировку у этой пары сброшены
+    return nb;
+}
+
 function applyMove(board, mv, promo) {
     const p = board[mv.fr][mv.fc];
     const res = { dead: [], thorn: false, burned: false, vanished: [], supBack: [] };
@@ -894,6 +932,15 @@ function applyMove(board, mv, promo) {
         const g = board[r][c];
         if (g && g.ghost && g !== p && (g.c === p.c || !p.ghost)) { res.vanished.push({ r, c, g }); board[r][c] = null; }
     });
+    if (mv.castle) {      // рокировка: король и ладья переставляются вместе (поля могут пересекаться, как в Chess960)
+        const rk = board[mv.fr][mv.rc];
+        board[mv.fr][mv.fc] = null; board[mv.fr][mv.rc] = null;
+        board[mv.tr][mv.tc] = p; board[mv.fr][mv.rt] = rk;
+        p.moved = true; rk.moved = true;
+        p.prev = [mv.fr, mv.fc]; rk.prev = [mv.fr, mv.rc];
+        delete p.scared; delete p.scaredT;
+        return res;
+    }
     // фигуры в суперпозиции на пути или на конечной клетке: не мешают и не гибнут, возвращаются назад
     const supHits = [];
     if (!p.ghost) moveCells(mv).forEach(([r, c]) => {
@@ -941,13 +988,6 @@ function applyMove(board, mv, promo) {
     if (p.sup) delete p.sup;              // суперпозиция спадает после хода самой фигуры
     p.prev = [mv.fr, mv.fc];
     if (victim) res.dead.push(victim);
-    if (mv.castle) {
-        const rk = board[mv.fr][mv.rc];
-        board[mv.fr][mv.rc] = null;
-        board[mv.fr][mv.rt] = rk;
-        rk.moved = true;
-        rk.prev = [mv.fr, mv.rc];
-    }
     // Гибель на горящей или острой клетке: рядом самоотверженный ангел-хранитель меняется с ней местами и гибнет вместо неё
     const tileDeath = isSharp => {
         const gd = pickGuardian(board, mv.tr, mv.tc, p, p,
@@ -1462,6 +1502,7 @@ function confusionOptions(r, c, first) {
     for (const m1 of quiet(b, r, c)) {
         const nb = cloneBoard(b);
         if (applyMove(nb, m1, 'q').burned) continue;
+        if (!safeAfter(cloneBoard(nb), col)) continue;      // фигура на самом деле встанет на эту клетку: ваш король не должен оказаться под боем (проверка на копии, плитки сдвигают фигуры)
         const seconds = quiet(nb, m1.tr, m1.tc).filter(m2 => {
             const nb2 = cloneBoard(nb);
             if (applyMove(nb2, m2, 'q').burned) return false;
@@ -2031,7 +2072,7 @@ function startGame() {
         if (G.hero[c] === 'jester') G.pretense[c] = 'pending';      // Притворство: выбор предателя перед первым ходом Шута
     });
     addLog('n', cfg && cfg.plain ? 'Партия началась: обычные шахматы, без героев' : `Партия началась: Белые — ${HEROES[G.hero.w].name}, Чёрные — ${HEROES[G.hero.b].name}`);
-    if (fischer) addLog('n', '🎲 Шахматы Фишера: случайная расстановка фигур, рокировки нет');
+    if (fischer) addLog('n', '🎲 Шахматы Фишера: случайная расстановка фигур, рокировка по правилам Chess960');
     if (cfg) {
         const need = ['w', 'b'].filter(x => cfg.win[x] === 'all').map(x => `над ${x === 'w' ? 'Белыми' : 'Чёрными'} нужно срубить все их фигуры`);
         addLog('n', '🧩 Своя доска' + (cfg.name ? ` «${cfg.name}»` : '') + (need.length ? ': победа ' + need.join(', ') : ''));
@@ -2476,7 +2517,7 @@ function executeMove(mv, promo, ctx) {
     }
 
     const res = applyMove(b, mv, promo);
-    if (sawed && G.cd[col]) G.cd[col].sawing = CONFIG.sawingCooldown + 1;      // +1: уменьшится в начале следующего хода, а блок должен держаться все 3 следующих хода
+    if (sawed) { const so = p.orig || p.c; if (G.cd[so]) G.cd[so].sawing = CONFIG.sawingCooldown + 1; }      // +1: уменьшится в начале следующего хода, а блок должен держаться все 3 следующих хода
     if (ctx.restoreC) p.c = ctx.restoreC;                 // Апокалипсис: чужой зомби возвращается к своему цвету
     const own = res.dead.find(d => d !== p && d.c === col && !d.ghost);   // срубленная своя фигура
     const cap = res.dead.some(d => d !== p && d.c !== col);
@@ -2916,72 +2957,94 @@ function doRescue(from, to) {
     finishAbility('rescue', `🪂 Спасение: ${sym} ${sqName(from[0], from[1])} → ${sqName(to[0], to[1])}`);
 }
 
-// Замешательство: вражеская фигура делает два настоящих хода подряд. После первого хода на её клетке срабатывают ловушки:
-// капкан (второго хода нет) и «Ход сурка» (фигура возвращается, откуда пришла, и второй ход выбирается заново уже оттуда).
-// Остальные плитки действуют, как обычно, в конце хода, на клетке, где фигура остановилась.
-function confusionSeconds(from, col) {
+// Замешательство: вражеская фигура делает два настоящих хода подряд, второй выбирается уже после первого.
+// Первый ход настоящий: фигура стоит на новой клетке, и на ней сразу срабатывают ловушки и плитки. Капкан (или гибель) заканчивает способность,
+// «Ход сурка» возвращает фигуру назад (второй ход делается уже оттуда), банан сдвигает её, а на потайном люке вы сами выбираете, откуда она вылезет.
+const pieceObjAt = p => { for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (G.board[r][c] === p) return [r, c]; return null; };
+
+function confusionSeconds(pos, col) {
     const b = G.board;
-    return pseudoMoves(b, from[0], from[1])
+    return pseudoMoves(b, pos[0], pos[1])
         .filter(m => !m.promo && !m.castle && !m.ep && !b[m.tr][m.tc])
         .filter(m2 => { const nb2 = cloneBoard(b); if (applyMove(nb2, m2, 'q').burned) return false; return safeAfter(nb2, col); });
 }
 
-function confusionLanding(p, r, c) {
+// Один настоящий ход фигуры без передачи очереди
+function confusionMove(p, mv, step) {
+    const sawed = wrapsOf(p) && !mv.castle && crossedEdge(mv);
+    const res = applyMove(G.board, mv, 'q');
+    if (sawed) { const so = p.orig || p.c; if (G.cd[so]) G.cd[so].sawing = CONFIG.sawingCooldown + 1; }
+    res.dead.forEach(d => { if (!d.ghost) toGrave(d); });
+    res.vanished.forEach(({ r, c, g }) => {
+        const o = findOriginal(g.pair);
+        if (o) delete o.p.pair;
+        G.fx.push({ r, c, type: 'poof' });
+        sfx('poof');
+        addLog('n', `🎭 Иллюзия на ${sqName(r, c)} рассеялась (${g.c === G.turn ? 'своя фигура' : 'сквозь неё прошла фигура'})`);
+    });
+    if (!res.burned) { G.fx.push({ r: mv.tr, c: mv.tc, type: step === 1 ? 'land' : 'hypno' }); sfx(step === 1 ? 'move' : 'hypno'); }
+    G.last = { fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc };
+    G.ep = null;
+    return res;
+}
+
+// Ловушки и плитки на клетке, где фигура остановилась после первого хода: 'dead', 'snared' или null
+function confusionLanding(p) {
     const b = G.board;
-    if (p.ghost || kSafe(p)) return null;
-    if (G.traps.some(t => t.r === r && t.c === c)) {
-        sweepTraps();                                  // капкан срабатывает сразу: фигура застревает
-        if (p.snared > 0) return 'snared';
-    }
-    const h = G.hogs.find(x => x.r === r && x.c === c);
-    const pv = p.prev;
-    if (h && !(h.exempt && p.uid === h.exempt) && pv && !b[pv[0]][pv[1]]) {
-        b[pv[0]][pv[1]] = p;
-        b[r][c] = null;
-        if (CONFIG.hogOnce) G.hogs = G.hogs.filter(x => x !== h);
-        G.fx.push({ r, c, type: 'poof' }, { r: pv[0], c: pv[1], type: 'ghost' });
-        addLog('n', p.invis ? '⏳ Ход сурка: невидимая фигура вернулась назад' : `⏳ Ход сурка: ${pieceSym(p)} возвращается с ${sqName(r, c)} на ${sqName(pv[0], pv[1])}`);
-        return 'back';
-    }
-    return null;
-}
-
-function doConfusion(from, m1, m2) {
-    const b = G.board, p = b[from[0]][from[1]], col = G.turn;
-    const note = p.t === 'p' ? '' : pieceSym(p);
-    const fs = sqName(from[0], from[1]), s1 = sqName(m1.tr, m1.tc);
-    applyMove(b, m1, 'q');                             // первый ход: настоящее перемещение фигуры
-    G.fx.push({ r: m1.tr, c: m1.tc, type: 'land' });
-    sfx('move');
-    const out = confusionLanding(p, m1.tr, m1.tc);
-    G.last = { fr: from[0], fc: from[1], tr: m1.tr, tc: m1.tc };
-    if (out === 'snared') {
-        finishAbility('confusion', `💫 Замешательство: ${note}${fs} → ${s1}, фигура в капкане, второго хода нет`);
-        return;
-    }
-    if (out === 'back') {
-        const seconds = confusionSeconds(from, col);
-        if (!seconds.length) {
-            finishAbility('confusion', `💫 Замешательство: ${note}${fs} → ${s1}, возврат на ${fs}, второго хода нет`);
-            return;
+    const pos = pieceObjAt(p);
+    if (!pos) return 'dead';
+    if (!p.ghost && !kSafe(p)) {
+        const h = G.hogs.find(x => x.r === pos[0] && x.c === pos[1]), pv = p.prev;
+        if (h && !(h.exempt && p.uid === h.exempt) && pv && !b[pv[0]][pv[1]]) {      // Ход сурка
+            b[pv[0]][pv[1]] = p;
+            b[pos[0]][pos[1]] = null;
+            if (CONFIG.hogOnce) G.hogs = G.hogs.filter(x => x !== h);
+            G.fx.push({ r: pos[0], c: pos[1], type: 'poof' }, { r: pv[0], c: pv[1], type: 'ghost' });
+            addLog('n', p.invis ? '⏳ Ход сурка: невидимая фигура вернулась назад' : `⏳ Ход сурка: ${pieceSym(p)} возвращается с ${sqName(pos[0], pos[1])} на ${sqName(pv[0], pv[1])}`);
         }
-        Object.assign(G.mode, { stage: 'C', locked: true, from, first: m1, note, seconds, cells: seconds.map(x => [x.tr, x.tc]) });
-        G.sel = { r: from[0], c: from[1] };
-        render();
-        return;
     }
-    confusionSecond(from, m1, m2, note, false);
+    sweepBananas(); sweepBurn(); sweepTraps(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true); sweepGens();      // тот же порядок, что в конце обычного хода
+    if (!pieceObjAt(p)) return 'dead';
+    return p.snared > 0 ? 'snared' : null;
 }
 
-function confusionSecond(from, m1, m2, note, back) {
-    applyMove(G.board, m2, 'q');
-    G.fx.push({ r: m2.tr, c: m2.tc, type: 'hypno' });
-    sfx('hypno');
-    G.last = { fr: from[0], fc: from[1], tr: m2.tr, tc: m2.tc };
-    const fs = sqName(from[0], from[1]);
-    finishAbility('confusion',
-        back ? `💫 Замешательство: ${note}${fs} → ${sqName(m1.tr, m1.tc)}, возврат на ${fs}, затем → ${sqName(m2.tr, m2.tc)}`
-            : `💫 Замешательство: ${note}${fs} → ${sqName(m1.tr, m1.tc)} → ${sqName(m2.tr, m2.tc)}`);
+function endConfusion(via, text) {
+    G.mode = { type: 'confusion', via };
+    finishAbility('confusion', text);
+}
+
+function confusionStep1(from, m1) {
+    const b = G.board, p = b[from[0]][from[1]], col = G.turn;
+    const via = G.mode && G.mode.via;
+    const note = p.t === 'p' ? '' : pieceSym(p), fs = sqName(from[0], from[1]);
+    G.sel = null; G.moves = [];
+    confusionMove(p, m1, 1);
+    addLog(col, `💫 Замешательство, первый ход: ${note}${fs} → ${sqName(m1.tr, m1.tc)}`);
+    const out = confusionLanding(p);
+    const goOn = () => {
+        const pos = pieceObjAt(p);
+        if (!pos) { endConfusion(via, '💫 Замешательство: фигура погибла, второго хода нет'); return; }
+        if (p.snared > 0) { endConfusion(via, `💫 Замешательство: ${note}${sqName(pos[0], pos[1])} в капкане, второго хода нет`); return; }
+        const seconds = confusionSeconds(pos, col);
+        if (!seconds.length) { endConfusion(via, `💫 Замешательство: у ${note}${sqName(pos[0], pos[1])} нет второго хода`); return; }
+        G.mode = { type: 'confusion', via, stage: 'C', locked: true, from: pos, note, seconds, cells: seconds.map(x => [x.tr, x.tc]) };
+        G.sel = { r: pos[0], c: pos[1] };
+        render();
+    };
+    if (out) { goOn(); return; }
+    const pos = pieceObjAt(p);
+    if (hatchTrigger(p, { tr: pos[0], tc: pos[1] }, goOn)) return;      // вы выбираете, из какого люка вылезет фигура
+    goOn();
+}
+
+function confusionStep2(m, m2) {
+    const b = G.board, from = m.from, p = b[from[0]][from[1]], via = m.via, note = m.note;
+    G.sel = null; G.moves = [];
+    const res = confusionMove(p, m2, 2);
+    const fin = () => endConfusion(via, `💫 Замешательство, второй ход: ${note}${sqName(from[0], from[1])} → ${sqName(m2.tr, m2.tc)}`);
+    if (res.burned || !pieceObjAt(p)) { fin(); return; }
+    if (hatchTrigger(p, m2, fin)) return;
+    fin();
 }
 
 function doConveyor(at, dir) {
@@ -3319,16 +3382,12 @@ function onModeCell(r, c) {
             m.cells = m.opts.map(o => [o.m1.tr, o.m1.tc]);
             G.sel = { r, c };
         } else if (m.stage === 'A') {
-            m.choice = m.opts.find(o => o.m1.tr === r && o.m1.tc === c);
-            m.stage = 'B';
-            m.cells = m.choice.seconds.map(x => [x.tr, x.tc]);
+            const o = m.opts.find(x => x.m1.tr === r && x.m1.tc === c);
+            if (o) confusionStep1(m.from, o.m1);
+            return;
         } else if (m.stage === 'C') {
             const m2 = m.seconds.find(x => x.tr === r && x.tc === c);
-            if (m2) confusionSecond(m.from, m.first, m2, m.note, true);
-            return;
-        } else {
-            const m2 = m.choice.seconds.find(x => x.tr === r && x.tc === c);
-            doConfusion(m.from, m.choice.m1, m2);
+            if (m2) confusionStep2(m, m2);
             return;
         }
         render();
@@ -3482,7 +3541,7 @@ function onCell(r, c) {
         G.sel = null; G.moves = [];
     }
     if (G.sel) {
-        const cands = G.moves.filter(m => m.tr === r && m.tc === c);
+        const cands = G.moves.filter(m => (m.tr === r && m.tc === c && !(m.castle && Math.abs(m.tc - m.fc) < 2)) || (m.castle && m.click && m.click[0] === r && m.click[1] === c));      // рокировка: нажатие на клетку короля (если он идёт на 2+ клетки) или на свою ладью
         let mv = cands[0];
         if (cands.length > 1 && cands.some(m => m.castle) && cands.some(m => m.possess)) {   // Призрак: рокировка и вселение на одну клетку
             const pick = pickOverride || (uiConfirm('Рокировка (ОК) или обычный ход короля без ладьи (Отмена)?') ? 'castle' : 'possess');
@@ -3606,6 +3665,7 @@ function showGameOver() {
         $('#goText').textContent = G.over.text;
         $('#gameover').classList.remove('hidden');
     }, 900);
+    if (NET.on) clearResume();      // партия окончена: возвращаться некуда
 }
 
 /* =====================================================================
@@ -3623,6 +3683,7 @@ function render() {
 }
 
 function updateEndBtn() {
+    $('#btnNew').classList.toggle('hidden', !!NET.on);      // в онлайн-партии новую игру начать нельзя
     const b = $('#btnEnd');
     if (!b) return;
     const arch = G.hero.w === 'architect' || G.hero.b === 'architect';
@@ -3638,7 +3699,8 @@ function renderBoard() {
     const actor = isActor();                       // подсказки выбора видит только тот, кто ходит
     const flip = NET.on && NET.me === 'b';         // чёрные видят доску со своей стороны
     $('#app').classList.toggle('flipped', flip);
-    if (G.sel && actor) G.moves.filter(m => !m.hidden).forEach(m => targets.set(m.tr + ',' + m.tc, ((G.board[m.tr][m.tc] && !G.board[m.tr][m.tc].invis && !supOpen(G.board, G.board[m.tr][m.tc])) || m.ep) ? 't-cap' : 't-move'));
+    if (G.sel && actor) G.moves.filter(m => m.castle && m.click && !m.hidden).forEach(m => { targets.set(m.click.join(','), 't-move'); });      // рокировку можно сделать нажатием на ладью
+    if (G.sel && actor) G.moves.filter(m => !(m.castle && Math.abs(m.tc - m.fc) < 2) && !m.hidden).forEach(m => targets.set(m.tr + ',' + m.tc, ((G.board[m.tr][m.tc] && !G.board[m.tr][m.tc].invis && !supOpen(G.board, G.board[m.tr][m.tc])) || m.ep) ? 't-cap' : 't-move'));
     if (G.mode && G.mode.cells && actor) (G.mode.cells.show || G.mode.cells).forEach(([r, c]) => targets.set(r + ',' + c, 't-' + G.mode.type));      // show: клетки, которые подсвечиваем (остальные нажимаются, но выглядят опасными)
     let kingPos = [];
     if (G.check) {
@@ -3882,7 +3944,7 @@ function renderStatus() {
         else if (t === 'illusion') h = m.stage === 'piece' ? 'Выберите фигуру, которая сходит и создаст двойника.'
             : m.stage === 'A' ? 'Куда пойдёт фигура?' : 'На какую клетку встанет двойник?';
         else if (t === 'confusion') h = m.stage === 'piece' ? 'Выберите вражескую фигуру (не короля).'
-            : m.stage === 'A' ? 'Первый ход этой фигуры (без рубки).' : m.stage === 'C' ? 'Ход сурка вернул фигуру назад: выберите её второй ход (без рубки).' : 'Второй ход этой фигуры (без рубки).';
+            : m.stage === 'A' ? 'Первый ход этой фигуры (без рубки). Он настоящий: фигура встанет туда.' : 'Второй ход этой фигуры с того места, где она стоит (без рубки).';
         else if (t === 'frankenstein') h = m.stage === 'piece' ? 'Выберите свою фигуру, которая поглотит другую.' : 'Выберите свою фигуру, которую она поглотит.';
         else if (t === 'apocalypse') h = m.stage === 'piece' ? 'Выберите своего зомби для дополнительного хода.' : 'Куда пойдёт зомби? Рубить не обязательно.';
         else if (t === 'conveyor') h = m.stage === 'piece' ? 'Выберите свободную клетку для конвейера.' : 'В какую сторону он толкает? Выберите соседнюю клетку в этом направлении.';
@@ -4254,7 +4316,7 @@ $('#btnNew').addEventListener('click', () => {
         openSetup();
     }
 });
-$('#goNew').addEventListener('click', openSetup);
+$('#goNew').addEventListener('click', () => { if (NET.on && NET.oppLeft) { leaveToMenu(); return; } openSetup(); });
 $('#goView').addEventListener('click', () => $('#gameover').classList.add('hidden'));
 $('#btnEnd').addEventListener('click', () => {
     if (G && !G.over && G.archUsed && !G.check && !G.pendingPromo) netDo({ t: 'end' });
@@ -4352,12 +4414,12 @@ function whenRelayChecked(fn) {
     setTimeout(() => whenRelayChecked(fn), 1000);
 }
 
-function relayConn(code, role, ticket) {
+function relayConn(code, role, ticket, resume) {
     const h = {};
     let queue = Promise.resolve();
-    const sid = Math.random().toString(36).slice(2, 12);
+    const sid = (resume && resume.sid) || Math.random().toString(36).slice(2, 12);      // при возврате в партию берём прежний sid
     let mid = 0;
-    const es = new EventSource(API + `/events?room=${code}&role=${role}&sid=${sid}` + (ticket ? `&ticket=${ticket}` : ''));
+    const es = new EventSource(API + `/events?room=${code}&role=${role}&sid=${sid}` + (ticket ? `&ticket=${ticket}` : '') + (resume ? `&last=${resume.last | 0}` : ''));
     const conn = {
         open: false,
         info: { code, role, sid },
@@ -4389,6 +4451,7 @@ function relayConn(code, role, ticket) {
 function attachConn(c) {
     NET.conn = c;
     c.on('open', () => {
+        if (NET.resumed && G && !G.over) { NET.resumed = false; sendAuth(); return; }      // вернулись в идущую партию: окно подготовки не открываем
         NET.on = true;
         NET.me = NET.host ? (NET.hostColor || 'w') : other(NET.hostColor || 'w');      // цвет хозяина комнаты: выбранный им (гость узнаёт его из сообщения tc)
         NET.oppLeft = false;
@@ -4400,20 +4463,34 @@ function attachConn(c) {
     c.on('data', netRecv);
     c.on('close', () => {
         if (!NET.on) return;
-        NET.lost = true;
-        NET.oppLeft = true;
-        if (!$('#setup').classList.contains('hidden')) { markOppLeft(); return; }
-        if (G) render();
-        uiAlert('Соединение с соперником потеряно.');
+        opponentGone('Соперник отключился. Вам засчитана победа.');
     });
+}
+
+// Соперник ушёл или пропал: оставшемуся игроку засчитывается победа, после подтверждения его возвращает на главный экран
+function opponentGone(text) {
+    NET.lost = true;
+    NET.oppLeft = true;
+    if (!$('#setup').classList.contains('hidden')) { markOppLeft(); return; }
+    if (G && !G.over && !REPLAY.on) {
+        G.over = { winner: NET.me, title: 'Победа', text };
+        render();
+        showGameOver();      // отправляет итог на сервер для рейтинга
+        setTimeout(() => { uiAlert(text); leaveToMenu(); }, 300);
+        return;
+    }
+    if (G) render();
+}
+function leaveToMenu() {
+    clearResume();
+    try { if (NET.conn && NET.conn.close) NET.conn.close(); } catch (e) { /* всё равно перезагрузим */ }
+    setTimeout(() => location.reload(), 600);
 }
 
 function netRecv(m) {
     switch (m.t) {
         case 'leave':
-            NET.lost = true; NET.oppLeft = true;
-            if (!$('#setup').classList.contains('hidden')) markOppLeft();
-            else { if (G) render(); uiAlert('Соперник покинул партию.'); }
+            opponentGone('Соперник покинул партию. Вам засчитана победа.');
             break;
         case 'peer':
             NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0; NET.oppId = /^[0-9a-f-]{36}$/i.test(m.id || '') ? m.id : null; if (isBlocked(NET.oppId)) NET.muted = true;
@@ -4769,7 +4846,8 @@ const EN = {
     "Куда пойдёт фигура?": "Where will the piece go?",
     "На какую клетку встанет двойник?": "Which square will the double stand on?",
     "Выберите вражескую фигуру (не короля).": "Choose an enemy piece (not the king).",
-    "Ход сурка вернул фигуру назад: выберите её второй ход (без рубки).": "Groundhog Move sent the piece back: choose its second move (no captures).",
+    "Первый ход этой фигуры (без рубки). Он настоящий: фигура встанет туда.": "This piece's first move (no capture). It is real: the piece will stand there.",
+    "Второй ход этой фигуры с того места, где она стоит (без рубки).": "This piece's second move from where it stands now (no capture).",
     "Первый ход этой фигуры (без рубки).": "This piece's first move (no capture).",
     "Второй ход этой фигуры (без рубки).": "This piece's second move (no capture).",
     "Выберите свою фигуру, которая поглотит другую.": "Choose your piece that will absorb another.",
@@ -4934,6 +5012,9 @@ const EN = {
     " (две иллюзии столкнулись": " (two illusions collided",
     "две иллюзии столкнулись": "two illusions collided",
     "пешка угрожает двойнику": "a pawn threatens the double",
+    "Соперник отключился. Вам засчитана победа.": "Your opponent disconnected. You are awarded the win.",
+    "Соперник покинул партию. Вам засчитана победа.": "Your opponent left the game. You are awarded the win.",
+    "Победа": "Victory",
     "⚪ Нейтральная": "⚪ Neutral",
     "Без героев (обычные шахматы, способностей нет)": "No heroes (plain chess, no abilities)",
     "Без героя": "No hero",
@@ -5741,6 +5822,7 @@ render = function () {
     if (CLOCK.on && G && !G.over && CLOCK.prev && G.turn !== CLOCK.prev && G.done && G.done[CLOCK.prev] > 1) CLOCK.left[CLOCK.prev] += CLOCK.inc || 0;      // за первый ход добавки нет: он шёл на особом времени
     if (G && CLOCK.on) CLOCK.prev = G.turn;
     _renderClock.call(this); paintClocks();
+    saveResume();      // запоминаем онлайн-партию, чтобы в неё можно было вернуться после закрытия приложения
 };
 
 
@@ -6013,7 +6095,7 @@ function hatchTrigger(p, mv, cont) {
 }
 
 // Фокус-Покус: две фигуры в квадрате 5×5 вокруг первой
-const hocusPiece = (p, col) => !!p && !kSafe(p) && p.t !== 'j' && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col);
+const hocusPiece = (p, col) => !!p && !kSafe(p) && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col);
 function hocusOk(a, b2, col) {
     const b = G.board, p = b[a[0]][a[1]], q = b[b2[0]][b2[1]];
     if (!hocusPiece(p, col) || !hocusPiece(q, col)) return false;
@@ -6855,6 +6937,7 @@ function markOppLeft() {
 $('#setupLeave').addEventListener('click', () => {
     if (!NET.on) { $('#lobby').classList.remove('hidden'); return; }      // игра на одном экране: просто назад в главное меню
     if (!uiConfirm('Выйти из партии?')) return;
+    clearResume();
     netSend({ t: 'leave' });
     $('#setupLeave').disabled = true;
     setTimeout(() => { try { if (NET.conn && NET.conn.close) NET.conn.close(); } catch (e) { /* всё равно перезагрузим */ } location.reload(); }, 500);
@@ -6886,6 +6969,8 @@ function startReplay(d, title) {
     selectedHeroes = { w: d.white_hero, b: d.black_hero };
     _seed = d.seed;
     CUSTOM = null;
+    let rlog = d.log;
+    if (rlog.length && rlog[0] && rlog[0].t === 'cfg') { CUSTOM = normCfg(rlog[0].c); rlog = rlog.slice(1); }      // партия на своей доске: первая запись содержит саму доску
     startGame();
     CLOCK.on = false;
     const animWas = { ...ANIM };
@@ -6894,7 +6979,7 @@ function startReplay(d, title) {
     REPLAY_REC = [];      // пока идёт промотка, звуки и анимации не играются, а записываются по ходам
     let carry = [];
     try {
-        for (const m of d.log) {
+        for (const m of rlog) {
             if (!G || G.over) break;
             const before = REW.snaps.length;
             try { applyInput(m); } catch (e) { break; }
@@ -7621,7 +7706,7 @@ function boardPicker(root, st, allowFischer) {
         Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === st.mode));
         edit.classList.toggle('hidden', st.mode !== 'custom');
         info.classList.toggle('hidden', st.mode === 'classic');
-        if (st.mode === 'fischer') info.textContent = L('Фигуры на первой и последней горизонталях расставляются случайно, у обеих сторон одинаково. Рокировки нет.', 'Pieces on the first and last ranks are placed randomly, the same for both sides. No castling.');
+        if (st.mode === 'fischer') info.textContent = L('Фигуры на первой и последней горизонталях расставляются случайно, у обеих сторон одинаково. Рокировка по правилам Chess960: король встаёт на g или c, ладья на f или d (нажмите на ладью или на клетку короля).', 'Pieces on the first and last ranks are placed randomly, the same for both sides. Chess960 castling: the king goes to g or c, the rook to f or d (tap the rook or the king target square).');
         else if (st.mode === 'custom') info.textContent = st.cfg ? L(`Выбрана доска: ${st.cfg.name || 'без названия'} (фигур: ${cfgPieceCount(st.cfg)}${cfgTileCount(st.cfg) ? ', плиток: ' + cfgTileCount(st.cfg) : ''}).`, `Selected board: ${st.cfg.name || 'untitled'} (${cfgPieceCount(st.cfg)} pieces${cfgTileCount(st.cfg) ? ', ' + cfgTileCount(st.cfg) + ' tiles' : ''}).`) : L('Доска не выбрана: откройте редактор, соберите или загрузите доску и нажмите «Использовать эту доску».', 'No board selected: open the editor, build or load a board and press “Use this board”.');
     };
     Object.entries(btns).forEach(([k, b]) => b.addEventListener('click', () => { st.mode = k; paint(); }));
@@ -7641,3 +7726,83 @@ function colorPicker(root, st) {
     const paint = () => Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === st.v));
     paint();
 }
+
+
+/* =====================================================================
+   ВОЗВРАТ В ОНЛАЙН-ПАРТИЮ
+   Пока идёт партия, браузер запоминает комнату. Если приложение закрылось или страница перезагрузилась (например, на телефоне),
+   при следующем открытии игра заново собирает партию из записи ходов на сервере и возвращает игрока на то же место.
+   Если соперник за это время пропал на минуту, ему засчитывается поражение (это решает сервер).
+   ===================================================================== */
+const RESUME_KEY = 'sc_resume';
+let _resumeSavedAt = 0;
+function clearResume() { try { localStorage.removeItem(RESUME_KEY); } catch (e) { } }
+function saveResume() {
+    if (!NET.on || !G || G.over || REPLAY.on || !NET.conn || !NET.conn.info || !NET.conn.info.sid) return;
+    const now = Date.now();
+    if (now - _resumeSavedAt < 1500) return;
+    _resumeSavedAt = now;
+    try {
+        localStorage.setItem(RESUME_KEY, JSON.stringify({
+            v: 1, ts: now, room: NET.conn.info.code, role: NET.conn.info.role, sid: NET.conn.info.sid,
+            me: NET.me, hostColor: NET.hostColor || 'w', tc: NET.tc || 0, inc: NET.inc || 0, rated: !!NET.rated, mode: NET.mode || null, custom: !!NET.custom,
+            clock: CLOCK && CLOCK.on ? { left: { ...CLOCK.left }, open: { ...CLOCK.open } } : null
+        }));
+    } catch (e) { }
+}
+
+async function tryResume() {
+    let sv = null;
+    try { sv = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch (e) { }
+    if (!sv) return;
+    if (sv.v !== 1 || !sv.room || !sv.sid || Date.now() - sv.ts > 10 * 60 * 1000) { clearResume(); return; }
+    for (let i = 0; !RELAY_CHECKED && i < 120; i++) await sleep(500);      // сервер на бесплатном Render просыпается до минуты
+    if (!RELAY || G) return;
+    let st = null;
+    try { const r = await fetch(API + `/state?room=${sv.room}&role=${sv.role}&sid=${sv.sid}`); if (r.ok) st = await r.json(); } catch (e) { }
+    if (!st || !st.start || !Array.isArray(st.inputs)) { clearResume(); return; }
+    ['lobby', 'setup', 'prof', 'top', 'auth', 'coll', 'rooms', 'local', 'gameover', 'promo', 'editor', 'report'].forEach(id => { const el = $('#' + id); if (el) el.classList.add('hidden'); });
+    NET.on = true; NET.host = sv.role === 'host'; NET.hostColor = sv.hostColor; NET.me = sv.me;
+    NET.tc = sv.tc; NET.inc = sv.inc; NET.rated = !!sv.rated; NET.mode = MODES[sv.mode] ? sv.mode : null; NET.custom = !!sv.custom; NET.fischer = false;
+    NET.lost = false; NET.oppLeft = false; NET.resumed = true;
+    const conn = relayConn(sv.room, sv.role, null, { sid: sv.sid, last: st.seq });      // те же sid и номер последнего сообщения: сервер доставит пропущенное
+    conn.open = true;
+    attachConn(conn);
+    const m = st.start;
+    selectedHeroes = { ...m.heroes }; _seed = m.seed; CUSTOM = normCfg(m.custom);
+    startGame();
+    // партия заново проигрывается в памяти без звуков и анимаций (так же, как повтор)
+    const animWas = { ...ANIM };
+    ANIM.board = true; ANIM.banner = true;
+    REPLAY_REC = [];
+    NET.on = false;
+    try {
+        for (const inp of st.inputs) {
+            if (!G || G.over) break;
+            if (inp && inp.t === 'cfg') continue;
+            try { applyInput(inp); } catch (e) { break; }
+            REPLAY_REC = [];
+        }
+    } finally {
+        NET.on = true;
+        REPLAY_REC = null;
+        Object.assign(ANIM, animWas);
+        ANIMQ.length = 0; ANIM_HIDE.length = 0;
+        if (G) G.fx = [];
+    }
+    NET.resumed = false;
+    if (!G) { clearResume(); return; }
+    if (st.result && !G.over) {      // пока вас не было, партия закончилась (сдача, время, отключение)
+        G.over = st.result === 'd' ? { winner: null, title: 'Ничья', text: 'Партия окончена вничью.' } : { winner: st.result, title: st.result === NET.me ? 'Победа' : 'Поражение', text: `${colorName(st.result)} побеждают.` };
+    }
+    if (G.over) { G.repSent = true; render(); showGameOver(); clearResume(); return; }
+    if (sv.clock && CLOCK.on) {      // часы: то, что было записано, минус время, пока вас не было
+        CLOCK.left = { ...sv.clock.left }; CLOCK.open = { ...sv.clock.open };
+        const away = Math.max(0, (Date.now() - sv.ts) / 1000), pool = inOpening(G.turn) ? CLOCK.open : CLOCK.left;
+        pool[G.turn] = Math.max(1, pool[G.turn] - away);
+        CLOCK.last = performance.now(); CLOCK.prev = G.turn;
+    }
+    sendAuth();
+    render();
+}
+tryResume();
