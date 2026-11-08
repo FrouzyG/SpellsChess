@@ -27,7 +27,8 @@ const CONFIG = {
         guardian: 5, purify: 10, lie: 9, virus: 3,  // новые способности
         vine: 5, ritual: 5, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
-        fog: 5, hatch: 3, hocus: 7, assistant: 6         // Фокусник
+        fog: 5, hatch: 3, hocus: 7, assistant: 6,        // Фокусник
+        assemble: 3, charger: 4                          // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
@@ -72,6 +73,7 @@ const GLYPH = { k: '♚\uFE0E', q: '♛\uFE0E', r: '♜\uFE0E', b: '♝\uFE0E', 
 const pImg = (c, t) => `<i class="pi ${c} t-${t}">${GLYPH[t]}</i>`;   // мини-фигура (картинка, а без папки pieces обычный символ)
 const SYM = { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' };
 GLYPH.j = '🦷'; SYM.j = '🦷';
+GLYPH.x = '🤖'; SYM.x = '🤖';      // робот Инженера
 GLYPH.h = '🐇'; SYM.h = '🐇';      // заяц Фокусника (Ассистент)      // заводные челюсти Шута
 
 const ABILITIES = {
@@ -351,6 +353,23 @@ Object.assign(ABILITIES, {
 });
 HEROES.magician = { icon: '🎩', name: 'Фокусник', tag: 'Фокусы и пропажи', passive: 'sawing', abilities: ['fog', 'hatch', 'hocus', 'assistant'] };
 
+// Инженер (в разработке): собирает фигуру-робота по своим правилам и заряжает его на плитке
+PASSIVES.engWip = {
+    icon: '🔧', name: 'Пассивка в разработке',
+    desc: 'У Инженера пока нет пассивки: герой ещё в разработке.'
+};
+Object.assign(ABILITIES, {
+    assemble: {
+        icon: '🤖', name: 'Сборка робота',
+        desc: 'Открывается планшет: вы собираете фигуру-робота (сапог: ходит и рубит по выбранным направлениям, не перепрыгивая фигуры, можно усилить дальность; крыло: прыгает по выбранным клеткам 5×5). Робот появится на свободной клетке ваших первых двух горизонталей. Перезарядка 3 и ещё плюс за каждое улучшение.'
+    },
+    charger: {
+        icon: '🔋', name: 'Зарядка',
+        desc: 'Создаёт на свободной клетке плитку-зарядку. Если в начале вашего хода на ней стоит ваш робот, он получает бесплатный ход: им обязательно нужно сходить с зарядки (если ход не оставляет короля под шахом и ему есть куда идти), а потом сделать обычный ход.'
+    }
+});
+HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника · в разработке', passive: 'engWip', abilities: ['assemble', 'charger'], dev: true };
+
 // Способности, у которых выбор идёт в два шага: сначала фигура, потом клетка
 const ACTIVE_PASSIVES = ['aim', 'teleport', 'timeslow'];
 const NO_TARGET = ['zawarudo', 'misclick'];   // способности без выбора цели: срабатывают сразу по кнопке   // пассивки, у которых есть кнопка и перезарядка
@@ -365,7 +384,7 @@ const colorName = c => (c === 'w' ? 'Белые' : 'Чёрные');
 const cloneBoard = b => b.map(row => row.map(p => (p ? { ...p } : null)));
 const mk = (t, c) => ({ t, c, moved: false, shield: false, frozen: 0 });
 const uidOf = p => (p.uid || (p.uid = G.nextUid++));
-const cdOf = (col, k) => CONFIG.cooldown[k] + ((G.cdBonus && G.cdBonus[col] && G.cdBonus[col][k]) || 0);
+const cdOf = (col, k) => CONFIG.cooldown[k] + ((G.cdBonus && G.cdBonus[col] && G.cdBonus[col][k]) || 0) + (k === 'assemble' && G.engCost ? (G.engCost[col] | 0) : 0);      // Сборка робота: перезарядка 3 + цена выбранных улучшений
 let HIST = [];
 // Общий генератор случайных чисел (одинаковый у обоих игроков онлайн): влияет только на порядок строк в журнале
 let _seed = 1;
@@ -489,7 +508,7 @@ const supOpen = (b, t) => !!t && !!t.sup && !t.ghost && !!t.prev && !b[t.prev[0]
 const scaredDirs = tp => ((tp === 'r' || tp === 'j') ? ORTH : (tp === 'n' || tp === 'b') ? DIAG : [...DIAG, ...ORTH]);
 
 // Распиливание доски (Фокусник): левый и правый край доски соединены для его фигур
-const wrapsOf = p => { const o = p && (p.orig || p.c); return !!p && !kSafe(p) && !!G && !!G.hero && G.hero[o] === 'magician' && !(G.cd && G.cd[o] && G.cd[o].sawing > 0); };      // фигура Фокусника, даже взятая под контроль врагом (гипноз, замешательство), проходит через край, и перезарядка уходит Фокуснику
+const wrapsOf = p => { const o = p && p.c; return !!p && !p.orig && !kSafe(p) && !!G && !!G.hero && G.hero[o] === 'magician' && !(G.cd && G.cd[o] && G.cd[o].sawing > 0); };      // гипнотизированная фигура Фокусника (p.orig) через край не ходит: распил ей доступен только при замешательстве      // фигура Фокусника, даже взятая под контроль врагом (гипноз, замешательство), проходит через край, и перезарядка уходит Фокуснику
 // Ход прошёл сквозь левый/правый край доски? (клетки пути соседние, поэтому скачок по столбцам больше 2 может быть только через край)
 function crossedEdge(mv) {
     const pts = [[mv.fr, mv.fc], ...(mv.path || []), [mv.tr, mv.tc]];
@@ -536,10 +555,22 @@ function rayWalk(b, r, c, dr, dc, cb) {
     }
 }
 
+// Робот Инженера: p.rob = { kind: 'boot' | 'wing', walk, atk, wr, ar (сапог), ja, jw (крыло) }, направления хранятся готовыми смещениями [dr, dc]
+// Куда робот может дотянуться (для Франкенштейна): все его клетки ходьбы, рубки и прыжков
+function robReach(b, r, c) {
+    const p = b[r][c], rb = p && p.rob, out = [];
+    if (!rb) return out;
+    (rb.walk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (rr, cc, t, path) => { if (path.length >= rb.wr) return true; out.push([rr, cc]); return !!(t && !t.ghost); }));
+    (rb.atk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (rr, cc, t, path) => { if (path.length >= rb.ar) return true; out.push([rr, cc]); return !!(t && !t.ghost); }));
+    [...(rb.ja || []), ...(rb.jw || [])].forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); });
+    return out;
+}
+
 // Клетки, до которых «достаёт» фигура типа tp (конь или слайдер).
 // Луч идёт до первой настоящей фигуры включительно; иллюзии прозрачны; порталы переносят луч.
 function lineSquares(b, r, c, tp) {
     const out = [];
+    if (tp === 'x') return robReach(b, r, c);
     if (tp === 'n') {
         const wp = b[r][c];
         KN.forEach(([dr, dc]) => { const tc = wcol(wp, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); });
@@ -572,6 +603,15 @@ function attackSquares(b, r, c) {
             ORTH.forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); });
         } else if (tp === 'h') {
             /* заяц никого не бьёт */
+        } else if (tp === 'x') {      // робот бьёт только по направлениям рубки (сапог) и по клеткам рубки (крыло)
+            const rb = p.rob;
+            if (!rb) return;
+            (rb.atk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (rr, cc, t, path) => {
+                if (path.length >= rb.ar) return true;
+                out.push([rr, cc]);
+                return !!(t && !t.ghost && !passThru(t, p.c, rr, cc) && !supOpen(b, t));
+            }));
+            (rb.ja || []).forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); });
         } else {
             out.push(...lineSquares(b, r, c, tp));
         }
@@ -773,6 +813,38 @@ function pseudoMoves(b, r, c) {
                 const t = b[tr][tc];
                 if (passable(t) || canTake(t, tr, tc)) add(tr, tc, tc !== c + dc ? { path: [] } : {});
             });
+        } else if (tp === 'x') {                       // робот Инженера
+            const rb = p.rob;
+            if (!rb) return;
+            // сапог: ходьба (без рубки, фигуры не перепрыгивает) и рубка (только по своим направлениям, фигуры не перепрыгивает)
+            (rb.walk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
+                if (path.length >= rb.wr) return true;
+                if (!t) { add(tr, tc, { path: path.slice() }); return false; }
+                if (t.ghost) { if (t.c === p.c || !ghost) add(tr, tc, { path: path.slice() }); return false; }
+                if (passThru(t, p.c, tr, tc)) return false;
+                if (!ghost && supOpen(b, t)) { add(tr, tc, { path: path.slice() }); return false; }
+                return true;
+            }));
+            (rb.atk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
+                if (path.length >= rb.ar) return true;
+                if (!t || t.ghost) return false;
+                if (passThru(t, p.c, tr, tc)) { if (t.c !== p.c && canTake(t, tr, tc)) add(tr, tc, { path: path.slice() }); return false; }
+                if (!ghost && supOpen(b, t)) return false;
+                if (canTake(t, tr, tc)) add(tr, tc, { path: path.slice() });
+                return true;
+            }));
+            // крыло: прыжки по клеткам 5×5 (ja: ходят и рубят, jw: только ходят)
+            (rb.ja || []).forEach(([dr, dc]) => {
+                const tr = r + dr, tc = wcol(p, c + dc);
+                if (tr < 0 || tr >= N || tc < 0) return;
+                const t = b[tr][tc];
+                if (passable(t) || canTake(t, tr, tc)) add(tr, tc, { path: [] });
+            });
+            (rb.jw || []).forEach(([dr, dc]) => {
+                const tr = r + dr, tc = wcol(p, c + dc);
+                if (tr < 0 || tr >= N || tc < 0) return;
+                if (passable(b[tr][tc])) add(tr, tc, { path: [] });
+            });
         } else if (tp === 'k') {
             KG.forEach(([dr, dc]) => {
                 const tr = r + dr, tc = wcol(p, c + dc);
@@ -857,7 +929,7 @@ const moveCells = mv => (mv.path ? [...mv.path, [mv.tr, mv.tc]] : pathCells(mv))
 
 // Применяет ход к доске (меняет её). Возвращает список погибших фигур.
 // Ценность фигур для выбора ангела-хранителя (у Франкенштейна считается исходная фигура, пришитые ходы не в счёт)
-const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, j: 1, h: 1 };
+const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, j: 1, h: 1, x: 4 };
 
 // Ангел-хранитель: если рядом с жертвой несколько ангелов, собой жертвует наименее ценный (при равенстве «случайный», одинаковый у обоих игроков онлайн).
 // Какую из погибающих фигур спасать, решает orderVictims: самую ценную (при равенстве слон раньше коня).
@@ -1478,6 +1550,7 @@ function givesCheck(b, mv) {
 function selectableMoves(r, c) {
     const p = G.board[r][c];
     if (G.archUsed) return [];             // Архитектор после способности не ходит фигурой
+    if (G.bonus && G.bonus.kind === 'charge' && (r !== G.bonus.r || c !== G.bonus.c)) return [];      // Зарядка: бесплатный ход только у робота на плитке
     let mv = legalMovesAt(G.board, r, c);
     if (p.ghost) {
         const o = findOriginal(p.pair);
@@ -1573,7 +1646,7 @@ function frankTargets(r, c) {
     const seen = new Set();
     moveTypes(p).forEach(tp => lineSquares(b, r, c, tp).forEach(([tr, tc]) => {
         const t = b[tr][tc], k = tr * N + tc;
-        if (seen.has(k) || !t || t.ghost || t.c !== p.c || t.frozen || kSafe(t) || t.t === 'p' || t.orig) return;
+        if (seen.has(k) || !t || t.ghost || t.c !== p.c || t.frozen || kSafe(t) || t.t === 'p' || t.t === 'x' || t.orig) return;
         seen.add(k);
         const nb = cloneBoard(b);
         eatApply(nb, r, c, tr, tc);
@@ -1639,7 +1712,7 @@ let VIEWER = null;
 const isEmptyCell = (r, c) => !G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER));
 const isFreeCell = (r, c) => !wallAt(r, c) && (!G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
     !G.gens.some(x => x.r === r && x.c === c) && !G.virus.some(x => x.r === r && x.c === c) && !G.vines.some(x => x.r === r && x.c === c) &&
-    !G.rituals.some(x => x.r === r && x.c === c) && !(G.hatches || []).some(x => x.r === r && x.c === c);
+    !G.rituals.some(x => x.r === r && x.c === c) && !(G.hatches || []).some(x => x.r === r && x.c === c) && !(G.chargers || []).some(x => x.r === r && x.c === c);
 
 // Порталы: одновременно две пары, при создании третьей самая старая исчезает
 function portalsWith(col, a, b2, id) {
@@ -1676,7 +1749,7 @@ function portalPartners(a, col, first) {
 }
 
 // Перемещать можно только плитки и порталы (ловушки, огонь и метки не двигаются). Новые плитки добавлять сюда
-const TILE_KEYS = ['conv', 'gens', 'virus', 'vines', 'rituals', 'portals', 'burn', 'hatches'];
+const TILE_KEYS = ['conv', 'gens', 'virus', 'vines', 'rituals', 'portals', 'burn', 'hatches', 'chargers'];
 function cellProps(r, c) {
     return { tiles: TILE_KEYS.flatMap(k => G[k].filter(x => x.r === r && x.c === c)) };
 }
@@ -1792,7 +1865,7 @@ function abilityCellsRaw(key, col, t, first) {
             for (let c = 0; c < N; c++) {
                 if (b[r][c] && !hiddenFor(b[r][c], col)) continue;
                 const nb = cloneBoard(b);
-                nb[r][c] = { ...mk(t.t, col), x: [...(t.x || [])], moved: true, zombie: key === 'raise' };
+                nb[r][c] = { ...mk(t.t, col), x: [...(t.x || [])], rob: t.rob, moved: true, zombie: key === 'raise' };
                 if (safeAfter(nb, col)) cells.push([r, c]);
             }
         });
@@ -2073,7 +2146,7 @@ function toGrave(p) {
     if (p.t === 'k') return;      // срубленный король (режим «срубить все») в сброс не попадает
     if (p.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(p)}: фигура погибла`);
     G.deaths = (G.deaths || 0) + 1;
-    G.grave[p.orig || p.c].push(p.hare ? { t: p.hare.t, x: [...(p.hare.x || [])] } : { t: p.t, x: [...(p.x || [])] });      // заяц в сброс идёт как исходная фигура
+    G.grave[p.orig || p.c].push(p.hare ? { t: p.hare.t, x: [...(p.hare.x || [])], rob: p.rob } : { t: p.t, x: [...(p.x || [])], rob: p.rob });      // заяц в сброс идёт как исходная фигура
 }
 
 // Начальное состояние партии (отдельной функцией, чтобы редактор досок мог проверять позиции)
@@ -2087,7 +2160,7 @@ function newState(board, hero, win) {
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
         cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
-        bananas: [], walls: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false },
+        bananas: [], walls: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false }, chargers: [], engCost: { w: 0, b: 0 },
         win
     };
 }
@@ -2132,7 +2205,7 @@ function logHidden(c, p, real) {
 // Плитки (сейчас только конвейеры) уничтожаются огненным шаром. Ловушки (капкан) плитками не считаются.
 // Новые виды плиток добавлять сюда.
 function destroyTiles(r, c) {
-    [['conv', 'конвейер'], ['gens', 'плитку генератора'], ['virus', 'заражённую плитку'], ['vines', 'лозу'], ['rituals', 'призрачную плитку'], ['hatches', 'потайной люк']].forEach(([k, name]) => {
+    [['conv', 'конвейер'], ['gens', 'плитку генератора'], ['virus', 'заражённую плитку'], ['vines', 'лозу'], ['rituals', 'призрачную плитку'], ['hatches', 'потайной люк'], ['chargers', 'зарядку']].forEach(([k, name]) => {
         if (!G[k]) return;
         const n = G[k].length;
         G[k] = G[k].filter(x => !(x.r === r && x.c === c));
@@ -2255,6 +2328,10 @@ function startTurn() {
     Object.keys(G.cd[c]).forEach(k => { if (k !== 'sawing' && G.cd[c][k] > 0) G.cd[c][k]--; });
     if (G.cd[other(c)] && G.cd[other(c)].sawing > 0) G.cd[other(c)].sawing--;      // Распиливание: перезарядка идёт по ходам соперника, чтобы угрозы от края видел и шах, и тот, кому он грозит
 
+    // Зарядка Инженера: робот на своей плитке в начале хода получает бесплатный ход
+    const chg = chargeRobot(c);
+    if (chg) { G.bonus = { kind: 'charge', r: chg[0], c: chg[1] }; addLog('n', `🔋 Робот на зарядке ${sqName(chg[0], chg[1])} получает бесплатный ход`); }
+
     // 3. Состояние партии
     const { attacked, latent } = computeState(c);
 
@@ -2282,6 +2359,18 @@ function startTurn() {
 
     render();
     if (G.over) showGameOver();
+}
+
+// Зарядка: свой робот на своей плитке, у которого есть законный ход (иначе бесплатного хода нет)
+function chargeRobot(c) {
+    if (!G.chargers || !G.chargers.length) return null;
+    for (const ch of G.chargers) {
+        if (ch.owner !== c) continue;
+        const q = G.board[ch.r][ch.c];
+        if (!q || q.t !== 'x' || q.c !== c || q.ghost || q.frozen > 0 || q.snared > 0) continue;
+        if (legalMovesAt(G.board, ch.r, ch.c).length) return [ch.r, ch.c];
+    }
+    return null;
 }
 
 // Продолжение хода того же игрока (доп. ход Жатвы, обычный ход после Апокалипсиса)
@@ -2509,7 +2598,7 @@ function endTurn() {
 
 function tryMove(mv, ctx) {
     if (mv.decoy) { if (!mv.redirect) return; mv = mv.redirect; }   // «сквозь» невидимую фигуру: на деле рубка её (или ход невозможен)
-    ctx = ctx || (G.bonus ? { bonus: true, zw: G.bonus.kind === 'zw' ? G.bonus.step : 0 } : {});
+    ctx = ctx || (G.bonus ? { bonus: true, zw: G.bonus.kind === 'zw' ? G.bonus.step : 0, charge: G.bonus.kind === 'charge' } : {});
     G.sel = null; G.moves = [];
     if (mv.promo) {
         const victim = G.board[mv.tr][mv.tc];
@@ -2657,6 +2746,13 @@ function executeMove(mv, promo, ctx) {
     }
 
     const tail0 = () => {
+        // Зарядка: бесплатный ход робота сделан, дальше обычный ход
+        if (ctx.charge) {
+            G.bonus = null;
+            addLog('n', '🔋 Зарядка: бесплатный ход робота сделан, теперь обычный ход');
+            continueTurn();
+            return;
+        }
         // Апокалипсис: зомби сходил вне очереди, обычный ход ещё впереди
         if (ctx.apo) {
             G.cd[col][ctx.cdKey] = cdOf(col, ctx.cdKey);
@@ -2820,7 +2916,7 @@ function useAbility(key, r, c, ref) {
 
     if (key === 'resurrect' || key === 'raise') {
         const d = G.grave[ref.col].splice(ref.idx, 1)[0];
-        G.board[r][c] = { ...mk(d.t, col), x: [...(d.x || [])], moved: true, zombie: key === 'raise' };
+        G.board[r][c] = { ...mk(d.t, col), x: [...(d.x || [])], rob: d.rob, moved: true, zombie: key === 'raise' };
         text = `${A.icon} ${A.name}: ${pieceSym(d)} ${key === 'raise' ? 'встаёт зомби' : 'возвращается'} на ${sqName(r, c)}`;
         G.fx.push({ r, c, type: key === 'raise' ? 'raise' : 'revive' });
         sfx(key === 'raise' ? 'raise' : 'revive');
@@ -3305,6 +3401,7 @@ function canPassive(col, k) {
 function startMode(k, via) {
     G.sel = null; G.moves = [];
     const base = via ? { type: k, via } : { type: k };
+    if (k === 'assemble') { G.mode = { ...base, stage: 'kind', cells: [], hist: [], kind: null, sel: null, walk: [], atk: [], wr: 1, ja: [], jw: [] }; return; }      // планшет Инженера
     if (k === 'resurrect' || k === 'raise') G.mode = { ...base, piece: null, cells: [] };
     else if (k === 'timeslow' || k === 'tomato') G.mode = { ...base, cells: [] };
     else if (k === 'hatch') G.mode = { ...base, stage: 'piece', need: (G.hatchUsed && G.hatchUsed[G.turn]) ? 1 : 2, cells: abilityCells(k, G.turn) };      // первый раз сразу два люка
@@ -3313,7 +3410,7 @@ function startMode(k, via) {
 }
 
 // Способности, зависящие от свободной клетки: попытка применить их на клетку с невидимой вражеской фигурой раскрывает её, ход не тратится
-const FREE_CELL_KEYS = ['hatch', 'ritual', 'vine', 'virus', 'trap', 'lure', 'generator', 'conveyor', 'portals', 'relocate'];
+const FREE_CELL_KEYS = ['assemble', 'charger', 'hatch', 'ritual', 'vine', 'virus', 'trap', 'lure', 'generator', 'conveyor', 'portals', 'relocate'];
 
 function onModeCell(r, c) {
     const m = G.mode, t = m.type;
@@ -3323,6 +3420,8 @@ function onModeCell(r, c) {
         return;
     }
     if (ghostIntercept(r, c)) return;
+    if (t === 'assemble') { if (m.stage === 'spawn') doAssemble(r, c); return; }
+    if (t === 'charger') { doCharger(r, c); return; }
     if (t === 'fog') { doFog(r, c); return; }
     if (t === 'hatch') {
         if (m.need === 2 && m.stage === 'piece') {          // первый люк из двух
@@ -3381,7 +3480,7 @@ function onModeCell(r, c) {
     }
     if (t === 'resurrect' || t === 'raise') {
         const d = G.grave[m.piece.col][m.piece.idx], me = G.turn;
-        if (guardPlacement(me, r, c, nb => { nb[r][c] = { ...mk(d.t, me), x: [...(d.x || [])], moved: true, zombie: t === 'raise' }; })) { cancelAbilityMode(); return; }
+        if (guardPlacement(me, r, c, nb => { nb[r][c] = { ...mk(d.t, me), x: [...(d.x || [])], rob: d.rob, moved: true, zombie: t === 'raise' }; })) { cancelAbilityMode(); return; }
         useAbility(t, r, c, m.piece);
         return;
     }
@@ -3682,6 +3781,7 @@ function applyInput(m) {
         case 'promo': applyPromo(m.p); break;
         case 'end': if (G.archUsed && !G.check && !G.pendingPromo) endTurn(); break;
         case 'esc': cancelAll(); break;
+        case 'eng': engInput(m); break;
     }
 }
 
@@ -3828,6 +3928,8 @@ function renderBoard() {
             if (gm) html += `<div class="tile-mark gen-mark ${gm.sign === '+' ? 'plus' : 'minus'} ${G.hero[gm.owner] === 'architect' ? '' : 'alt'}">${gm.sign === '+' ? '＋' : '－'}</div>`;
             const htm = (G.hatches || []).find(x => x.r === r && x.c === c);
             if (htm) html += '<div class="tile-mark hatch-mark"><span></span></div>';
+            const chm = (G.chargers || []).find(x => x.r === r && x.c === c);
+            if (chm) html += `<div class="tile-mark charger-mark ${chm.owner}"><span>⚡</span></div>`;
             const hg = G.hogs.find(x => x.r === r && x.c === c);
             if (hg && (hg.visible || (showTraps && (NET.on ? hg.owner === NET.me : hg.owner === G.turn)))) html += `<div class="tile-mark hog-mark ${hg.visible ? '' : 'hidden-hog'}">⏳</div>`;
 
@@ -3861,6 +3963,7 @@ function renderBoard() {
                 if (p.sup) html += '<span class="sp">⚛</span>';
                 if (p.altruist > 0) html += `<span class="al">👼${p.altruist}</span>`;
                 if (p.t === 'j') html += `<span class="jl">${Number.isFinite(p.life) ? '⏳' + p.life : '∞'}</span>`;
+                if (p.t === 'x' && p.rob) html += `<span class="rb">${p.rob.kind === 'wing' ? '🪽' : '👢'}</span>`;
                 if (p.hare) html += `<span class="jl">🐇${p.hare.left}</span>`;
                 if (p.cap > 0 && jesterSees(p.capBy)) html += `<span class="cp">🤡${p.cap}</span>`;
                 if (p.betray && jesterSees(p.betray)) html += '<span class="bt">🃏</span>';
@@ -3988,7 +4091,7 @@ function renderStatus() {
     const st = $('#status'), hi = $('#hint');
     if (G.over) { st.textContent = G.over.title; st.className = 'status over'; hi.textContent = G.over.text; return; }
     let s = `Ход: ${colorName(G.turn)}`;
-    if (G.bonus) s += G.bonus.kind === 'zw' ? ` · ZA WARUDO, ход ${G.bonus.step}/2` : ' · доп. ход';
+    if (G.bonus) s += G.bonus.kind === 'zw' ? ` · ZA WARUDO, ход ${G.bonus.step}/2` : G.bonus.kind === 'charge' ? ' · зарядка, бесплатный ход робота' : ' · доп. ход';
     if (G.check === 'check') s += ' · ШАХ!';
     else if (G.check === 'latent') s += ' · шах после взрыва!';
     st.textContent = s;
@@ -4048,12 +4151,16 @@ function renderStatus() {
         else if (t === 'hatch') h = m.need === 2 ? (m.stage === 'piece' ? 'Первое применение создаёт сразу два люка. Выберите клетку для первого.' : 'Выберите клетку для второго люка.') : 'Выберите свободную клетку для потайного люка.';
         else if (t === 'hocus') h = m.stage === 'piece' ? 'Выберите первую фигуру (не короля) для обмена.' : 'Выберите вторую фигуру в квадрате 5×5 вокруг первой: они поменяются местами.';
         else if (t === 'assistant') h = 'Выберите фигуру (не короля): она станет зайцем на ' + CONFIG.hareTurns + ' ваших хода.';
+        else if (t === 'assemble') h = m.stage === 'spawn' ? '🤖 Робот готов: выберите свободную клетку на своих первых двух горизонталях, там он появится.' : 'Соберите робота на планшете.';
+        else if (t === 'charger') h = '🔋 Выберите свободную клетку для плитки-зарядки.';
         else if (t === 'hatchexit') h = m.plan ? '🪵 ' + m.label + ' попала на люк: выберите люк, из которого она вылезет.' : '🪵 Фигура провалилась в люк: выберите свободный люк, из которого она вылезет.';
         if (m.via) h = '🪞 Зеркало: ' + h;
     } else if (G.sel && G.board[G.sel.r][G.sel.c] && G.board[G.sel.r][G.sel.c].betray === G.turn && G.board[G.sel.r][G.sel.c].c !== G.turn) {
         h = '🃏 Нажмите на фигуру ещё раз: она навсегда перейдёт на вашу сторону. Это тратит ход.';
     } else if (G.archUsed) {
         h = '🧰 Ходить фигурой уже нельзя: можно применить ещё способность или нажать «Завершить ход».';
+    } else if (G.bonus && G.bonus.kind === 'charge') {
+        h = '🔋 Зарядка: робот на плитке получает бесплатный ход. Сходите им (подсвечен), после этого обычный ход.';
     } else if (G.bonus) {
         h = G.bonus.kind === 'zw'
             ? (G.bonus.step === 1 ? '🕰️ ZA WARUDO: первый ход, им нельзя ни шаховать, ни рубить.' : '🕰️ ZA WARUDO: второй ход, теперь можно шаховать и рубить.')
@@ -4104,7 +4211,7 @@ const psFreeDot = pk => ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePass
 /* ---------- Замки героев и магические шары ---------- */
 // Замки работают только в рейтинговых онлайн-партиях. В дружеских комнатах и на одном экране открыты все герои.
 const lockActive = () => !!(NET.on && NET.rated);
-const heroOpen = id => CONFIG.freeHeroes.includes(id) || UNL.heroes.includes(id);
+const heroOpen = id => !(HEROES[id] && HEROES[id].dev) && (CONFIG.freeHeroes.includes(id) || UNL.heroes.includes(id));      // герои «в разработке» (dev) в рейтинге закрыты
 
 async function loadUnlocks() {
     if (!SB || !ACC.user) { UNL.orbs = 0; UNL.heroes = []; return; }
@@ -4132,6 +4239,7 @@ function showOrbNote(gained) {
 // Открыть героя за шар: подтверждение, запрос в Supabase, анимация замка
 async function tryUnlock(id, card) {
     if (UNL.busy) return;
+    if (HEROES[id] && HEROES[id].dev) { uiAlert(L('Этот герой ещё в разработке: его можно выбрать в дружеских партиях и на одном экране.', 'This hero is still in development: you can pick them in friendly games and on one screen.')); return; }
     if (!SB || !ACC.user) { uiAlert(L('Нужен вход в аккаунт.', 'Please sign in first.')); return; }
     await loadUnlocks();
     if (heroOpen(id)) { refreshHeroViews(); return; }
@@ -5373,6 +5481,54 @@ Object.assign(EN, {
     "🌫️ Дым рассеялся": "🌫️ The smoke has cleared",
     "🪵 Фигура проваливается в потайной люк и вылезает из другого": "🪵 A piece falls through a secret hatch and climbs out of another"
 });
+Object.assign(EN, {
+    "Инженер": "Engineer",
+    "Робототехника · в разработке": "Robotics · in development",
+    [PASSIVES.engWip.name]: "Passive in development",
+    [PASSIVES.engWip.desc]: "The Engineer has no passive yet: the hero is still in development.",
+    [ABILITIES.assemble.name]: "Robot Assembly",
+    [ABILITIES.assemble.desc]: "A tablet opens: you build a robot piece (boot: walks and captures along chosen directions without jumping over pieces, range can be upgraded; wing: jumps to chosen squares of a 5×5 area). The robot appears on a free square of your first two ranks. Cooldown 3 plus extra for every upgrade.",
+    [ABILITIES.charger.name]: "Charger",
+    [ABILITIES.charger.desc]: "Creates a charger tile on a free square. If your robot stands on it at the start of your turn, it gets a free move: you must move it off the charger (if the move does not leave your king in check and it has somewhere to go), then make your normal move.",
+    "Этот герой ещё в разработке: его можно выбрать в дружеских партиях и на одном экране.": "This hero is still in development: you can pick them in friendly games and on one screen.",
+    "🤖 Робот готов: выберите свободную клетку на своих первых двух горизонталях, там он появится.": "🤖 The robot is ready: choose a free square on your first two ranks, it will appear there.",
+    "Соберите робота на планшете.": "Build the robot on the tablet.",
+    "🔋 Выберите свободную клетку для плитки-зарядки.": "🔋 Choose a free square for the charger tile.",
+    "🔋 Зарядка: робот на плитке получает бесплатный ход. Сходите им (подсвечен), после этого обычный ход.": "🔋 Charger: the robot on the tile gets a free move. Move it (highlighted), then make your normal move.",
+    " · зарядка, бесплатный ход робота": " · charger, free robot move",
+    "🔋 Зарядка: бесплатный ход робота сделан, теперь обычный ход": "🔋 Charger: the free robot move is done, now your normal move",
+    "🔋 Робот на зарядке": "🔋 The robot on the charger",
+    "получает бесплатный ход": "gets a free move",
+    "робот (крыло) появляется на": "robot (wing) appears on",
+    "робот (сапог) появляется на": "robot (boot) appears on",
+    "ВЫБОР ФИГУРЫ": "CHOOSE A PIECE",
+    "САПОГ": "BOOT",
+    "КРЫЛО": "WING",
+    "+0 КД": "+0 CD",
+    "+4 КД": "+4 CD",
+    "САПОГ: ХОДИТ И РУБИТ, НЕ ПРЫГАЯ ЧЕРЕЗ ФИГУРЫ. КРЫЛО: ПРЫГАЕТ ПО КЛЕТКАМ.": "BOOT: WALKS AND CAPTURES WITHOUT JUMPING OVER PIECES. WING: JUMPS ACROSS SQUARES.",
+    "НАПРАВЛЕНИЯ ХОДЬБЫ": "WALKING DIRECTIONS",
+    "НАПРАВЛЕНИЯ АТАКИ": "ATTACK DIRECTIONS",
+    "ПОДТВЕРДИТЬ ×2": "CONFIRM ×2",
+    "КАЖДАЯ СТРЕЛКА +1 КД. ХОД НА КЛЕТКУ ВПЕРЁД.": "EACH ARROW +1 CD. MOVES ONE SQUARE.",
+    "КАЖДАЯ СТРЕЛКА +1 КД. НУЖНО ВЫБРАТЬ ХОТЯ БЫ ОДНО НАПРАВЛЕНИЕ.": "EACH ARROW +1 CD. PICK AT LEAST ONE DIRECTION.",
+    "ЧТО ДАЛЬШЕ?": "WHAT NEXT?",
+    "ДАЛЬНОСТЬ": "RANGE",
+    "ГОТОВО": "DONE",
+    "НАПРАВЛЕНИЯ СОВПАЛИ: ДАЛЬНОСТЬ ХОДЬБЫ И АТАКИ ВМЕСТЕ, КАЖДЫЙ ШАГ +2 КД.": "DIRECTIONS MATCH: WALKING AND ATTACK RANGE GROW TOGETHER, EACH STEP +2 CD.",
+    "ДАЛЬНОСТЬ ХОДЬБЫ, КАЖДЫЙ ШАГ +1 КД.": "WALKING RANGE, EACH STEP +1 CD.",
+    "ПРЫЖКИ: ХОД И АТАКА": "JUMPS: MOVE AND ATTACK",
+    "КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО": "EACH SQUARE +2 CD. CHOSEN",
+    "УСИЛИТЬ": "UPGRADE",
+    "ВСЕ 8 КЛЕТОК УЖЕ ВЫБРАНЫ, УСИЛИТЬ НЕЛЬЗЯ.": "ALL 8 SQUARES ARE ALREADY CHOSEN, NO UPGRADE POSSIBLE.",
+    "УСИЛЕНИЕ: ТОЛЬКО ХОДЬБА": "UPGRADE: WALKING ONLY",
+    "КАЖДАЯ КЛЕТКА +1 КД. ВСЕГО КЛЕТОК": "EACH SQUARE +1 CD. TOTAL SQUARES",
+    " ИЗ ": " OF ",
+    "СБОРКА РОБОТА · КД:": "ROBOT ASSEMBLY · CD:",
+    "◀ НАЗАД": "◀ BACK",
+    "ПРОДОЛЖИТЬ ▶": "CONTINUE ▶",
+    "Закрыть планшет": "Close the tablet"
+});
 
 let LANG = 'ru';
 try {
@@ -5917,7 +6073,7 @@ const _abilityCellsV = abilityCells;
 abilityCells = function (key, col, t, first) {
     const prev = VIEWER;
     VIEWER = col;
-    try { return JESTER_KEYS.includes(key) ? jesterCells(key, col) : MAGI_KEYS.includes(key) ? magiCells(key, col, first) : _abilityCellsV.apply(this, arguments); } finally { VIEWER = prev; }
+    try { return JESTER_KEYS.includes(key) ? jesterCells(key, col) : MAGI_KEYS.includes(key) ? magiCells(key, col, first) : ENG_KEYS.includes(key) ? engCells(key, col) : _abilityCellsV.apply(this, arguments); } finally { VIEWER = prev; }
 };
 const _onModeCellV = onModeCell;
 onModeCell = function () {
@@ -6377,6 +6533,254 @@ function revertHare(r, c, p) {
     G.fx.push({ r, c, type: 'poof' });
     addLog('n', p.invis ? '🐇 Заяц снова становится фигурой' : `🐇 Заяц на ${sqName(r, c)} снова становится фигурой: ${pieceSym(p)}${note}`);
 }
+
+/* =====================================================================
+   ИНЖЕНЕР (в разработке)
+   Сборка робота: планшет с зелёным ретро-экраном. Каждый нажатый квадрат идёт как обычное действие игрока (t: 'eng'),
+   поэтому онлайн и в повторах всё считается одинаково. Робот: фигура типа 'x', её правила лежат в p.rob.
+   Направления в планшете считаются от своей стороны (вверх = вперёд), в p.rob лежат готовые смещения [строка, столбец].
+   ===================================================================== */
+const ENG_KEYS = ['assemble', 'charger'];
+const ENG_DUMMY = { kind: 'boot', walk: [[1, 0]], atk: [], wr: 1, ar: 1 };      // пробный робот для проверки клеток появления
+const ENG_MAX_JUMP = 8;                                                          // сколько клеток крыла можно выбрать всего
+
+// Клетки, куда можно поставить робота (две первые горизонтали, король остаётся в безопасности) или зарядку (любая свободная клетка)
+function engCells(key, col) {
+    const b = G.board, cells = [];
+    if (key === 'assemble') {
+        const rows = col === 'w' ? [N - 1, N - 2] : [0, 1];
+        rows.forEach(r => {
+            if (r < 0 || r >= N) return;
+            for (let c = 0; c < N; c++) {
+                if (!isFreeCell(r, c)) continue;
+                const nb = cloneBoard(b);
+                nb[r][c] = { ...mk('x', col), moved: true, rob: ENG_DUMMY };
+                if (safeAfter(nb, col)) cells.push([r, c]);
+            }
+        });
+    } else if (key === 'charger') {
+        if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом плитка не спасает короля, а ход тратит
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) cells.push([r, c]);
+    }
+    return cells;
+}
+
+const engHas = (arr, d) => arr.some(x => x[0] === d[0] && x[1] === d[1]);
+const engToggle = (arr, d) => { const k = arr.findIndex(x => x[0] === d[0] && x[1] === d[1]); if (k >= 0) arr.splice(k, 1); else arr.push([d[0], d[1]]); };
+// Направления ходьбы и атаки совпали: дальность усиливается у обеих сразу
+const engSame = m => m.walk.length > 0 && m.walk.length === m.atk.length && m.walk.every(d => engHas(m.atk, d));
+// Сколько перезарядки добавляет собранный робот к базовым 3
+function engCost(m) {
+    if (m.kind === 'wing') return 4 + 2 * m.ja.length + m.jw.length;
+    if (m.kind !== 'boot') return 0;
+    return m.walk.length + m.atk.length + (m.wr - 1) * (engSame(m) ? 2 : 1);
+}
+// Готовые правила робота. Белые: вверх по экрану = к чёрным (строка −1); чёрные: наоборот
+function engBuild(m, col) {
+    const sg = col === 'w' ? 1 : -1, abs = d => [d[0] * sg, d[1] * sg];
+    if (m.kind === 'wing') return { kind: 'wing', ja: m.ja.map(abs), jw: m.jw.map(abs) };
+    return { kind: 'boot', walk: m.walk.map(abs), atk: m.atk.map(abs), wr: m.wr, ar: engSame(m) ? m.wr : 1 };
+}
+
+function engFinish(m) {
+    m.stage = 'spawn'; m.sel = null;
+    m.cells = abilityCells('assemble', G.turn);
+    if (!m.cells.length) { cancelAbilityMode(); return; }
+    G.sel = null;
+    render();
+}
+
+function engInput(msg) {
+    const m = G.mode;
+    if (!m || m.type !== 'assemble' || m.stage === 'spawn' || !msg) return;
+    const a = msg.a, v = msg.v, st = m.stage;
+    const go = ns => { m.hist.push(st); m.stage = ns; m.sel = null; };
+    const okD = (d, lim) => Array.isArray(d) && d.length === 2 && d.every(x => Number.isInteger(x) && Math.abs(x) <= lim) && (d[0] || d[1]);
+    if (a === 'close') { cancelAbilityMode(); return; }
+    if (a === 'back') {
+        if (!m.hist.length) { cancelAbilityMode(); return; }
+        m.stage = m.hist.pop(); m.sel = null;
+    } else if (a === 'pick') {
+        if ((st === 'kind' && (v === 'boot' || v === 'wing')) || ((st === 'after' || st === 'wingafter') && (v === 'boot' || v === 'x'))) {
+            if (st === 'wingafter' && v === 'boot' && m.ja.length >= ENG_MAX_JUMP) return;
+            m.sel = v;
+        } else return;
+    } else if (a === 'dir') {
+        if (!okD(v, 1)) return;
+        if (st === 'walk') engToggle(m.walk, v); else if (st === 'atk') engToggle(m.atk, v); else return;
+    } else if (a === 'jump') {
+        if (!okD(v, 2)) return;
+        if (st === 'wing') {
+            if (!engHas(m.ja, v) && m.ja.length >= ENG_MAX_JUMP) return;
+            engToggle(m.ja, v);
+        } else if (st === 'wingplus') {
+            if (engHas(m.ja, v)) return;
+            if (!engHas(m.jw, v) && m.ja.length + m.jw.length >= ENG_MAX_JUMP) return;
+            engToggle(m.jw, v);
+        } else return;
+    } else if (a === 'range') {
+        if (st !== 'range' || (v !== 1 && v !== -1)) return;
+        m.wr = Math.max(1, Math.min(N - 1, m.wr + v));
+    } else if (a === 'x2') {
+        if (st !== 'walk' || !m.walk.length) return;
+        m.atk = m.walk.map(d => [d[0], d[1]]);
+        go('after');
+    } else if (a === 'next') {
+        if (st === 'kind') { if (m.sel !== 'boot' && m.sel !== 'wing') return; m.kind = m.sel; go(m.sel === 'boot' ? 'walk' : 'wing'); }
+        else if (st === 'walk') go('atk');
+        else if (st === 'atk') { if (m.walk.length + m.atk.length < 1) return; go('after'); }
+        else if (st === 'after') {
+            if (m.sel === 'boot') go('range');
+            else if (m.sel === 'x') { m.wr = 1; engFinish(m); return; }
+            else return;
+        }
+        else if (st === 'range') { engFinish(m); return; }
+        else if (st === 'wing') { if (!m.ja.length) return; go('wingafter'); }
+        else if (st === 'wingafter') {
+            if (m.sel === 'boot') { if (m.ja.length >= ENG_MAX_JUMP) return; go('wingplus'); }
+            else if (m.sel === 'x') { engFinish(m); return; }
+            else return;
+        }
+        else if (st === 'wingplus') { engFinish(m); return; }
+    } else return;
+    render();
+}
+
+// Робот появляется на выбранной клетке; перезарядка = 3 + цена улучшений
+function doAssemble(r, c) {
+    const m = G.mode, col = G.turn, A = ABILITIES.assemble;
+    const rob = engBuild(m, col);
+    if (guardPlacement(col, r, c, nb => { nb[r][c] = { ...mk('x', col), moved: true, rob }; })) { cancelAbilityMode(); return; }
+    const cost = engCost(m);
+    G.board[r][c] = { ...mk('x', col), moved: true, rob };
+    if (!G.engCost) G.engCost = { w: 0, b: 0 };
+    G.engCost[col] = cost;
+    G.last = null;
+    G.fx.push({ r, c, type: 'revive' });
+    sfx('revive');
+    finishAbility('assemble', `${A.icon} ${A.name}: робот (${rob.kind === 'wing' ? 'крыло' : 'сапог'}) появляется на ${sqName(r, c)}`);
+}
+
+// Плитка-зарядка
+function doCharger(r, c) {
+    const col = G.turn, A = ABILITIES.charger;
+    if (!G.chargers) G.chargers = [];
+    G.chargers.push({ r, c, owner: col });
+    G.fx.push({ r, c, type: 'cast' });
+    sfx('trap');
+    G.last = null;
+    finishAbility('charger', `${A.icon} ${A.name}: плитка на ${sqName(r, c)}`);
+}
+
+/* ---------- Планшет: пиксельные картинки и экран ---------- */
+const ENG_SPR = {
+    pawn: ['...##...', '..####..', '...##...', '..####..', '...##...', '..####..', '.######.', '.######.'],
+    sword: ['...##....#.', '..####...#.', '...##....#.', '..####...#.', '...##...###', '..####....#', '.######...#', '.######...#'],
+    boot: ['.####.....', '.####.....', '.####.....', '.####.....', '.####.....', '.#######..', '.#########', '.#########', '.#########', '..########'],
+    wing: ['#.........', '##........', '###.......', '.####.....', '.######...', '..#######.', '...#######', '....######', '.....####.'],
+    arrow: ['...#...', '..###..', '.#####.', '...#...', '...#...', '...#...', '...#...'],
+    plus: ['...#...', '...#...', '...#...', '#######', '...#...', '...#...', '...#...'],
+    minus: ['.......', '.......', '.......', '#######', '.......', '.......', '.......'],
+    cross: Array.from({ length: 9 }, (_, i) => Array.from({ length: 9 }, (_, j) => (Math.abs(i - j) <= 1 || Math.abs(i + j - 8) <= 1) ? '#' : '.').join(''))
+};
+function engPix(name) {
+    const g = ENG_SPR[name], w = g[0].length, h = g.length;
+    let rects = '';
+    g.forEach((row, y) => { for (let x = 0; x < w; x++) if (row[x] === '#') rects += `<rect x="${x}" y="${y}" width="1" height="1"/>`; });
+    return `<svg class="eng-pix" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" fill="currentColor">${rects}</svg>`;
+}
+
+function engTabletHTML(m) {
+    const st = m.stage, d3 = [-1, 0, 1], d5 = [-2, -1, 0, 1, 2];
+    const kindNow = m.kind || m.sel;
+    let title = '', body = '', note = '', ok = true, x2 = false;
+    const sq = (act, val, on, inner, label, dis) => `<button class="eng-sq big${on ? ' on' : ''}" data-eng="${act}" data-v="${val}" ${dis ? 'disabled' : ''}>${inner}<i>${label}</i></button>`;
+    const dirGrid = list => '<div class="eng-grid g3">' + d3.map(i => d3.map(j => {
+        if (!i && !j) return `<div class="eng-sq static">${engPix(st === 'atk' ? 'sword' : 'pawn')}</div>`;
+        const deg = Math.round(Math.atan2(j, -i) * 180 / Math.PI);
+        return `<button class="eng-sq${engHas(list, [i, j]) ? ' on' : ''}" data-eng="dir" data-v="${i},${j}"><span class="eng-rot" style="transform:rotate(${deg}deg)">${engPix('arrow')}</span></button>`;
+    }).join('')).join('') + '</div>';
+    const jumpGrid = plus => '<div class="eng-grid g5">' + d5.map(i => d5.map(j => {
+        if (!i && !j) return `<div class="eng-sq static">${engPix('pawn')}</div>`;
+        const inA = engHas(m.ja, [i, j]), inW = engHas(m.jw, [i, j]);
+        const full = m.ja.length + m.jw.length >= ENG_MAX_JUMP;
+        const dis = plus ? inA : (!inA && m.ja.length >= ENG_MAX_JUMP);
+        return `<button class="eng-sq${inA ? ' on' : ''}${inW ? ' on walk' : ''}${plus && inA ? ' lock' : ''}" data-eng="jump" data-v="${i},${j}" ${dis || (plus && !inW && !inA && full) ? 'disabled' : ''}></button>`;
+    }).join('')).join('') + '</div>';
+
+    if (st === 'kind') {
+        title = 'ВЫБОР ФИГУРЫ';
+        body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'САПОГ<br>+0 КД') + sq('pick', 'wing', m.sel === 'wing', engPix('wing'), 'КРЫЛО<br>+4 КД') + '</div>';
+        note = 'САПОГ: ХОДИТ И РУБИТ, НЕ ПРЫГАЯ ЧЕРЕЗ ФИГУРЫ. КРЫЛО: ПРЫГАЕТ ПО КЛЕТКАМ.';
+        ok = m.sel === 'boot' || m.sel === 'wing';
+    } else if (st === 'walk') {
+        title = 'НАПРАВЛЕНИЯ ХОДЬБЫ'; x2 = true;
+        body = dirGrid(m.walk);
+        note = 'КАЖДАЯ СТРЕЛКА +1 КД. ХОД НА КЛЕТКУ ВПЕРЁД.';
+        ok = true;
+    } else if (st === 'atk') {
+        title = 'НАПРАВЛЕНИЯ АТАКИ';
+        body = dirGrid(m.atk);
+        note = 'КАЖДАЯ СТРЕЛКА +1 КД. НУЖНО ВЫБРАТЬ ХОТЯ БЫ ОДНО НАПРАВЛЕНИЕ.';
+        ok = m.walk.length + m.atk.length >= 1;
+    } else if (st === 'after') {
+        title = 'ЧТО ДАЛЬШЕ?';
+        body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'ДАЛЬНОСТЬ') + sq('pick', 'x', m.sel === 'x', engPix('cross'), 'ГОТОВО') + '</div>';
+        ok = m.sel === 'boot' || m.sel === 'x';
+    } else if (st === 'range') {
+        title = 'ДАЛЬНОСТЬ';
+        body = `<div class="eng-row"><div class="eng-sq big static">${engPix('pawn')}</div><div class="eng-col"><button class="eng-sq mini" data-eng="range" data-v="1">${engPix('plus')}</button><div class="eng-sq big static">${engPix('boot')}<b class="eng-num">${m.wr}</b></div><button class="eng-sq mini" data-eng="range" data-v="-1">${engPix('minus')}</button></div></div>`;
+        note = engSame(m) ? 'НАПРАВЛЕНИЯ СОВПАЛИ: ДАЛЬНОСТЬ ХОДЬБЫ И АТАКИ ВМЕСТЕ, КАЖДЫЙ ШАГ +2 КД.' : 'ДАЛЬНОСТЬ ХОДЬБЫ, КАЖДЫЙ ШАГ +1 КД.';
+    } else if (st === 'wing') {
+        title = 'ПРЫЖКИ: ХОД И АТАКА';
+        body = jumpGrid(false);
+        note = `КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО ${m.ja.length} ИЗ ${ENG_MAX_JUMP}.`;
+        ok = m.ja.length >= 1;
+    } else if (st === 'wingafter') {
+        title = 'ЧТО ДАЛЬШЕ?';
+        body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'УСИЛИТЬ', m.ja.length >= ENG_MAX_JUMP) + sq('pick', 'x', m.sel === 'x', engPix('cross'), 'ГОТОВО') + '</div>';
+        note = m.ja.length >= ENG_MAX_JUMP ? 'ВСЕ 8 КЛЕТОК УЖЕ ВЫБРАНЫ, УСИЛИТЬ НЕЛЬЗЯ.' : '';
+        ok = m.sel === 'boot' || m.sel === 'x';
+    } else if (st === 'wingplus') {
+        title = 'УСИЛЕНИЕ: ТОЛЬКО ХОДЬБА';
+        body = jumpGrid(true);
+        note = `КАЖДАЯ КЛЕТКА +1 КД. ВСЕГО КЛЕТОК ${m.ja.length + m.jw.length} ИЗ ${ENG_MAX_JUMP}.`;
+    }
+    const total = 3 + engCost({ ...m, kind: kindNow });
+    return `<div class="eng-tab"><button class="eng-close" data-eng="close" title="Закрыть планшет">✕</button>
+      <div class="eng-screen">
+        <div class="eng-head"><span class="eng-title">${title}</span>${x2 ? '<button class="eng-btn eng-x2" data-eng="x2" ' + (m.walk.length ? '' : 'disabled') + '>ПОДТВЕРДИТЬ ×2</button>' : ''}</div>
+        <div class="eng-body">${body}</div>
+        <div class="eng-note">${note}</div>
+        <div class="eng-cost">СБОРКА РОБОТА · КД: 3 + ${engCost({ ...m, kind: kindNow })} = ${total}</div>
+        <div class="eng-foot"><button class="eng-btn" data-eng="back">◀ НАЗАД</button><button class="eng-btn" data-eng="next" ${ok ? '' : 'disabled'}>ПРОДОЛЖИТЬ ▶</button></div>
+      </div></div>`;
+}
+
+function renderEngTablet() {
+    let ov = document.getElementById('engTablet');
+    const m = G && G.mode;
+    const show = !!(m && m.type === 'assemble' && m.stage !== 'spawn' && !G.over && isActor() && !REPLAY.on && REW.idx < 0);
+    if (!show) { if (ov) ov.classList.add('hidden'); return; }
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'engTablet';
+        ov.className = 'eng-ov';
+        ov.addEventListener('click', e => {
+            const b = e.target.closest('[data-eng]');
+            if (!b || b.disabled) return;
+            let v = b.dataset.v;
+            if (v !== undefined) { if (v.includes(',')) v = v.split(',').map(Number); else if (/^-?\d+$/.test(v)) v = Number(v); }
+            netDo({ t: 'eng', a: b.dataset.eng, v });
+        });
+        document.body.appendChild(ov);
+    }
+    ov.innerHTML = engTabletHTML(m);
+    ov.classList.remove('hidden');
+}
+const _renderEngBase = render;
+render = function () { _renderEngBase.apply(this, arguments); try { renderEngTablet(); } catch (e) { /* планшет не должен ломать партию */ } };
+
 
 /* =====================================================================
    АНИМАЦИИ СПОСОБНОСТЕЙ
