@@ -28,7 +28,7 @@ const CONFIG = {
         vine: 5, ritual: 5, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
         fog: 5, hatch: 3, hocus: 7, assistant: 6,        // Фокусник
-        assemble: 3, charger: 4                          // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
+        assemble: 3, charger: 4, turret: 5, reprogram: 1  // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
@@ -74,6 +74,7 @@ const pImg = (c, t) => `<i class="pi ${c} t-${t}">${GLYPH[t]}</i>`;   // мин�
 const SYM = { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' };
 GLYPH.j = '🦷'; SYM.j = '🦷';
 GLYPH.x = '🤖'; SYM.x = '🤖';      // робот Инженера
+GLYPH.u = '🗼'; SYM.u = '🗼';      // робот Инженера
 GLYPH.h = '🐇'; SYM.h = '🐇';      // заяц Фокусника (Ассистент)      // заводные челюсти Шута
 
 const ABILITIES = {
@@ -365,10 +366,18 @@ Object.assign(ABILITIES, {
     },
     charger: {
         icon: '🔋', name: 'Зарядка',
-        desc: 'Создаёт на свободной клетке плитку-зарядку. Если в начале вашего хода на ней стоит ваш робот, он получает бесплатный ход: им обязательно нужно сходить с зарядки (если ход не оставляет короля под шахом и ему есть куда идти), а потом сделать обычный ход.'
+        desc: 'Создаёт на свободной клетке плитку-зарядку. Пока ваш робот стоит на зарядке, он может сделать бесплатный ход, который не тратит ваш основной ход (ходить им необязательно). Один бесплатный ход за ход на каждого робота.'
+    },
+    turret: {
+        icon: '🗼', name: 'Сборка турели',
+        desc: 'Открывается планшет: вы собираете неподвижную турель. Мгновенная стрельба: выбираете клетки радиуса 3×3, враг, оказавшийся в них, уничтожается сразу. Дальняя артиллерия: выбираете клетки радиуса 5×5, если в одной из них появится новый враг, через ход туда прилетит выстрел. Турель появляется на свободной клетке ваших первых трёх горизонталей. Перезарядка 5 и ещё плюс за каждую клетку радиуса.'
+    },
+    reprogram: {
+        icon: '🛠', name: 'Перепрограммирование', free: true,
+        desc: 'Не тратит ход. Перенастраивает радиус вашей турели или ТОЛЬКО ходьбу вашего робота. Перезарядка 1, плюс 2 за каждую новую клетку турели и плюс 1 за каждую новую клетку или направление ходьбы робота.'
     }
 });
-HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника · в разработке', passive: 'engWip', abilities: ['assemble', 'charger'], dev: true };
+HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника · в разработке', passive: 'engWip', abilities: ['assemble', 'charger', 'turret', 'reprogram'], dev: true };
 
 // Способности, у которых выбор идёт в два шага: сначала фигура, потом клетка
 const ACTIVE_PASSIVES = ['aim', 'teleport', 'timeslow'];
@@ -384,7 +393,7 @@ const colorName = c => (c === 'w' ? 'Белые' : 'Чёрные');
 const cloneBoard = b => b.map(row => row.map(p => (p ? { ...p } : null)));
 const mk = (t, c) => ({ t, c, moved: false, shield: false, frozen: 0 });
 const uidOf = p => (p.uid || (p.uid = G.nextUid++));
-const cdOf = (col, k) => CONFIG.cooldown[k] + ((G.cdBonus && G.cdBonus[col] && G.cdBonus[col][k]) || 0) + (k === 'assemble' && G.engCost ? (G.engCost[col] | 0) : 0);      // Сборка робота: перезарядка 3 + цена выбранных улучшений
+const cdOf = (col, k) => CONFIG.cooldown[k] + ((G.cdBonus && G.cdBonus[col] && G.cdBonus[col][k]) || 0) + (k === 'assemble' && G.engCost ? (G.engCost[col] | 0) : 0) + (k === 'turret' && G.engCost ? (G.engCost[col + 't'] | 0) : 0) + (k === 'reprogram' && G.engCost ? (G.engCost[col + 'r'] | 0) : 0);      // Сборка робота: перезарядка 3 + цена выбранных улучшений
 let HIST = [];
 // Общий генератор случайных чисел (одинаковый у обоих игроков онлайн): влияет только на порядок строк в журнале
 let _seed = 1;
@@ -571,6 +580,7 @@ function robReach(b, r, c) {
 function lineSquares(b, r, c, tp) {
     const out = [];
     if (tp === 'x') return robReach(b, r, c);
+    if (tp === 'u') return out;
     if (tp === 'n') {
         const wp = b[r][c];
         KN.forEach(([dr, dc]) => { const tc = wcol(wp, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); });
@@ -588,6 +598,7 @@ function lineSquares(b, r, c, tp) {
 // Клетки, которые бьёт фигура (с учётом пришитых способов ходить)
 function attackSquares(b, r, c) {
     const p = b[r][c], out = [];
+    if (p.t === 'u') return out;      // турель стреляет по своим правилам, а не как фигура
     if (p.scared) {                               // напуганная фигура бьёт только на 1 клетку по своим направлениям
         if (p.t === 'p') return out;
         moveTypes(p).forEach(tp => scaredDirs(tp).forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) out.push([r + dr, tc]); }));
@@ -707,7 +718,7 @@ function kingSafe(b, col, fires, settle) {
         bb.forEach(row => row.forEach(p => { if (p && p.hypno === 1 && p.c === col) p.c = p.orig; }));
     }
     if (kingAttacked(bb, col)) return false;
-    const enemyFires = fires.filter(f => f.owner !== col);
+    const enemyFires = fires.filter(f => f.owner !== col && !(f.wait > 0));
     if (enemyFires.length) {
         const b2 = cloneBoard(bb);
         let changed = false;
@@ -740,7 +751,7 @@ function kingSafe(b, col, fires, settle) {
 
 function pseudoMoves(b, r, c) {
     const p = b[r][c], mv = [], seen = new Set();
-    if (!p || p.frozen > 0 || p.snared > 0) return mv;
+    if (!p || p.frozen > 0 || p.snared > 0 || p.t === 'u') return mv;      // турель не ходит
     const ghost = !!p.ghost;                                   // иллюзия ходит, но никого не рубит
     const harvest = !ghost && !p.orig && G.hero[p.c] === 'necromancer';   // Жатва: рубит свои пешки
     const add = (tr, tc, extra = {}) => {
@@ -929,7 +940,7 @@ const moveCells = mv => (mv.path ? [...mv.path, [mv.tr, mv.tc]] : pathCells(mv))
 
 // Применяет ход к доске (меняет её). Возвращает список погибших фигур.
 // Ценность фигур для выбора ангела-хранителя (у Франкенштейна считается исходная фигура, пришитые ходы не в счёт)
-const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, j: 1, h: 1, x: 4 };
+const PIECE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, j: 1, h: 1, x: 4, u: 3 };
 
 // Ангел-хранитель: если рядом с жертвой несколько ангелов, собой жертвует наименее ценный (при равенстве «случайный», одинаковый у обоих игроков онлайн).
 // Какую из погибающих фигур спасать, решает orderVictims: самую ценную (при равенстве слон раньше коня).
@@ -1550,7 +1561,6 @@ function givesCheck(b, mv) {
 function selectableMoves(r, c) {
     const p = G.board[r][c];
     if (G.archUsed) return [];             // Архитектор после способности не ходит фигурой
-    if (G.bonus && G.bonus.kind === 'charge' && (r !== G.bonus.r || c !== G.bonus.c)) return [];      // Зарядка: бесплатный ход только у робота на плитке
     let mv = legalMovesAt(G.board, r, c);
     if (p.ghost) {
         const o = findOriginal(p.pair);
@@ -1642,11 +1652,11 @@ function eatApply(board, r, c, tr, tc) {
 
 function frankTargets(r, c) {
     const b = G.board, p = b[r][c], out = [];
-    if (!p || p.ghost || p.frozen || p.snared || kSafe(p) || p.t === 'p' || p.orig) return out;
+    if (!p || p.ghost || p.frozen || p.snared || kSafe(p) || p.t === 'p' || p.t === 'u' || p.orig) return out;
     const seen = new Set();
     moveTypes(p).forEach(tp => lineSquares(b, r, c, tp).forEach(([tr, tc]) => {
         const t = b[tr][tc], k = tr * N + tc;
-        if (seen.has(k) || !t || t.ghost || t.c !== p.c || t.frozen || kSafe(t) || t.t === 'p' || t.t === 'x' || t.orig) return;
+        if (seen.has(k) || !t || t.ghost || t.c !== p.c || t.frozen || kSafe(t) || t.t === 'p' || t.t === 'x' || t.t === 'u' || t.orig) return;
         seen.add(k);
         const nb = cloneBoard(b);
         eatApply(nb, r, c, tr, tc);
@@ -2097,7 +2107,7 @@ function abilityAvailable(col, k) {
 }
 
 // Способности Шута, не тратящие ход и не спасающие короля (кожура, помидор): для мата и пата не считаются «действием»
-const NOT_AN_ESCAPE = ['banana', 'tomato', 'fog'];
+const NOT_AN_ESCAPE = ['banana', 'tomato', 'fog', 'reprogram'];
 function hasAnyAction(col) {
     if (col === G.turn && G.forced && G.forced.length) return true;
     if (anyLegalMove(G.board, col)) return true;
@@ -2142,7 +2152,7 @@ function guardSwap(r, c, unsafe) {
 }
 
 function toGrave(p) {
-    if (p.t === 'j') return;      // заводные челюсти не уходят в сброс
+    if (p.t === 'j' || p.t === 'u') return;      // заводные челюсти и турели не уходят в сброс
     if (p.t === 'k') return;      // срубленный король (режим «срубить все») в сброс не попадает
     if (p.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(p)}: фигура погибла`);
     G.deaths = (G.deaths || 0) + 1;
@@ -2160,7 +2170,7 @@ function newState(board, hero, win) {
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
         cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
-        bananas: [], walls: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false }, chargers: [], engCost: { w: 0, b: 0 },
+        bananas: [], walls: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false }, chargers: [], chargeUsed: [], engCost: { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 },
         win
     };
 }
@@ -2294,14 +2304,15 @@ function startTurn() {
     G.pairStep = null;
 
     // 1. Взрываются огненные шары и прилетают стрелы игрока, чей ход начинается
-    const mine = G.fire.filter(f => f.owner === c);
-    G.fire = G.fire.filter(f => f.owner !== c);
+    const mine = G.fire.filter(f => f.owner === c && !(f.wait > 0));
+    G.fire.forEach(f => { if (f.owner === c && f.wait > 0) f.wait--; });      // выстрел турели летит «через ход»: сначала ждёт один ход владельца
+    G.fire = G.fire.filter(f => !mine.includes(f));
     const hitVal = f => { const q = f.kind === 'shomen' ? null : G.board[f.r][f.c]; return q && !q.ghost ? (PIECE_VAL[q.t] || 0) : 0; };
     mine.sort((a, b) => hitVal(b) - hitVal(a));      // сначала то, что бьёт самые ценные фигуры: ангел спасёт их
     mine.forEach(f => {
         if (f.kind === 'shomen') { shomenStrike(f, c); return; }
-        const arrow = f.kind === 'arrow';
-        const name = arrow ? '🏹 Стрела' : '💥 Взрыв';
+        const arrow = f.kind === 'arrow' || f.kind === 'shell';
+        const name = f.kind === 'shell' ? '🎯 Выстрел турели' : arrow ? '🏹 Стрела' : '💥 Взрыв';
         const sq = sqName(f.r, f.c);
         const p = G.board[f.r][f.c];
         const fd = queueFlight(f.owner, f, arrow ? 'arrow' : 'fire', p);      // сколько секунд летит снаряд (0 = мгновенно)
@@ -2328,9 +2339,7 @@ function startTurn() {
     Object.keys(G.cd[c]).forEach(k => { if (k !== 'sawing' && G.cd[c][k] > 0) G.cd[c][k]--; });
     if (G.cd[other(c)] && G.cd[other(c)].sawing > 0) G.cd[other(c)].sawing--;      // Распиливание: перезарядка идёт по ходам соперника, чтобы угрозы от края видел и шах, и тот, кому он грозит
 
-    // Зарядка Инженера: робот на своей плитке в начале хода получает бесплатный ход
-    const chg = chargeRobot(c);
-    if (chg) { G.bonus = { kind: 'charge', r: chg[0], c: chg[1] }; addLog('n', `🔋 Робот на зарядке ${sqName(chg[0], chg[1])} получает бесплатный ход`); }
+    G.chargeUsed = [];      // Зарядка: в каждый ход у каждого робота на плитке один бесплатный ход
 
     // 3. Состояние партии
     const { attacked, latent } = computeState(c);
@@ -2359,18 +2368,6 @@ function startTurn() {
 
     render();
     if (G.over) showGameOver();
-}
-
-// Зарядка: свой робот на своей плитке, у которого есть законный ход (иначе бесплатного хода нет)
-function chargeRobot(c) {
-    if (!G.chargers || !G.chargers.length) return null;
-    for (const ch of G.chargers) {
-        if (ch.owner !== c) continue;
-        const q = G.board[ch.r][ch.c];
-        if (!q || q.t !== 'x' || q.c !== c || q.ghost || q.frozen > 0 || q.snared > 0) continue;
-        if (legalMovesAt(G.board, ch.r, ch.c).length) return [ch.r, ch.c];
-    }
-    return null;
 }
 
 // Продолжение хода того же игрока (доп. ход Жатвы, обычный ход после Апокалипсиса)
@@ -2572,6 +2569,7 @@ function endTurn() {
     sweepLures();
     sweepSharp();
     sweepGens();
+    turretScan();      // турели Инженера: мгновенные убивают врагов в радиусе, артиллерия наводится на новых
     G.vines.forEach(v => { if (v.owner === c) v.left--; });
     G.vines = G.vines.filter(v => v.left > 0);
     Object.keys(G.disabled[c] || {}).forEach(k => {      // Красная обструкция: отключение спадает в конце ходов самого игрока
@@ -2598,7 +2596,11 @@ function endTurn() {
 
 function tryMove(mv, ctx) {
     if (mv.decoy) { if (!mv.redirect) return; mv = mv.redirect; }   // «сквозь» невидимую фигуру: на деле рубка её (или ход невозможен)
-    ctx = ctx || (G.bonus ? { bonus: true, zw: G.bonus.kind === 'zw' ? G.bonus.step : 0, charge: G.bonus.kind === 'charge' } : {});
+    ctx = ctx || (G.bonus ? { bonus: true, zw: G.bonus.kind === 'zw' ? G.bonus.step : 0 } : {});
+    if (!G.bonus && !ctx.pairSecond && !ctx.apo && !ctx.charge) {      // Зарядка: ход робота с плитки бесплатный, обычный ход остаётся
+        const q0 = G.board[mv.fr][mv.fc];
+        if (chargeFree(q0, mv.fr, mv.fc)) ctx = { ...ctx, charge: true, cuid: uidOf(q0) };
+    }
     G.sel = null; G.moves = [];
     if (mv.promo) {
         const victim = G.board[mv.tr][mv.tc];
@@ -2748,8 +2750,9 @@ function executeMove(mv, promo, ctx) {
     const tail0 = () => {
         // Зарядка: бесплатный ход робота сделан, дальше обычный ход
         if (ctx.charge) {
-            G.bonus = null;
-            addLog('n', '🔋 Зарядка: бесплатный ход робота сделан, теперь обычный ход');
+            if (!G.chargeUsed) G.chargeUsed = [];
+            G.chargeUsed.push(ctx.cuid);
+            addLog('n', '🔋 Зарядка: бесплатный ход робота сделан, обычный ход ещё впереди');
             continueTurn();
             return;
         }
@@ -2828,7 +2831,7 @@ function lieOptions(r, c, first) {
 function doLie(from, R, F) {
     const b = G.board, p = b[from[0]][from[1]];
     const preview = { ...p, ghost: true };
-    hatchPlan([{ p, to: [R.tr, R.tc], label: 'Настоящая фигура' }, { p: preview, to: [F.tr, F.tc], label: 'Фейк' }],
+    hatchPlan([{ p, to: [R.tr, R.tc], label: 'Настоящая фигура', from }, { p: preview, to: [F.tr, F.tc], label: 'Фейк', from }],
         chosen => doLieApply(from, R, F, chosen), (r, c) => hatchPlanBump(r, c));
 }
 function doLieApply(from, R, F, chosen) {
@@ -2898,7 +2901,7 @@ function finishAbility(key, text) {
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = key;
     addLog(col, text);
-    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog') { continueTurn(); return; }   // свободное действие: после него обычный ход
+    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog' || key === 'reprogram') { continueTurn(); return; }   // свободное действие: после него обычный ход
     G.ep = null;
     if (G.hero[col] === 'architect') {      // пассивка «Мастер на все руки»: способности не заканчивают ход
         G.archUsed = true;
@@ -3052,7 +3055,7 @@ function useAbility(key, r, c, ref) {
 function doIllusion(from, A, B) {
     const b = G.board, p = b[from[0]][from[1]];
     const preview = { ...p, ghost: true };
-    hatchPlan([{ p, to: [A.tr, A.tc], label: 'Оригинал' }, { p: preview, to: [B.tr, B.tc], label: 'Иллюзия' }],
+    hatchPlan([{ p, to: [A.tr, A.tc], label: 'Оригинал', from }, { p: preview, to: [B.tr, B.tc], label: 'Иллюзия', from }],
         chosen => doIllusionApply(from, A, B, chosen), (r, c) => hatchPlanBump(r, c));
 }
 function doIllusionApply(from, A, B, chosen) {
@@ -3401,6 +3404,8 @@ function canPassive(col, k) {
 function startMode(k, via) {
     G.sel = null; G.moves = [];
     const base = via ? { type: k, via } : { type: k };
+    if (k === 'turret') { G.mode = { ...base, stage: 'tkind', cells: [], hist: [], sel: null, tk: null, tc: [] }; return; }
+    if (k === 'reprogram') { G.mode = { ...base, stage: 'piece', cells: abilityCells('reprogram', G.turn), hist: [], sel: null, target: null, rp: null }; return; }
     if (k === 'assemble') { G.mode = { ...base, stage: 'kind', cells: [], hist: [], kind: null, sel: null, walk: [], atk: [], wr: 1, ja: [], jw: [] }; return; }      // планшет Инженера
     if (k === 'resurrect' || k === 'raise') G.mode = { ...base, piece: null, cells: [] };
     else if (k === 'timeslow' || k === 'tomato') G.mode = { ...base, cells: [] };
@@ -3410,7 +3415,7 @@ function startMode(k, via) {
 }
 
 // Способности, зависящие от свободной клетки: попытка применить их на клетку с невидимой вражеской фигурой раскрывает её, ход не тратится
-const FREE_CELL_KEYS = ['assemble', 'charger', 'hatch', 'ritual', 'vine', 'virus', 'trap', 'lure', 'generator', 'conveyor', 'portals', 'relocate'];
+const FREE_CELL_KEYS = ['assemble', 'charger', 'turret', 'hatch', 'ritual', 'vine', 'virus', 'trap', 'lure', 'generator', 'conveyor', 'portals', 'relocate'];
 
 function onModeCell(r, c) {
     const m = G.mode, t = m.type;
@@ -3422,6 +3427,8 @@ function onModeCell(r, c) {
     if (ghostIntercept(r, c)) return;
     if (t === 'assemble') { if (m.stage === 'spawn') doAssemble(r, c); return; }
     if (t === 'charger') { doCharger(r, c); return; }
+    if (t === 'turret') { if (m.stage === 'spawn') doTurret(r, c); return; }
+    if (t === 'reprogram') { if (m.stage === 'piece') engPickRepro(r, c); return; }
     if (t === 'fog') { doFog(r, c); return; }
     if (t === 'hatch') {
         if (m.need === 2 && m.stage === 'piece') {          // первый люк из двух
@@ -3902,7 +3909,9 @@ function renderBoard() {
             G.fire.filter(x => x.r === r && x.c === c).forEach(f => {
                 html += f.kind === 'arrow'
                     ? `<div class="arrow-mark ${f.owner}">🏹</div>`
-                    : `<div class="fire-mark ${f.owner}">🔥</div>`;
+                    : f.kind === 'shell'
+                        ? `<div class="shell-mark ${f.owner}">🎯</div>`
+                        : `<div class="fire-mark ${f.owner}">🔥</div>`;
             });
             const cvm = G.conv.find(x => x.r === r && x.c === c);
             if (cvm) html += `<div class="conv-mark">${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[cvm.dir.map(x => (flip ? -x : x)).join(',')]}</div>`;
@@ -3949,6 +3958,7 @@ function renderBoard() {
                 if (auraProtected(G.board, r, c)) pc += ' aura';
                 if (must.has(r + ',' + c)) pc += ' must';
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'land')) pc += ' pop';
+                if (G.fx.some(x => x.r === r && x.c === c && x.type === 'raise')) pc += ' crawl';      // зомби выкарабкивается из-под земли
                 if (ANIM_HIDE.some(h => h.r === r && h.c === c && h.until > Date.now())) pc += ' anim-hide';
                 html += `<div class="${pc}">${GLYPH[p.t]}`;
                 if (p.x && p.x.length) html += `<span class="xs">${p.x.map(t => pImg(p.c, t)).join('')}</span>`;
@@ -3964,6 +3974,7 @@ function renderBoard() {
                 if (p.altruist > 0) html += `<span class="al">👼${p.altruist}</span>`;
                 if (p.t === 'j') html += `<span class="jl">${Number.isFinite(p.life) ? '⏳' + p.life : '∞'}</span>`;
                 if (p.t === 'x' && p.rob) html += `<span class="rb">${p.rob.kind === 'wing' ? '🪽' : '👢'}</span>`;
+                if (p.t === 'u' && p.tur) html += `<span class="rb">${p.tur.kind === 'instant' ? '⚡' : '🎯'}</span>`;
                 if (p.hare) html += `<span class="jl">🐇${p.hare.left}</span>`;
                 if (p.cap > 0 && jesterSees(p.capBy)) html += `<span class="cp">🤡${p.cap}</span>`;
                 if (p.betray && jesterSees(p.betray)) html += '<span class="bt">🃏</span>';
@@ -3977,6 +3988,7 @@ function renderBoard() {
             G.fx.filter(x => x.r === r && x.c === c && x.type !== 'land' && (!x.only || !NET.on || x.only === NET.me) && !fxHidden(x, r, c))
                 .forEach(x => {
                     if (x.delay > 0) ANIMQ.push({ k: 'lateFx', r, c, type: x.type, delay: x.delay });      // эффект появится, когда долетит снаряд
+                    else if (x.type === 'raise') html += `<div class="fx fx-raise"><b class="mound"></b>${[[-0.42, -0.55, 0], [-0.3, -0.8, 40], [-0.15, -0.95, 90], [0.0, -1.0, 20], [0.15, -0.9, 120], [0.3, -0.75, 60], [0.42, -0.5, 10], [-0.22, -0.6, 170], [0.22, -0.65, 140], [0.05, -0.7, 220]].map((d, i) => `<i class="dirt" style="--dx:${d[0]};--dy:${d[1]};--dl:${d[2]}ms;--ds:${i % 3}"></i>`).join('')}</div>`;
                     else html += `<div class="fx fx-${x.type}"></div>`;
                 });
             html += '</div>';
@@ -4091,7 +4103,7 @@ function renderStatus() {
     const st = $('#status'), hi = $('#hint');
     if (G.over) { st.textContent = G.over.title; st.className = 'status over'; hi.textContent = G.over.text; return; }
     let s = `Ход: ${colorName(G.turn)}`;
-    if (G.bonus) s += G.bonus.kind === 'zw' ? ` · ZA WARUDO, ход ${G.bonus.step}/2` : G.bonus.kind === 'charge' ? ' · зарядка, бесплатный ход робота' : ' · доп. ход';
+    if (G.bonus) s += G.bonus.kind === 'zw' ? ` · ZA WARUDO, ход ${G.bonus.step}/2` : ' · доп. ход';
     if (G.check === 'check') s += ' · ШАХ!';
     else if (G.check === 'latent') s += ' · шах после взрыва!';
     st.textContent = s;
@@ -4153,14 +4165,14 @@ function renderStatus() {
         else if (t === 'assistant') h = 'Выберите фигуру (не короля): она станет зайцем на ' + CONFIG.hareTurns + ' ваших хода.';
         else if (t === 'assemble') h = m.stage === 'spawn' ? '🤖 Робот готов: выберите свободную клетку на своих первых двух горизонталях, там он появится.' : 'Соберите робота на планшете.';
         else if (t === 'charger') h = '🔋 Выберите свободную клетку для плитки-зарядки.';
+        else if (t === 'turret') h = m.stage === 'spawn' ? '🗼 Турель готова: выберите свободную клетку на своих первых трёх горизонталях, там она появится.' : 'Соберите турель на планшете.';
+        else if (t === 'reprogram') h = m.stage === 'piece' ? '🛠 Выберите своего робота или свою турель для перепрограммирования (ход не тратится).' : 'Перенастройте фигуру на планшете.';
         else if (t === 'hatchexit') h = m.plan ? '🪵 ' + m.label + ' попала на люк: выберите люк, из которого она вылезет.' : '🪵 Фигура провалилась в люк: выберите свободный люк, из которого она вылезет.';
         if (m.via) h = '🪞 Зеркало: ' + h;
     } else if (G.sel && G.board[G.sel.r][G.sel.c] && G.board[G.sel.r][G.sel.c].betray === G.turn && G.board[G.sel.r][G.sel.c].c !== G.turn) {
         h = '🃏 Нажмите на фигуру ещё раз: она навсегда перейдёт на вашу сторону. Это тратит ход.';
     } else if (G.archUsed) {
         h = '🧰 Ходить фигурой уже нельзя: можно применить ещё способность или нажать «Завершить ход».';
-    } else if (G.bonus && G.bonus.kind === 'charge') {
-        h = '🔋 Зарядка: робот на плитке получает бесплатный ход. Сходите им (подсвечен), после этого обычный ход.';
     } else if (G.bonus) {
         h = G.bonus.kind === 'zw'
             ? (G.bonus.step === 1 ? '🕰️ ZA WARUDO: первый ход, им нельзя ни шаховать, ни рубить.' : '🕰️ ZA WARUDO: второй ход, теперь можно шаховать и рубить.')
@@ -5489,7 +5501,7 @@ Object.assign(EN, {
     [ABILITIES.assemble.name]: "Robot Assembly",
     [ABILITIES.assemble.desc]: "A tablet opens: you build a robot piece (boot: walks and captures along chosen directions without jumping over pieces, range can be upgraded; wing: jumps to chosen squares of a 5×5 area). The robot appears on a free square of your first two ranks. Cooldown 3 plus extra for every upgrade.",
     [ABILITIES.charger.name]: "Charger",
-    [ABILITIES.charger.desc]: "Creates a charger tile on a free square. If your robot stands on it at the start of your turn, it gets a free move: you must move it off the charger (if the move does not leave your king in check and it has somewhere to go), then make your normal move.",
+    [ABILITIES.charger.desc]: "Creates a charger tile on a free square. While your robot stands on the charger, it can make a free move that does not use your main move (moving it is optional). One free move per turn for each robot.",
     "Этот герой ещё в разработке: его можно выбрать в дружеских партиях и на одном экране.": "This hero is still in development: you can pick them in friendly games and on one screen.",
     "🤖 Робот готов: выберите свободную клетку на своих первых двух горизонталях, там он появится.": "🤖 The robot is ready: choose a free square on your first two ranks, it will appear there.",
     "Соберите робота на планшете.": "Build the robot on the tablet.",
@@ -5505,7 +5517,7 @@ Object.assign(EN, {
     "САПОГ": "BOOT",
     "КРЫЛО": "WING",
     "+0 КД": "+0 CD",
-    "+4 КД": "+4 CD",
+    "+3 КД": "+3 CD",
     "САПОГ: ХОДИТ И РУБИТ, НЕ ПРЫГАЯ ЧЕРЕЗ ФИГУРЫ. КРЫЛО: ПРЫГАЕТ ПО КЛЕТКАМ.": "BOOT: WALKS AND CAPTURES WITHOUT JUMPING OVER PIECES. WING: JUMPS ACROSS SQUARES.",
     "НАПРАВЛЕНИЯ ХОДЬБЫ": "WALKING DIRECTIONS",
     "НАПРАВЛЕНИЯ АТАКИ": "ATTACK DIRECTIONS",
@@ -5527,7 +5539,50 @@ Object.assign(EN, {
     "СБОРКА РОБОТА · КД:": "ROBOT ASSEMBLY · CD:",
     "◀ НАЗАД": "◀ BACK",
     "ПРОДОЛЖИТЬ ▶": "CONTINUE ▶",
-    "Закрыть планшет": "Close the tablet"
+    "Закрыть планшет": "Close the tablet",
+    "Забыли пароль?": "Forgot your password?",
+    "Восстановление пароля": "Password recovery",
+    "Новый пароль": "New password",
+    "Отправить письмо": "Send the email",
+    "Сохранить пароль": "Save password",
+    "Вспомнили пароль? Войти": "Remembered it? Sign in",
+    "Введите почту, на которую зарегистрирован аккаунт.": "Enter the email your account is registered with.",
+    "Если такая почта зарегистрирована, мы отправили письмо со ссылкой для нового пароля. Загляните и в «Спам».": "If this email is registered, we have sent a message with a link to set a new password. Check the spam folder too.",
+    "Новый пароль должен отличаться от старого.": "The new password must differ from the old one.",
+    "Ссылка устарела. Нажмите «Забыли пароль?» и запросите письмо заново.": "The link has expired. Press “Forgot your password?” and request a new email.",
+    [ABILITIES.turret.name]: "Turret Assembly",
+    [ABILITIES.turret.desc]: "A tablet opens: you build a stationary turret. Instant fire: you choose squares of a 3×3 radius; an enemy that ends up in them is destroyed at once. Long-range artillery: you choose squares of a 5×5 radius; if a new enemy appears in one of them, a shot lands there after a turn. The turret appears on a free square of your first three ranks. Cooldown 5 plus extra for every square of the radius.",
+    [ABILITIES.reprogram.name]: "Reprogramming",
+    [ABILITIES.reprogram.desc]: "Does not use your move. Reconfigures the radius of your turret or ONLY the walking of your robot. Cooldown 1, plus 2 for every new turret square and plus 1 for every new walking square or direction of the robot.",
+    "🗼 Турель готова: выберите свободную клетку на своих первых трёх горизонталях, там она появится.": "🗼 The turret is ready: choose a free square on your first three ranks, it will appear there.",
+    "Соберите турель на планшете.": "Build the turret on the tablet.",
+    "🛠 Выберите своего робота или свою турель для перепрограммирования (ход не тратится).": "🛠 Choose your robot or your turret to reprogram (does not use your move).",
+    "Перенастройте фигуру на планшете.": "Reconfigure the piece on the tablet.",
+    "🔋 Зарядка: бесплатный ход робота сделан, обычный ход ещё впереди": "🔋 Charger: the free robot move is done, your normal move is still ahead",
+    "ВЫБОР ТУРЕЛИ": "CHOOSE A TURRET",
+    "МГНОВЕННАЯ": "INSTANT",
+    "СТРЕЛЬБА": "FIRE",
+    "ДАЛЬНЯЯ": "LONG-RANGE",
+    "АРТИЛЛЕРИЯ": "ARTILLERY",
+    "МГНОВЕННАЯ: ВРАГ В РАДИУСЕ 3×3 УНИЧТОЖАЕТСЯ СРАЗУ. АРТИЛЛЕРИЯ: РАДИУС 5×5, ВЫСТРЕЛ ЧЕРЕЗ ХОД.": "INSTANT: AN ENEMY IN THE 3×3 RADIUS IS DESTROYED AT ONCE. ARTILLERY: 5×5 RADIUS, SHOT AFTER A TURN.",
+    "РАДИУС: МГНОВЕННАЯ СТРЕЛЬБА": "RADIUS: INSTANT FIRE",
+    "РАДИУС: АРТИЛЛЕРИЯ": "RADIUS: ARTILLERY",
+    "КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО": "EACH SQUARE +2 CD. CHOSEN",
+    "НУЖНА ХОТЯ БЫ ОДНА.": "AT LEAST ONE IS NEEDED.",
+    "СБОРКА ТУРЕЛИ · КД:": "TURRET ASSEMBLY · CD:",
+    "ПЕРЕПРОГРАММИРОВАНИЕ": "REPROGRAMMING",
+    "ПЕРЕПРОГРАММИРОВАНИЕ · КД:": "REPROGRAMMING · CD:",
+    "ПРИМЕНИТЬ ▶": "APPLY ▶",
+    "РАДИУС ТУРЕЛИ. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.": "TURRET RADIUS. EACH NEW SQUARE +2 CD.",
+    "ТОЛЬКО ХОДЬБА РОБОТА. КАЖДАЯ НОВАЯ КЛЕТКА +1 КД.": "ROBOT WALKING ONLY. EACH NEW SQUARE +1 CD.",
+    "ТОЛЬКО ХОДЬБА РОБОТА. КАЖДОЕ НОВОЕ НАПРАВЛЕНИЕ +1 КД.": "ROBOT WALKING ONLY. EACH NEW DIRECTION +1 CD.",
+    "🎯 Выстрел турели": "🎯 Turret shot",
+    "наводится на": "aims at",
+    "выстрел через ход": "the shot lands after a turn",
+    "мгновенно уничтожает": "instantly destroys",
+    "Турель на": "Turret on",
+    "перенастроена": "reconfigured",
+    "перенастроен": "reconfigured"
 });
 
 let LANG = 'ru';
@@ -6058,7 +6113,7 @@ render = function () {
     const chat = g('chat'), app = g('app'), log = g('log');
     if (!chat || !app || !log) return;
     const side = app.querySelector('.side-col'), logTitle = log.previousElementSibling;
-    const mq = window.matchMedia('(max-width: 760px)');
+    const mq = window.matchMedia('(max-width: 760px), (pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 600px)');
     const place = () => {
         if (mq.matches) { if (chat.parentElement !== side) side.insertBefore(chat, logTitle); }
         else if (chat.parentElement !== app) app.insertBefore(chat, side);
@@ -6280,7 +6335,7 @@ function hatchCellOpen(r, c, p, b) {
     const q = (b || G.board)[r][c];
     if (!q) return true;
     if (q === p) return false;
-    if (q.ghost) return !(p && p.ghost);
+    if (q.ghost) return true;      // иллюзия не мешает вылезти на её клетку (она рассеется), даже если выходит другая иллюзия
     return !!(p && q.invis && q.c !== p.c);
 }
 const hatchExits = (r, c, p) => (G.hatches || []).filter(h => !(h.r === r && h.c === c) && hatchCellOpen(h.r, h.c, p));
@@ -6297,10 +6352,10 @@ function fxHidden(x, r, c) {
     return fogAt(r, c) && !(q && q.c === NET.me);
 }
 
-function hatchFall(from, to) {
-    const p = G.board[from[0]][from[1]];
+function hatchFall(from, to, pp) {
+    const p = pp || G.board[from[0]][from[1]];      // pp: фигуру уже сняли с доски (две фигуры проваливаются одновременно)
     if (!p) return;
-    G.board[from[0]][from[1]] = null;
+    if (!pp) G.board[from[0]][from[1]] = null;
     G.board[to[0]][to[1]] = p;
     p.prev = [from[0], from[1]];
     G.fx.push({ r: to[0], c: to[1], type: 'ghost' });
@@ -6316,7 +6371,7 @@ function hatchFall(from, to) {
 function hatchGo(from, to) {
     const p = G.board[from[0]][from[1]], q = G.board[to[0]][to[1]];
     if (q && q.invis && !q.ghost && p && q.c !== p.c) { hatchBump(to); return true; }
-    if (q && q.ghost && p && !p.ghost) vanishGhost(to[0], to[1], 'из люка вылезла фигура');
+    if (q && q.ghost && p && q !== p) vanishGhost(to[0], to[1], 'из люка вылезла фигура');
     hatchFall(from, to);
     return false;
 }
@@ -6361,15 +6416,24 @@ function hatchPlan(items, cont, onBump) {
     items.forEach((it, i) => {
         if (G.hatches && G.hatches.length && !kSafe(it.p) && !(it.p.warded > 0) && G.hatches.some(h => h.r === it.to[0] && h.c === it.to[1])) falls.push(i);
     });
-    HATCH_PLAN = { items, falls, chosen: [], idx: 0, cont, onBump, via: G.mode && G.mode.via };      // via: способность вызвана через Зеркало
+    HATCH_PLAN = { items, falls, chosen: [], idx: 0, cont, onBump, via: G.mode && G.mode.via, from: items[0].from };      // via: способность вызвана через Зеркало
     hatchPlanNext();
 }
 function hatchPlanNext() {
     const P = HATCH_PLAN;
     while (P.idx < P.falls.length) {
         const i = P.falls[P.idx], it = P.items[i];
-        const land = P.items.map(x => x.to);
-        const exits = (G.hatches || []).filter(h => !land.some(l => l[0] === h.r && l[1] === h.c) && !P.chosen.some(ch => ch && ch[0] === h.r && ch[1] === h.c) && hatchCellOpen(h.r, h.c, it.p));
+        // Оригинал и копия проваливаются одновременно: люк, куда упала другая фигура, освобождается, поэтому выйти можно и из него.
+        // Нельзя выйти только из своего люка, из люка, где фигура остаётся стоять (король), и из уже выбранного
+        const stay = P.items.filter((x, j) => !P.falls.includes(j)).map(x => x.to);
+        const exits = (G.hatches || []).filter(h => {
+            if (h.r === it.to[0] && h.c === it.to[1]) return false;
+            if (stay.some(l => l[0] === h.r && l[1] === h.c)) return false;
+            if (P.chosen.some(ch => ch && ch[0] === h.r && ch[1] === h.c)) return false;
+            if (P.falls.some(j => P.items[j].to[0] === h.r && P.items[j].to[1] === h.c)) return true;      // туда упала другая фигура: люк освободится
+            if (P.from && h.r === P.from[0] && h.c === P.from[1]) return true;      // клетку, с которой фигура ушла, она освободила
+            return hatchCellOpen(h.r, h.c, it.p);
+        });
         if (!exits.length) { P.idx++; continue; }
         if (exits.length === 1) { hatchPlanTake(exits[0].r, exits[0].c); if (!HATCH_PLAN) return; continue; }
         G.mode = { type: 'hatchexit', locked: true, plan: true, via: P.via, label: it.label, cells: exits.map(h => [h.r, h.c]) };
@@ -6393,10 +6457,19 @@ function hatchPlanPick(r, c) {
 }
 // Применяет выбранные выходы: фигура и иллюзия уже стоят на люках и появляются из выбранных одновременно
 function hatchApplyPlan(items, chosen) {
+    const mv = [];
     items.forEach((it, i) => {
         if (!chosen[i]) return;
         const at = pieceObjAt(it.p);
-        if (at) hatchGo(at, chosen[i]);
+        if (at) mv.push({ p: it.p, from: at, to: chosen[i] });
+    });
+    if (!mv.length) return;
+    mv.forEach(m => { G.board[m.from[0]][m.from[1]] = null; });      // сначала обе фигуры исчезают в люках...
+    if (mv.length > 1 && rnd() < 0.5) mv.reverse();                  // ...порядок записи в журнале случайный: по нему не вычислить, где иллюзия
+    mv.forEach(m => {                                                // ...и потом появляются из выбранных люков одновременно
+        const q = G.board[m.to[0]][m.to[1]];
+        if (q && q.ghost && q !== m.p) vanishGhost(m.to[0], m.to[1], 'из люка вылезла фигура');
+        hatchFall(m.from, m.to, m.p);
     });
 }
 // Выбранный выход оказался занят невидимкой: способность отменяется целиком, ничего не потрачено
@@ -6438,7 +6511,7 @@ function hocusCells(col, a, first) {
 // Ассистент: фигура может стать зайцем, если после этого ваш король в безопасности
 function assistantOk(r, c, col) {
     const b = G.board, p = b[r][c];
-    if (!p || kSafe(p) || p.t === 'j' || p.t === 'h' || p.soul || p.sup || p.lie || hiddenFor(p, col)) return false;
+    if (!p || kSafe(p) || p.t === 'j' || p.t === 'h' || p.t === 'u' || p.soul || p.sup || p.lie || hiddenFor(p, col)) return false;
     if (p.c !== col && !p.ghost && magicProof(b, r, c)) return false;
     const nb = cloneBoard(b);
     dropGhostOn(nb, r, c);
@@ -6536,63 +6609,88 @@ function revertHare(r, c, p) {
 
 /* =====================================================================
    ИНЖЕНЕР (в разработке)
-   Сборка робота: планшет с зелёным ретро-экраном. Каждый нажатый квадрат идёт как обычное действие игрока (t: 'eng'),
+   Сборка робота и сборка турели: планшет с зелёным ретро-экраном. Каждый нажатый квадрат идёт как обычное действие игрока (t: 'eng'),
    поэтому онлайн и в повторах всё считается одинаково. Робот: фигура типа 'x', её правила лежат в p.rob.
-   Направления в планшете считаются от своей стороны (вверх = вперёд), в p.rob лежат готовые смещения [строка, столбец].
+   Турель: неподвижная фигура типа 'u', её радиус лежит в p.tur.
+   Направления в планшете считаются от своей стороны (вверх = вперёд), в p.rob и p.tur лежат готовые смещения [строка, столбец].
    ===================================================================== */
-const ENG_KEYS = ['assemble', 'charger'];
+const ENG_KEYS = ['assemble', 'charger', 'turret', 'reprogram'];
+const ENG_TAB_MODES = ['assemble', 'turret', 'reprogram'];
 const ENG_DUMMY = { kind: 'boot', walk: [[1, 0]], atk: [], wr: 1, ar: 1 };      // пробный робот для проверки клеток появления
 const ENG_MAX_JUMP = 8;                                                          // сколько клеток крыла можно выбрать всего
 
-// Клетки, куда можно поставить робота (две первые горизонтали, король остаётся в безопасности) или зарядку (любая свободная клетка)
+const engHas = (arr, d) => arr.some(x => x[0] === d[0] && x[1] === d[1]);
+const engToggle = (arr, d) => { const k = arr.findIndex(x => x[0] === d[0] && x[1] === d[1]); if (k >= 0) arr.splice(k, 1); else arr.push([d[0], d[1]]); };
+const engSign = col => (col === 'w' ? 1 : -1);
+const engAbs = (col, d) => [d[0] * engSign(col), d[1] * engSign(col)];       // из «вид игрока» в доску (и обратно: знак тот же)
+const turRows = col => (col === 'w' ? [N - 1, N - 2, N - 3] : [0, 1, 2]);
+
+// Клетки: появление робота (две первые горизонтали), появление турели (три первые), плитка-зарядка (любая свободная),
+// перепрограммирование (свои роботы и турели). Король остаётся в безопасности
 function engCells(key, col) {
     const b = G.board, cells = [];
-    if (key === 'assemble') {
-        const rows = col === 'w' ? [N - 1, N - 2] : [0, 1];
+    if (key === 'assemble' || key === 'turret') {
+        const rows = key === 'turret' ? turRows(col) : (col === 'w' ? [N - 1, N - 2] : [0, 1]);
+        const sample = key === 'turret' ? { ...mk('u', col), moved: true, tur: { kind: 'instant', cells: [[1, 0]], seen: [] } } : { ...mk('x', col), moved: true, rob: ENG_DUMMY };
         rows.forEach(r => {
             if (r < 0 || r >= N) return;
             for (let c = 0; c < N; c++) {
                 if (!isFreeCell(r, c)) continue;
                 const nb = cloneBoard(b);
-                nb[r][c] = { ...mk('x', col), moved: true, rob: ENG_DUMMY };
+                nb[r][c] = { ...sample };
                 if (safeAfter(nb, col)) cells.push([r, c]);
             }
         });
     } else if (key === 'charger') {
         if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом плитка не спасает короля, а ход тратит
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) cells.push([r, c]);
+    } else if (key === 'reprogram') {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+            const p = b[r][c];
+            if (p && p.c === col && !p.orig && !p.ghost && ((p.t === 'x' && p.rob) || (p.t === 'u' && p.tur))) cells.push([r, c]);
+        }
     }
     return cells;
 }
 
-const engHas = (arr, d) => arr.some(x => x[0] === d[0] && x[1] === d[1]);
-const engToggle = (arr, d) => { const k = arr.findIndex(x => x[0] === d[0] && x[1] === d[1]); if (k >= 0) arr.splice(k, 1); else arr.push([d[0], d[1]]); };
 // Направления ходьбы и атаки совпали: дальность усиливается у обеих сразу
 const engSame = m => m.walk.length > 0 && m.walk.length === m.atk.length && m.walk.every(d => engHas(m.atk, d));
-// Сколько перезарядки добавляет собранный робот к базовым 3
+// Сколько перезарядки добавляет собранное к базовой
 function engCost(m) {
-    if (m.kind === 'wing') return 4 + 2 * m.ja.length + m.jw.length;
+    if (m.type === 'turret') return 2 * m.tc.length;
+    if (m.kind === 'wing') return 3 + 2 * m.ja.length + m.jw.length;
     if (m.kind !== 'boot') return 0;
     return m.walk.length + m.atk.length + (m.wr - 1) * (engSame(m) ? 2 : 1);
 }
 // Готовые правила робота. Белые: вверх по экрану = к чёрным (строка −1); чёрные: наоборот
 function engBuild(m, col) {
-    const sg = col === 'w' ? 1 : -1, abs = d => [d[0] * sg, d[1] * sg];
+    const abs = d => engAbs(col, d);
     if (m.kind === 'wing') return { kind: 'wing', ja: m.ja.map(abs), jw: m.jw.map(abs) };
     return { kind: 'boot', walk: m.walk.map(abs), atk: m.atk.map(abs), wr: m.wr, ar: engSame(m) ? m.wr : 1 };
 }
 
 function engFinish(m) {
     m.stage = 'spawn'; m.sel = null;
-    m.cells = abilityCells('assemble', G.turn);
+    m.cells = abilityCells(m.type, G.turn);
     if (!m.cells.length) { cancelAbilityMode(); return; }
     G.sel = null;
     render();
 }
 
+// Перепрограммирование: что изменилось и сколько это стоит
+function engReproState(m) {
+    const rp = m.rp;
+    if (!rp) return { cost: 0, changed: false, valid: false, per: 1 };
+    const key = d => d[0] + ',' + d[1];
+    const diff = (a, b) => a.filter(d => !b.some(x => key(x) === key(d))).length;      // клеток в a, которых нет в b
+    if (rp.kind === 'turret') return { cost: 2 * diff(rp.tc, rp.old), changed: diff(rp.tc, rp.old) + diff(rp.old, rp.tc) > 0, valid: rp.tc.length >= 1, per: 2 };
+    if (rp.kind === 'wing') return { cost: diff(rp.jw, rp.old), changed: diff(rp.jw, rp.old) + diff(rp.old, rp.jw) > 0, valid: true, per: 1 };
+    return { cost: diff(rp.walk, rp.old), changed: diff(rp.walk, rp.old) + diff(rp.old, rp.walk) > 0, valid: rp.walk.length + rp.atk.length >= 1, per: 1 };
+}
+
 function engInput(msg) {
     const m = G.mode;
-    if (!m || m.type !== 'assemble' || m.stage === 'spawn' || !msg) return;
+    if (!m || !ENG_TAB_MODES.includes(m.type) || m.stage === 'spawn' || m.stage === 'piece' || !msg) return;
     const a = msg.a, v = msg.v, st = m.stage;
     const go = ns => { m.hist.push(st); m.stage = ns; m.sel = null; };
     const okD = (d, lim) => Array.isArray(d) && d.length === 2 && d.every(x => Number.isInteger(x) && Math.abs(x) <= lim) && (d[0] || d[1]);
@@ -6600,7 +6698,48 @@ function engInput(msg) {
     if (a === 'back') {
         if (!m.hist.length) { cancelAbilityMode(); return; }
         m.stage = m.hist.pop(); m.sel = null;
-    } else if (a === 'pick') {
+        if (m.stage === 'piece') { m.cells = abilityCells('reprogram', G.turn); m.rp = null; m.target = null; }
+        render();
+        return;
+    }
+    if (m.type === 'turret') {
+        if (a === 'pick') {
+            if (st === 'tkind' && (v === 'instant' || v === 'artillery')) m.sel = v; else return;
+        } else if (a === 'jump') {
+            if (st !== 'tcells' || !okD(v, m.tk === 'instant' ? 1 : 2)) return;
+            engToggle(m.tc, v);
+        } else if (a === 'next') {
+            if (st === 'tkind') { if (m.sel !== 'instant' && m.sel !== 'artillery') return; if (m.tk !== m.sel) m.tc = []; m.tk = m.sel; go('tcells'); }
+            else if (st === 'tcells') { if (!m.tc.length) return; engFinish(m); return; }
+            else return;
+        } else return;
+        render();
+        return;
+    }
+    if (m.type === 'reprogram') {
+        const rp = m.rp;
+        if (st !== 'rp' || !rp) return;
+        if (a === 'dir') {
+            if (rp.kind !== 'boot' || !okD(v, 1)) return;
+            engToggle(rp.walk, v);
+        } else if (a === 'jump') {
+            if (rp.kind === 'turret') { if (!okD(v, rp.tk === 'instant' ? 1 : 2)) return; engToggle(rp.tc, v); }
+            else if (rp.kind === 'wing') {
+                if (!okD(v, 2) || engHas(rp.ja, v)) return;
+                if (!engHas(rp.jw, v) && rp.ja.length + rp.jw.length >= ENG_MAX_JUMP) return;
+                engToggle(rp.jw, v);
+            } else return;
+        } else if (a === 'next') {
+            const s = engReproState(m);
+            if (!s.valid || !s.changed) return;
+            doReprogram(m);
+            return;
+        } else return;
+        render();
+        return;
+    }
+    // ---- сборка робота ----
+    if (a === 'pick') {
         if ((st === 'kind' && (v === 'boot' || v === 'wing')) || ((st === 'after' || st === 'wingafter') && (v === 'boot' || v === 'x'))) {
             if (st === 'wingafter' && v === 'boot' && m.ja.length >= ENG_MAX_JUMP) return;
             m.sel = v;
@@ -6653,12 +6792,43 @@ function doAssemble(r, c) {
     if (guardPlacement(col, r, c, nb => { nb[r][c] = { ...mk('x', col), moved: true, rob }; })) { cancelAbilityMode(); return; }
     const cost = engCost(m);
     G.board[r][c] = { ...mk('x', col), moved: true, rob };
-    if (!G.engCost) G.engCost = { w: 0, b: 0 };
+    if (!G.engCost) G.engCost = { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 };
     G.engCost[col] = cost;
     G.last = null;
     G.fx.push({ r, c, type: 'revive' });
     sfx('revive');
     finishAbility('assemble', `${A.icon} ${A.name}: робот (${rob.kind === 'wing' ? 'крыло' : 'сапог'}) появляется на ${sqName(r, c)}`);
+}
+
+// Турель появляется на выбранной клетке; перезарядка = 5 + 2 за каждую клетку радиуса
+function doTurret(r, c) {
+    const m = G.mode, col = G.turn, A = ABILITIES.turret;
+    const tur = { kind: m.tk, cells: m.tc.map(d => engAbs(col, d)), seen: [] };
+    if (guardPlacement(col, r, c, nb => { nb[r][c] = { ...mk('u', col), moved: true, tur }; })) { cancelAbilityMode(); return; }
+    G.board[r][c] = { ...mk('u', col), moved: true, tur };
+    turretSeen(r, c);
+    if (!G.engCost) G.engCost = { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 };
+    G.engCost[col + 't'] = engCost(m);
+    G.last = null;
+    G.fx.push({ r, c, type: 'revive' });
+    sfx('revive');
+    finishAbility('turret', `${A.icon} ${A.name}: ${tur.kind === 'instant' ? 'мгновенная стрельба' : 'дальняя артиллерия'} на ${sqName(r, c)}`);
+}
+
+// Перепрограммирование: свободное действие, ход не тратится
+function doReprogram(m) {
+    const col = G.turn, A = ABILITIES.reprogram;
+    const [r, c] = m.target, p = G.board[r][c], s = engReproState(m), rp = m.rp;
+    if (!p) { cancelAbilityMode(); return; }
+    const abs = d => engAbs(col, d);
+    if (rp.kind === 'turret') { p.tur.cells = rp.tc.map(abs); turretSeen(r, c); }
+    else if (rp.kind === 'wing') p.rob.jw = rp.jw.map(abs);
+    else p.rob.walk = rp.walk.map(abs);
+    if (!G.engCost) G.engCost = { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 };
+    G.engCost[col + 'r'] = s.cost;
+    G.fx.push({ r, c, type: 'cast' });
+    sfx('cast');
+    finishAbility('reprogram', `${A.icon} ${A.name}: ${p.t === 'u' ? 'турель' : 'робот'} на ${sqName(r, c)} перенастроен${p.t === 'u' ? 'а' : ''}`);
 }
 
 // Плитка-зарядка
@@ -6672,96 +6842,314 @@ function doCharger(r, c) {
     finishAbility('charger', `${A.icon} ${A.name}: плитка на ${sqName(r, c)}`);
 }
 
-/* ---------- Планшет: пиксельные картинки и экран ---------- */
+// Бесплатный ход: свой робот стоит на своей зарядке и ещё не пользовался ею в этот ход
+const chargeFree = (p, r, c) => !!p && p.t === 'x' && !p.ghost && p.c === G.turn && !p.orig && (G.chargers || []).some(x => x.r === r && x.c === c && x.owner === p.c) && !(G.chargeUsed || []).includes(p.uid);
+
+/* ---------- Турель: радиус, срабатывание, выстрел ---------- */
+const turKey = (q, rr, cc) => (q.ghost ? 'g' + (q.pair || 0) + ':' + rr + ',' + cc : String(uidOf(q)));
+// Враги, которые стоят в радиусе турели сейчас
+function turEnemies(r, c, p) {
+    const out = [];
+    p.tur.cells.forEach(([dr, dc]) => {
+        const rr = r + dr, cc = c + dc;
+        if (rr < 0 || rr >= N || cc < 0 || cc >= N) return;
+        const q = G.board[rr][cc];
+        if (q && q.c !== p.c) out.push([rr, cc, q]);
+    });
+    return out;
+}
+// Запомнить, кто уже стоит в радиусе (они не считаются «новым появлением»)
+function turretSeen(r, c) {
+    const p = G.board[r][c];
+    if (p && p.tur) p.tur.seen = turEnemies(r, c, p).map(([rr, cc, q]) => turKey(q, rr, cc));
+}
+// В конце каждого хода: мгновенная турель уничтожает врагов в радиусе, артиллерия готовит выстрел на новых
+function turretScan() {
+    const list = [];
+    G.board.forEach((row, r) => row.forEach((p, c) => { if (p && p.t === 'u' && p.tur && !p.ghost) list.push([r, c, p]); }));
+    let died = false;
+    list.forEach(([r, c, p]) => {
+        if (G.board[r][c] !== p) return;      // турель уже уничтожена в этот же момент
+        const near = turEnemies(r, c, p), here = sqName(r, c);
+        if (p.tur.kind === 'instant') {
+            near.forEach(([rr, cc, q]) => {
+                if (G.board[rr][cc] !== q) return;
+                const sq = sqName(rr, cc);
+                if (magicProof(G.board, rr, cc, p.c)) { if (!q.invis) addLog('n', `⚡ Турель на ${here} целится в ${sq}: цель неуязвима для магии`); return; }
+                G.fx.push({ r: rr, c: cc, type: 'arrowhit', delay: 0 });
+                sfx('arrow');
+                if (q.ghost) { vanishGhost(rr, cc, 'выстрел турели'); addLog('n', `⚡ Турель на ${here} стреляет в ${sq}`); died = true; return; }
+                const dp = guardSwap(rr, cc) || q;
+                G.board[rr][cc] = null;
+                toGrave(dp);
+                addLog('n', `⚡ Турель на ${here} мгновенно уничтожает ${pieceSym(dp)} на ${sq}`);
+                died = true;
+            });
+        } else {
+            const seen = new Set(p.tur.seen || []);
+            near.forEach(([rr, cc, q]) => {
+                if (seen.has(turKey(q, rr, cc))) return;
+                if (G.fire.some(f => f.kind === 'shell' && f.r === rr && f.c === cc && f.owner === p.c)) return;
+                G.fire.push({ r: rr, c: cc, owner: p.c, kind: 'shell', wait: 1 });
+                addLog('n', `🎯 Турель на ${here} наводится на ${sqName(rr, cc)}: выстрел через ход`);
+            });
+            turretSeen(r, c);
+        }
+    });
+    if (died) { soulSync(); checkIllusions(); }
+}
+
+/* ---------- Подсветка клеток робота и турели при нажатии ---------- */
+let ENG_INFO = null;      // { r, c, stamp }: осмотр чужой (или любой, когда не ваш ход) фигуры-робота или турели
+const engSpecial = p => !!p && !p.ghost && ((p.t === 'x' && p.rob) || (p.t === 'u' && p.tur));
+// Клетки робота: m: ходит, c: рубит (ходьба и рубка по направлениям считаются с учётом стоящих на пути фигур)
+function robMap(b, r, c) {
+    const p = b[r][c], rb = p.rob, out = new Map();
+    const add = (rr, cc, k) => { const key = rr + ',' + cc; const o = out.get(key) || { m: false, c: false }; o[k] = true; out.set(key, o); };
+    if (rb.kind === 'wing') {
+        (rb.ja || []).forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) { add(r + dr, tc, 'm'); add(r + dr, tc, 'c'); } });
+        (rb.jw || []).forEach(([dr, dc]) => { const tc = wcol(p, c + dc); if (r + dr >= 0 && r + dr < N && tc >= 0) add(r + dr, tc, 'm'); });
+        return out;
+    }
+    (rb.walk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (rr, cc, t, path) => {
+        if (path.length >= rb.wr) return true;
+        if (t && !t.ghost) return true;
+        add(rr, cc, 'm');
+        return false;
+    }));
+    (rb.atk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (rr, cc, t, path) => {
+        if (path.length >= rb.ar) return true;
+        if (t && !t.ghost) { if (t.c !== p.c) add(rr, cc, 'c'); return true; }
+        add(rr, cc, 'c');
+        return false;
+    }));
+    return out;
+}
+function engPaintInfo() {
+    const root = document.getElementById('board');
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('.cell.rbi-m,.cell.rbi-b,.cell.rbi-c,.cell.rbi-t,.cell.rbi-a').forEach(el => el.classList.remove('rbi-m', 'rbi-b', 'rbi-c', 'rbi-t', 'rbi-a'));
+    root.querySelectorAll('.piece.charged').forEach(el => el.classList.remove('charged'));
+    if (!G || G.over) return;
+    // осматриваемая фигура: чужая (по нажатию) или выбранная своя
+    let tgt = null;
+    if (ENG_INFO) {
+        const q = G.board[ENG_INFO.r][ENG_INFO.c];
+        if (engSpecial(q) && ENG_INFO.stamp === G.log.length) tgt = [ENG_INFO.r, ENG_INFO.c]; else ENG_INFO = null;
+    }
+    if (!tgt && G.sel && !G.mode && engSpecial(G.board[G.sel.r][G.sel.c])) tgt = [G.sel.r, G.sel.c];
+    const cellEl = (r, c) => root.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+    if (tgt) {
+        const [r, c] = tgt, p = G.board[r][c];
+        if (p.t === 'x') {
+            robMap(G.board, r, c).forEach((o, key) => {
+                const [rr, cc] = key.split(',').map(Number), el = cellEl(rr, cc);
+                if (el) el.classList.add(o.m && o.c ? 'rbi-b' : o.m ? 'rbi-m' : 'rbi-c');
+            });
+        } else {
+            p.tur.cells.forEach(([dr, dc]) => { const rr = r + dr, cc = c + dc; if (rr < 0 || rr >= N || cc < 0 || cc >= N) return; const el = cellEl(rr, cc); if (el) el.classList.add(p.tur.kind === 'instant' ? 'rbi-t' : 'rbi-a'); });
+        }
+        const LEG = p.t === 'x'
+            ? ['Робот: синие клетки: ходит, красные: ходит и рубит, фиолетовые: только рубит.', 'Robot: blue squares: moves, red: moves and captures, purple: captures only.']
+            : p.tur.kind === 'instant'
+                ? ['Турель: красные клетки: враг в них уничтожается сразу.', 'Turret: red squares: an enemy there is destroyed at once.']
+                : ['Турель: жёлтые клетки: если в них появится враг, через ход туда прилетит выстрел.', 'Turret: yellow squares: if an enemy appears there, a shot lands on it after a turn.'];
+        ['hint', 'mHint'].forEach(id => { const h = document.getElementById(id); if (h) h.textContent = L(LEG[0], LEG[1]); });
+    }
+    // робот на зарядке: бесплатный ход
+    if (!G.mode && isActor()) {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (chargeFree(G.board[r][c], r, c)) { const el = cellEl(r, c), pe = el && el.querySelector('.piece'); if (pe) pe.classList.add('charged'); }
+        if (G.sel && chargeFree(G.board[G.sel.r][G.sel.c], G.sel.r, G.sel.c)) ['hint', 'mHint'].forEach(id => { const h = document.getElementById(id); if (h) h.textContent = L('🔋 Робот на зарядке: этот ход бесплатный, после него вы ещё сходите как обычно.', '🔋 The robot is on a charger: this move is free, you still make your normal move after it.'); });
+    }
+}
+// Нажатие на чужого (или, когда не ваш ход, любого) робота или турель: показать, куда они дотягиваются, ничего не отправляя сопернику
+document.getElementById('board').addEventListener('click', e => {
+    const cell = e.target.closest('.cell');
+    if (!cell || !G || G.over || G.pendingPromo || REPLAY.on) return;
+    const r = +cell.dataset.r, c = +cell.dataset.c, p = G.board[r][c];
+    const me = NET.on ? NET.me : G.turn;
+    const actor = isActor();
+    const special = engSpecial(p) && !(p.invis && p.c !== me);
+    if (ENG_MIN && G.mode && ENG_TAB_MODES.includes(G.mode.type) && G.mode.stage !== 'spawn' && G.mode.stage !== 'piece') {      // планшет свёрнут: доска только для осмотра, сборка не сбрасывается
+        e.stopImmediatePropagation();
+        if (special) ENG_INFO = (ENG_INFO && ENG_INFO.r === r && ENG_INFO.c === c) ? null : { r, c, stamp: G.log.length };
+        else ENG_INFO = null;
+        render();
+        return;
+    }
+    const aimed = !!(G.mode && G.mode.cells && G.mode.cells.some(x => x[0] === r && x[1] === c)) || !!(G.sel && G.moves.some(m => m.tr === r && m.tc === c)) || !!G.pairStep;
+    if (special && !aimed && (p.c !== me || !actor)) {
+        e.stopImmediatePropagation();
+        ENG_INFO = (ENG_INFO && ENG_INFO.r === r && ENG_INFO.c === c) ? null : { r, c, stamp: G.log.length };
+        render();
+        return;
+    }
+    ENG_INFO = null;
+}, true);
+
+/* ---------- Пиксельные картинки и экран планшета ---------- */
 const ENG_SPR = {
-    pawn: ['...##...', '..####..', '...##...', '..####..', '...##...', '..####..', '.######.', '.######.'],
-    sword: ['...##....#.', '..####...#.', '...##....#.', '..####...#.', '...##...###', '..####....#', '.######...#', '.######...#'],
-    boot: ['.####.....', '.####.....', '.####.....', '.####.....', '.####.....', '.#######..', '.#########', '.#########', '.#########', '..########'],
+    // пешка: большая голова, шея, ступенька и основание
+    pawn: ['..####..', '..####..', '...##...', '...##...', '...##...', '..####..', '.######.', '.######.'],
+    // меч: длинный клинок, широкая гарда, короткая рукоять (ниже собирается пешка с мечом)
+    blade: ['..##..', '..##..', '..##..', '..##..', '..##..', '..##..', '..##..', '######', '######', '..##..', '..##..'],
+    boot: ['.####.....', '.####.....', '.####.....', '.####.....', '.####.....', '.#######..', '.#########', '.#########', '.#########', '.#########'],
     wing: ['#.........', '##........', '###.......', '.####.....', '.######...', '..#######.', '...#######', '....######', '.....####.'],
-    arrow: ['...#...', '..###..', '.#####.', '...#...', '...#...', '...#...', '...#...'],
+    arrow: ['....#....', '...###...', '..#####..', '.#######.', '....#....', '....#....', '....#....', '....#....', '....#....'],
     plus: ['...#...', '...#...', '...#...', '#######', '...#...', '...#...', '...#...'],
     minus: ['.......', '.......', '.......', '#######', '.......', '.......', '.......'],
+    bolt: ['.....###.', '....###..', '...###...', '..######.', '.....##..', '....##...', '...##....', '..#......', '.#.......'],
+    target: ['...###...', '.##...##.', '.#..#..#.', '#...#...#', '#.#####.#', '#...#...#', '.#..#..#.', '.##...##.', '...###...'],
+    tower: ['..####..', '.######.', '..####..', '..####..', '.######.', '.######.', '########', '########'],
     cross: Array.from({ length: 9 }, (_, i) => Array.from({ length: 9 }, (_, j) => (Math.abs(i - j) <= 1 || Math.abs(i + j - 8) <= 1) ? '#' : '.').join(''))
 };
+// пешка с мечом: пешка внизу слева, меч справа
+ENG_SPR.sword = ENG_SPR.blade.map((row, i) => {
+    const off = ENG_SPR.blade.length - ENG_SPR.pawn.length;
+    return (i >= off ? ENG_SPR.pawn[i - off] : '........') + '.' + row;
+});
 function engPix(name) {
     const g = ENG_SPR[name], w = g[0].length, h = g.length;
     let rects = '';
     g.forEach((row, y) => { for (let x = 0; x < w; x++) if (row[x] === '#') rects += `<rect x="${x}" y="${y}" width="1" height="1"/>`; });
-    return `<svg class="eng-pix" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" fill="currentColor">${rects}</svg>`;
+    return `<svg class="eng-pix${w > h + 3 ? ' wide' : ''}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" fill="currentColor">${rects}</svg>`;
 }
 
 function engTabletHTML(m) {
     const st = m.stage, d3 = [-1, 0, 1], d5 = [-2, -1, 0, 1, 2];
     const kindNow = m.kind || m.sel;
-    let title = '', body = '', note = '', ok = true, x2 = false;
+    let title = '', body = '', note = '', ok = true, x2 = false, costLine = '', nextLabel = 'ПРОДОЛЖИТЬ ▶';
     const sq = (act, val, on, inner, label, dis) => `<button class="eng-sq big${on ? ' on' : ''}" data-eng="${act}" data-v="${val}" ${dis ? 'disabled' : ''}>${inner}<i>${label}</i></button>`;
+    // сетка со стрелками (направления робота)
     const dirGrid = list => '<div class="eng-grid g3">' + d3.map(i => d3.map(j => {
         if (!i && !j) return `<div class="eng-sq static">${engPix(st === 'atk' ? 'sword' : 'pawn')}</div>`;
         const deg = Math.round(Math.atan2(j, -i) * 180 / Math.PI);
         return `<button class="eng-sq${engHas(list, [i, j]) ? ' on' : ''}" data-eng="dir" data-v="${i},${j}"><span class="eng-rot" style="transform:rotate(${deg}deg)">${engPix('arrow')}</span></button>`;
     }).join('')).join('') + '</div>';
-    const jumpGrid = plus => '<div class="eng-grid g5">' + d5.map(i => d5.map(j => {
-        if (!i && !j) return `<div class="eng-sq static">${engPix('pawn')}</div>`;
-        const inA = engHas(m.ja, [i, j]), inW = engHas(m.jw, [i, j]);
-        const full = m.ja.length + m.jw.length >= ENG_MAX_JUMP;
-        const dis = plus ? inA : (!inA && m.ja.length >= ENG_MAX_JUMP);
-        return `<button class="eng-sq${inA ? ' on' : ''}${inW ? ' on walk' : ''}${plus && inA ? ' lock' : ''}" data-eng="jump" data-v="${i},${j}" ${dis || (plus && !inW && !inA && full) ? 'disabled' : ''}></button>`;
-    }).join('')).join('') + '</div>';
-
-    if (st === 'kind') {
-        title = 'ВЫБОР ФИГУРЫ';
-        body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'САПОГ<br>+0 КД') + sq('pick', 'wing', m.sel === 'wing', engPix('wing'), 'КРЫЛО<br>+4 КД') + '</div>';
-        note = 'САПОГ: ХОДИТ И РУБИТ, НЕ ПРЫГАЯ ЧЕРЕЗ ФИГУРЫ. КРЫЛО: ПРЫГАЕТ ПО КЛЕТКАМ.';
-        ok = m.sel === 'boot' || m.sel === 'wing';
-    } else if (st === 'walk') {
-        title = 'НАПРАВЛЕНИЯ ХОДЬБЫ'; x2 = true;
-        body = dirGrid(m.walk);
-        note = 'КАЖДАЯ СТРЕЛКА +1 КД. ХОД НА КЛЕТКУ ВПЕРЁД.';
-        ok = true;
-    } else if (st === 'atk') {
-        title = 'НАПРАВЛЕНИЯ АТАКИ';
-        body = dirGrid(m.atk);
-        note = 'КАЖДАЯ СТРЕЛКА +1 КД. НУЖНО ВЫБРАТЬ ХОТЯ БЫ ОДНО НАПРАВЛЕНИЕ.';
-        ok = m.walk.length + m.atk.length >= 1;
-    } else if (st === 'after') {
-        title = 'ЧТО ДАЛЬШЕ?';
-        body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'ДАЛЬНОСТЬ') + sq('pick', 'x', m.sel === 'x', engPix('cross'), 'ГОТОВО') + '</div>';
-        ok = m.sel === 'boot' || m.sel === 'x';
-    } else if (st === 'range') {
-        title = 'ДАЛЬНОСТЬ';
-        body = `<div class="eng-row"><div class="eng-sq big static">${engPix('pawn')}</div><div class="eng-col"><button class="eng-sq mini" data-eng="range" data-v="1">${engPix('plus')}</button><div class="eng-sq big static">${engPix('boot')}<b class="eng-num">${m.wr}</b></div><button class="eng-sq mini" data-eng="range" data-v="-1">${engPix('minus')}</button></div></div>`;
-        note = engSame(m) ? 'НАПРАВЛЕНИЯ СОВПАЛИ: ДАЛЬНОСТЬ ХОДЬБЫ И АТАКИ ВМЕСТЕ, КАЖДЫЙ ШАГ +2 КД.' : 'ДАЛЬНОСТЬ ХОДЬБЫ, КАЖДЫЙ ШАГ +1 КД.';
-    } else if (st === 'wing') {
-        title = 'ПРЫЖКИ: ХОД И АТАКА';
-        body = jumpGrid(false);
-        note = `КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО ${m.ja.length} ИЗ ${ENG_MAX_JUMP}.`;
-        ok = m.ja.length >= 1;
-    } else if (st === 'wingafter') {
-        title = 'ЧТО ДАЛЬШЕ?';
-        body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'УСИЛИТЬ', m.ja.length >= ENG_MAX_JUMP) + sq('pick', 'x', m.sel === 'x', engPix('cross'), 'ГОТОВО') + '</div>';
-        note = m.ja.length >= ENG_MAX_JUMP ? 'ВСЕ 8 КЛЕТОК УЖЕ ВЫБРАНЫ, УСИЛИТЬ НЕЛЬЗЯ.' : '';
-        ok = m.sel === 'boot' || m.sel === 'x';
-    } else if (st === 'wingplus') {
-        title = 'УСИЛЕНИЕ: ТОЛЬКО ХОДЬБА';
-        body = jumpGrid(true);
-        note = `КАЖДАЯ КЛЕТКА +1 КД. ВСЕГО КЛЕТОК ${m.ja.length + m.jw.length} ИЗ ${ENG_MAX_JUMP}.`;
+    // сетка клеток 3×3 или 5×5: list: выбранные, lock: заблокированные (уже выбраны раньше), walk: цвет «только ходьба»
+    const cellGrid = (n, list, lock, walk, centerSprite) => {
+        const rng = n === 3 ? d3 : d5, full = (lock ? lock.length : 0) + list.length >= (n === 3 ? 8 : ENG_MAX_JUMP);
+        return `<div class="eng-grid g${n}">` + rng.map(i => rng.map(j => {
+            if (!i && !j) return `<div class="eng-sq static">${engPix(centerSprite)}</div>`;
+            const inL = lock && engHas(lock, [i, j]), inS = engHas(list, [i, j]);
+            const dis = inL || (n === 5 && walk && !inS && full);
+            return `<button class="eng-sq${inS ? ' on' : ''}${inS && walk ? ' walk' : ''}${inL ? ' on lock' : ''}" data-eng="jump" data-v="${i},${j}" ${dis ? 'disabled' : ''}></button>`;
+        }).join('')).join('') + '</div>';
+    };
+    if (m.type === 'turret') {
+        costLine = `СБОРКА ТУРЕЛИ · КД: 5 + ${engCost(m)} = ${5 + engCost(m)}`;
+        if (st === 'tkind') {
+            title = 'ВЫБОР ТУРЕЛИ';
+            body = '<div class="eng-row">' + sq('pick', 'instant', m.sel === 'instant', engPix('bolt'), 'МГНОВЕННАЯ<br>СТРЕЛЬБА') + sq('pick', 'artillery', m.sel === 'artillery', engPix('target'), 'ДАЛЬНЯЯ<br>АРТИЛЛЕРИЯ') + '</div>';
+            note = 'МГНОВЕННАЯ: ВРАГ В РАДИУСЕ 3×3 УНИЧТОЖАЕТСЯ СРАЗУ. АРТИЛЛЕРИЯ: РАДИУС 5×5, ВЫСТРЕЛ ЧЕРЕЗ ХОД.';
+            ok = m.sel === 'instant' || m.sel === 'artillery';
+        } else {
+            title = m.tk === 'instant' ? 'РАДИУС: МГНОВЕННАЯ СТРЕЛЬБА' : 'РАДИУС: АРТИЛЛЕРИЯ';
+            body = cellGrid(m.tk === 'instant' ? 3 : 5, m.tc, null, false, 'tower');
+            note = `КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО ${m.tc.length}. НУЖНА ХОТЯ БЫ ОДНА.`;
+            ok = m.tc.length >= 1;
+        }
+    } else if (m.type === 'reprogram') {
+        const rp = m.rp, s = engReproState(m);
+        title = 'ПЕРЕПРОГРАММИРОВАНИЕ';
+        nextLabel = 'ПРИМЕНИТЬ ▶';
+        ok = s.valid && s.changed;
+        costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: 1 + ${s.cost} = ${1 + s.cost}`;
+        if (rp.kind === 'turret') { body = cellGrid(rp.tk === 'instant' ? 3 : 5, rp.tc, null, false, 'tower'); note = 'РАДИУС ТУРЕЛИ. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.'; }
+        else if (rp.kind === 'wing') { body = cellGrid(5, rp.jw, rp.ja, true, 'pawn'); note = 'ТОЛЬКО ХОДЬБА РОБОТА. КАЖДАЯ НОВАЯ КЛЕТКА +1 КД.'; }
+        else { body = dirGrid(rp.walk); note = 'ТОЛЬКО ХОДЬБА РОБОТА. КАЖДОЕ НОВОЕ НАПРАВЛЕНИЕ +1 КД.'; }
+    } else {
+        costLine = `СБОРКА РОБОТА · КД: 3 + ${engCost({ ...m, kind: kindNow })} = ${3 + engCost({ ...m, kind: kindNow })}`;
+        if (st === 'kind') {
+            title = 'ВЫБОР ФИГУРЫ';
+            body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'САПОГ<br>+0 КД') + sq('pick', 'wing', m.sel === 'wing', engPix('wing'), 'КРЫЛО<br>+3 КД') + '</div>';
+            note = 'САПОГ: ХОДИТ И РУБИТ, НЕ ПРЫГАЯ ЧЕРЕЗ ФИГУРЫ. КРЫЛО: ПРЫГАЕТ ПО КЛЕТКАМ.';
+            ok = m.sel === 'boot' || m.sel === 'wing';
+        } else if (st === 'walk') {
+            title = 'НАПРАВЛЕНИЯ ХОДЬБЫ'; x2 = true;
+            body = dirGrid(m.walk);
+            note = 'КАЖДАЯ СТРЕЛКА +1 КД. ХОД НА КЛЕТКУ ВПЕРЁД.';
+        } else if (st === 'atk') {
+            title = 'НАПРАВЛЕНИЯ АТАКИ';
+            body = dirGrid(m.atk);
+            note = 'КАЖДАЯ СТРЕЛКА +1 КД. НУЖНО ВЫБРАТЬ ХОТЯ БЫ ОДНО НАПРАВЛЕНИЕ.';
+            ok = m.walk.length + m.atk.length >= 1;
+        } else if (st === 'after') {
+            title = 'ЧТО ДАЛЬШЕ?';
+            body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'ДАЛЬНОСТЬ') + sq('pick', 'x', m.sel === 'x', engPix('cross'), 'ГОТОВО') + '</div>';
+            ok = m.sel === 'boot' || m.sel === 'x';
+        } else if (st === 'range') {
+            title = 'ДАЛЬНОСТЬ';
+            body = `<div class="eng-row"><div class="eng-sq big static">${engPix('pawn')}</div><div class="eng-col"><button class="eng-sq mini" data-eng="range" data-v="1">${engPix('plus')}</button><div class="eng-sq big static">${engPix('boot')}<b class="eng-num">${m.wr}</b></div><button class="eng-sq mini" data-eng="range" data-v="-1">${engPix('minus')}</button></div></div>`;
+            note = engSame(m) ? 'НАПРАВЛЕНИЯ СОВПАЛИ: ДАЛЬНОСТЬ ХОДЬБЫ И АТАКИ ВМЕСТЕ, КАЖДЫЙ ШАГ +2 КД.' : 'ДАЛЬНОСТЬ ХОДЬБЫ, КАЖДЫЙ ШАГ +1 КД.';
+        } else if (st === 'wing') {
+            title = 'ПРЫЖКИ: ХОД И АТАКА';
+            body = cellGrid(5, m.ja, null, false, 'pawn');
+            note = `КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО ${m.ja.length} ИЗ ${ENG_MAX_JUMP}.`;
+            ok = m.ja.length >= 1;
+        } else if (st === 'wingafter') {
+            title = 'ЧТО ДАЛЬШЕ?';
+            body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'УСИЛИТЬ', m.ja.length >= ENG_MAX_JUMP) + sq('pick', 'x', m.sel === 'x', engPix('cross'), 'ГОТОВО') + '</div>';
+            note = m.ja.length >= ENG_MAX_JUMP ? 'ВСЕ 8 КЛЕТОК УЖЕ ВЫБРАНЫ, УСИЛИТЬ НЕЛЬЗЯ.' : '';
+            ok = m.sel === 'boot' || m.sel === 'x';
+        } else if (st === 'wingplus') {
+            title = 'УСИЛЕНИЕ: ТОЛЬКО ХОДЬБА';
+            body = cellGrid(5, m.jw, m.ja, true, 'pawn');
+            note = `КАЖДАЯ КЛЕТКА +1 КД. ВСЕГО КЛЕТОК ${m.ja.length + m.jw.length} ИЗ ${ENG_MAX_JUMP}.`;
+        }
     }
-    const total = 3 + engCost({ ...m, kind: kindNow });
-    return `<div class="eng-tab"><button class="eng-close" data-eng="close" title="Закрыть планшет">✕</button>
+    return `<div class="eng-tab"><button class="eng-close" data-eng="close" title="Закрыть планшет">✕</button><button class="eng-min" data-eng="min" title="Свернуть планшет">—</button>
       <div class="eng-screen">
         <div class="eng-head"><span class="eng-title">${title}</span>${x2 ? '<button class="eng-btn eng-x2" data-eng="x2" ' + (m.walk.length ? '' : 'disabled') + '>ПОДТВЕРДИТЬ ×2</button>' : ''}</div>
         <div class="eng-body">${body}</div>
         <div class="eng-note">${note}</div>
-        <div class="eng-cost">СБОРКА РОБОТА · КД: 3 + ${engCost({ ...m, kind: kindNow })} = ${total}</div>
-        <div class="eng-foot"><button class="eng-btn" data-eng="back">◀ НАЗАД</button><button class="eng-btn" data-eng="next" ${ok ? '' : 'disabled'}>ПРОДОЛЖИТЬ ▶</button></div>
+        <div class="eng-cost">${costLine}</div>
+        <div class="eng-foot"><button class="eng-btn" data-eng="back">◀ НАЗАД</button><button class="eng-btn" data-eng="next" ${ok ? '' : 'disabled'}>${nextLabel}</button></div>
       </div></div>`;
 }
 
+/* ---------- Звуки планшета: ретро-пиксельные «пшик» и бипы (только у того, кто нажимает) ---------- */
+function engNoise(d, v, delay = 0, hp = 3000) {
+    if (!CONFIG.sound) return;
+    try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const n = Math.max(1, Math.floor(actx.sampleRate * d)), buf = actx.createBuffer(1, n, actx.sampleRate), data = buf.getChannelData(0);
+        for (let i = 0; i < n; i += 4) { const x = Math.random() * 2 - 1; for (let j = 0; j < 4 && i + j < n; j++) data[i + j] = x; }      // «пиксельный» шум: значение держится по 4 отсчёта
+        const src = actx.createBufferSource(), g = actx.createGain(), f = actx.createBiquadFilter();
+        f.type = 'highpass'; f.frequency.value = hp;
+        const t = actx.currentTime + delay;
+        g.gain.setValueAtTime(v, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        src.buffer = buf; src.connect(f); f.connect(g); g.connect(actx.destination);
+        src.start(t);
+    } catch (e) { /* звук не критичен */ }
+}
+Object.assign(SFX, {
+    engClick: () => tone(1200, 0.025, 'square', 0.03),
+    engPick: () => { tone(700, 0.04, 'square', 0.04); tone(1050, 0.05, 'square', 0.04, 0.04); },
+    engOn: () => { tone(1000, 0.03, 'square', 0.035); tone(1500, 0.035, 'square', 0.03, 0.03); },
+    engOff: () => { tone(1000, 0.03, 'square', 0.035); tone(600, 0.04, 'square', 0.03, 0.03); },
+    engBack: () => { tone(800, 0.03, 'square', 0.035); tone(500, 0.05, 'square', 0.035, 0.03); },
+    engSwitch: () => { engNoise(0.09, 0.05, 0, 2500);[1800, 900, 1400, 600].forEach((f, i) => tone(f, 0.02, 'square', 0.025, i * 0.02)); },
+    engOk: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.07, 'square', 0.035, i * 0.06)),
+    engMin: () => { tone(900, 0.04, 'square', 0.03); tone(450, 0.06, 'square', 0.03, 0.04); },
+    engMax: () => { tone(450, 0.04, 'square', 0.03); tone(900, 0.06, 'square', 0.03, 0.04); },
+    raise: () => { tone(70, 0.5, 'sawtooth', 0.07); tone(110, 0.4, 'square', 0.04, 0.2);[150, 120, 170, 110, 140].forEach((f, i) => tone(f, 0.05, 'square', 0.025, 0.12 + i * 0.09)); engNoise(0.35, 0.03, 0.1, 600); }      // и земля сыплется
+});
+
+let ENG_MIN = false;      // планшет свёрнут: на доску можно смотреть, ничего не сбрасывается
+let ENG_LAST = null;      // какой экран планшета был показан в прошлый раз (для «глюка» при переходе)
 function renderEngTablet() {
-    let ov = document.getElementById('engTablet');
+    let ov = document.getElementById('engTablet'), mini = document.getElementById('engMini');
     const m = G && G.mode;
-    const show = !!(m && m.type === 'assemble' && m.stage !== 'spawn' && !G.over && isActor() && !REPLAY.on && REW.idx < 0);
-    if (!show) { if (ov) ov.classList.add('hidden'); return; }
+    const show = !!(m && ENG_TAB_MODES.includes(m.type) && m.stage !== 'spawn' && m.stage !== 'piece' && !G.over && isActor() && !REPLAY.on && REW.idx < 0);
+    if (!show) {
+        if (ov) ov.classList.add('hidden');
+        if (mini) mini.classList.add('hidden');
+        if (ENG_LAST && m && ENG_TAB_MODES.includes(m.type) && m.stage === 'spawn' && isActor() && !REPLAY.on) SFX.engOk();      // сборка подтверждена
+        ENG_MIN = false; ENG_LAST = null;
+        return;
+    }
     if (!ov) {
         ov = document.createElement('div');
         ov.id = 'engTablet';
@@ -6769,17 +7157,62 @@ function renderEngTablet() {
         ov.addEventListener('click', e => {
             const b = e.target.closest('[data-eng]');
             if (!b || b.disabled) return;
+            const act = b.dataset.eng;
+            if (act === 'min') { SFX.engMin(); ENG_MIN = true; renderEngTablet(); return; }      // только у себя, соперник ничего не видит
+            if (act === 'pick') SFX.engPick();
+            else if (act === 'dir' || act === 'jump') (b.classList.contains('on') ? SFX.engOff : SFX.engOn)();
+            else if (act === 'range') SFX.engOn();
+            else if (act === 'back' || act === 'close') SFX.engBack();
+            else SFX.engClick();
             let v = b.dataset.v;
             if (v !== undefined) { if (v.includes(',')) v = v.split(',').map(Number); else if (/^-?\d+$/.test(v)) v = Number(v); }
-            netDo({ t: 'eng', a: b.dataset.eng, v });
+            netDo({ t: 'eng', a: act, v });
         });
         document.body.appendChild(ov);
     }
+    if (!mini) {
+        mini = document.createElement('button');
+        mini.id = 'engMini';
+        mini.className = 'eng-mini-btn hidden';
+        mini.addEventListener('click', () => { SFX.engMax(); ENG_MIN = false; ENG_LAST = null; render(); });
+        document.body.appendChild(mini);
+    }
+    const key = m.type + ':' + m.stage;
+    if (ENG_MIN) {
+        ov.classList.add('hidden');
+        mini.textContent = '📟 ' + L('Планшет', 'Tablet');
+        mini.classList.remove('hidden');
+        ENG_LAST = key;
+        return;
+    }
+    mini.classList.add('hidden');
     ov.innerHTML = engTabletHTML(m);
     ov.classList.remove('hidden');
+    if (key !== ENG_LAST) {      // переход между экранами: экран на микросекунду «глючит» и расплывается, как переключение камер
+        const sc = ov.querySelector('.eng-screen');
+        if (sc) sc.classList.add('glitch');
+        SFX.engSwitch();
+    }
+    ENG_LAST = key;
 }
 const _renderEngBase = render;
-render = function () { _renderEngBase.apply(this, arguments); try { renderEngTablet(); } catch (e) { /* планшет не должен ломать партию */ } };
+render = function () {
+    _renderEngBase.apply(this, arguments);
+    try { renderEngTablet(); } catch (e) { /* планшет не должен ломать партию */ }
+    try { engPaintInfo(); } catch (e) { /* подсветка тоже */ }
+};
+
+// Выбор своего робота или турели для перепрограммирования (нажатие на клетку на доске)
+function engPickRepro(r, c) {
+    const m = G.mode, col = G.turn, p = G.board[r][c];
+    if (!p || !m.cells.some(x => x[0] === r && x[1] === c)) return;
+    const ui = d => engAbs(col, d);
+    m.hist.push('piece'); m.target = [r, c]; m.sel = null; m.stage = 'rp'; m.cells = [];
+    if (p.t === 'u') { const t = p.tur.cells.map(ui); m.rp = { kind: 'turret', tk: p.tur.kind, tc: t.map(d => [d[0], d[1]]), old: t.map(d => [d[0], d[1]]) }; }
+    else if (p.rob.kind === 'wing') { const w = p.rob.jw.map(ui); m.rp = { kind: 'wing', ja: p.rob.ja.map(ui), jw: w.map(d => [d[0], d[1]]), old: w.map(d => [d[0], d[1]]) }; }
+    else { const w = p.rob.walk.map(ui); m.rp = { kind: 'boot', walk: w.map(d => [d[0], d[1]]), atk: p.rob.atk.map(ui), old: w.map(d => [d[0], d[1]]) }; }
+    render();
+}
 
 
 /* =====================================================================
@@ -7188,16 +7621,18 @@ async function loadProfile() {
 
 function openAuth(mode) {
     authMode = mode;
-    const nick = mode === 'nick', signup = mode === 'signup';
-    $('#authTitle').textContent = nick ? 'Как вас называть?' : signup ? 'Регистрация' : 'Вход';
-    $('#authGoogleBox').classList.toggle('hidden', nick || !!window.Capacitor);   // в приложении вход через Google пока скрыт: Google не пускает во встроенный браузер
-    $('#authEmail').classList.toggle('hidden', nick);
-    $('#authPass').classList.toggle('hidden', nick);
+    const nick = mode === 'nick', signup = mode === 'signup', reset = mode === 'reset', newp = mode === 'newpass';
+    $('#authTitle').textContent = nick ? 'Как вас называть?' : signup ? 'Регистрация' : reset ? 'Восстановление пароля' : newp ? 'Новый пароль' : 'Вход';
+    $('#authGoogleBox').classList.toggle('hidden', nick || reset || newp || !!window.Capacitor);   // в приложении вход через Google пока скрыт: Google не пускает во встроенный браузер
+    $('#authEmail').classList.toggle('hidden', nick || newp);
+    $('#authPass').classList.toggle('hidden', nick || reset);
     $('#authNick').classList.toggle('hidden', !(nick || signup));
-    $('#authPass').autocomplete = signup ? 'new-password' : 'current-password';
-    $('#authSubmit').textContent = nick ? 'Сохранить ник' : signup ? 'Регистрация' : 'Войти';
-    $('#authSwitch').classList.toggle('hidden', nick);
-    $('#authSwitch').textContent = signup ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Регистрация';
+    $('#authPass').autocomplete = (signup || newp) ? 'new-password' : 'current-password';
+    $('#authPass').placeholder = newp ? L('Новый пароль (от 6 символов)', 'New password (6+ characters)') : L('Пароль (от 6 символов)', 'Password (6+ characters)');
+    $('#authSubmit').textContent = nick ? 'Сохранить ник' : signup ? 'Регистрация' : reset ? 'Отправить письмо' : newp ? 'Сохранить пароль' : 'Войти';
+    $('#authSwitch').classList.toggle('hidden', nick || newp);
+    $('#authSwitch').textContent = signup ? 'Уже есть аккаунт? Войти' : reset ? 'Вспомнили пароль? Войти' : 'Нет аккаунта? Регистрация';
+    $('#authForgot').classList.toggle('hidden', mode !== 'login');
     authMsg('');
     $('#auth').classList.remove('hidden');
 }
@@ -7213,6 +7648,8 @@ function authError(err) {
     if (/not confirmed/i.test(m)) return 'Подтвердите почту по ссылке из письма, затем войдите.';
     if (/rate limit|too many/i.test(m)) return 'Слишком много попыток, подождите немного.';
     if (/at least 6/i.test(m)) return 'Пароль должен быть не короче 6 символов.';
+    if (/different from the old|same as the old/i.test(m)) return 'Новый пароль должен отличаться от старого.';
+    if (/session missing|expired|invalid.*token|otp/i.test(m)) return 'Ссылка устарела. Нажмите «Забыли пароль?» и запросите письмо заново.';
     return m || 'Не удалось выполнить вход. Попробуйте ещё раз.';
 }
 
@@ -7229,6 +7666,23 @@ async function authSubmit() {
             ACC.needNick = false; ACC.loading = false;
             $('#auth').classList.add('hidden');
             await loadProfile();
+            return;
+        }
+        if (authMode === 'reset') {      // забыли пароль: письмо со ссылкой на новый пароль
+            const mail = $('#authEmail').value.trim();
+            if (!mail) { authMsg('Введите почту, на которую зарегистрирован аккаунт.'); return; }
+            const { error } = await SB.auth.resetPasswordForEmail(mail, { redirectTo: location.origin + location.pathname });
+            if (error) { authMsg(authError(error)); return; }
+            authMsg('Если такая почта зарегистрирована, мы отправили письмо со ссылкой для нового пароля. Загляните и в «Спам».');
+            return;
+        }
+        if (authMode === 'newpass') {      // пришли по ссылке из письма: задаём новый пароль
+            const np = $('#authPass').value;
+            if (np.length < 6) { authMsg('Пароль должен быть не короче 6 символов.'); return; }
+            const { error } = await SB.auth.updateUser({ password: np });
+            if (error) { authMsg(authError(error)); return; }
+            $('#authPass').value = '';
+            $('#auth').classList.add('hidden');
             return;
         }
         const email = $('#authEmail').value.trim(), pass = $('#authPass').value;
@@ -7464,6 +7918,7 @@ $('#collBody').addEventListener('click', e => {
 });
 $('#authSubmit').addEventListener('click', authSubmit);
 $('#authSwitch').addEventListener('click', () => openAuth(authMode === 'login' ? 'signup' : 'login'));
+$('#authForgot').addEventListener('click', () => openAuth('reset'));
 $('#authClose').addEventListener('click', () => $('#auth').classList.add('hidden'));
 ['authEmail', 'authPass', 'authNick'].forEach(id => $('#' + id).addEventListener('keydown', e => { if (e.key === 'Enter') authSubmit(); }));
 $('#authGoogle').addEventListener('click', async () => {
@@ -7474,6 +7929,7 @@ $('#authGoogle').addEventListener('click', async () => {
 
 if (SB) {
     SB.auth.onAuthStateChange((ev, session) => {
+        if (ev === 'PASSWORD_RECOVERY') setTimeout(() => openAuth('newpass'), 0);      // человек пришёл по ссылке из письма
         const prev = ACC.user && ACC.user.id;
         ACC.user = session ? session.user : null;
         if (!ACC.user) { ACC.profile = null; ACC.needNick = false; UNL.orbs = 0; UNL.heroes = []; accRefresh(); return; }
