@@ -356,7 +356,7 @@ HEROES.magician = { icon: '🎩', name: 'Фокусник', tag: 'Фокусы �
 
 // Инженер: собирает фигуру-робота по своим правилам и заряжает его на плитке
 PASSIVES.eureka = {
-    icon: '💡', name: 'Эврека',
+    icon: '💡', name: 'Эврика',
     desc: 'Один раз за бой можно аннулировать перезарядку любой своей способности: нажмите на способность, которая перезаряжается, и подтвердите выбор галочкой.'
 };
 Object.assign(ABILITIES, {
@@ -4108,7 +4108,7 @@ function panelHTML(col) {
         }
         const on = active && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
         const can = active && !lock && abilityAvailable(col, k);
-        const eu = active && !lock && !G.mode && !G.bonus && cd > 0 && !offT && !hideCd && eurekaReady(col);      // Эврека: можно обнулить перезарядку
+        const eu = active && !lock && !G.mode && !G.bonus && cd > 0 && !offT && !hideCd && eurekaReady(col);      // Эврика: можно обнулить перезарядку
         let sub = 'готово';
         if (cd > 0) sub = '';
         else if (active && G.bonus) sub = 'доп. ход';
@@ -4118,7 +4118,7 @@ function panelHTML(col) {
         else if (k === 'copy' && can) sub = '→ ' + ABILITIES[G.lastAb[other(col)]].name;
         if (offT) sub = '🍅 отключена';
         if (hideCd) sub = 'скрыто';      // применение не должно быть видно по перезарядке
-        if (eu) sub = '💡 Эврека?';
+        if (eu) sub = '💡 Эврика?';
         h += `<button class="ab ${on ? 'on' : ''}${offT ? ' tomatoed' : ''}${eu ? ' eureka-ready' : ''}" ${eu ? `data-eureka="${k}"` : `data-ab="${k}" ${can || on ? '' : 'disabled'}`} title="${abilityDesc(k)}">
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}${offT ? `<span class="tm-badge">🍅${offT}</span>` : ''}</button>`;
     });
@@ -4533,10 +4533,8 @@ $('#startBtn').addEventListener('click', () => {
     startGame();
 });
 
-$('#board').addEventListener('click', e => {
-    const cell = e.target.closest('.cell');
-    if (!cell || !G || G.over || G.pendingPromo) return;
-    const r = +cell.dataset.r, c = +cell.dataset.c;
+function boardCellAct(r, c) {
+    if (!G || G.over || G.pendingPromo) return;
     if (CONFIRM.on && !(NET.on && (NET.lost || !isActor())) && needsConfirm(r, c)) {      // режим «подтверждать ход кнопкой»
         CONFIRM.pend = { r, c };
         render();
@@ -4544,6 +4542,11 @@ $('#board').addEventListener('click', e => {
     }
     CONFIRM.pend = null;
     netDo({ t: 'cell', r, c });
+}
+$('#board').addEventListener('click', e => {
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    boardCellAct(+cell.dataset.r, +cell.dataset.c);
 });
 
 $('#app').addEventListener('click', e => {
@@ -5569,7 +5572,7 @@ Object.assign(EN, {
     [PASSIVES.eureka.name]: "Eureka",
     [PASSIVES.eureka.desc]: "Once per game you can nullify the cooldown of any of your abilities: click an ability that is recharging and confirm with the check mark.",
     " (использована)": " (used)",
-    "💡 Эврека?": "💡 Eureka?",
+    "💡 Эврика?": "💡 Eureka?",
     "💡 ЭВРЕКА": "💡 EUREKA",
     "ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ": "NULLIFY THE COOLDOWN OF",
     "? ЭТО МОЖНО СДЕЛАТЬ ОДИН РАЗ ЗА БОЙ.": "? YOU CAN DO THIS ONCE PER GAME.",
@@ -6201,7 +6204,7 @@ render = function () {
     const chat = g('chat'), app = g('app'), log = g('log');
     if (!chat || !app || !log) return;
     const side = app.querySelector('.side-col'), logTitle = log.previousElementSibling;
-    const mq = window.matchMedia('(max-width: 760px), (pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 600px)');
+    const mq = window.matchMedia('(max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px)');
     const place = () => {
         if (mq.matches) { if (chat.parentElement !== side) side.insertBefore(chat, logTitle); }
         else if (chat.parentElement !== app) app.insertBefore(chat, side);
@@ -7015,7 +7018,7 @@ function turretScan() {
     if (died) { soulSync(); checkIllusions(); }
 }
 
-/* ---------- Эврека: один раз за бой аннулировать перезарядку способности ---------- */
+/* ---------- Эврика: один раз за бой аннулировать перезарядку способности ---------- */
 const eurekaReady = col => !!G && G.hero[col] === 'engineer' && !(G.eurekaUsed && G.eurekaUsed[col]);
 function doEureka(k) {
     const col = G.turn;
@@ -7025,7 +7028,7 @@ function doEureka(k) {
     G.eurekaUsed[col] = true;
     G.fx.push({ r: -1, c: -1, type: 'cast' });
     sfx('shield');
-    addLog(col, `💡 Эврека! Перезарядка способности «${ABILITIES[k].name}» аннулирована`);
+    addLog(col, `💡 Эврика! Перезарядка способности «${ABILITIES[k].name}» аннулирована`);
     render();
 }
 // Подтверждение: два зелёных квадрата, галочка и крестик
@@ -7143,8 +7146,8 @@ document.getElementById('board').addEventListener('click', e => {
 
 /* ---------- Пиксельные картинки и экран планшета ---------- */
 const ENG_SPR = {
-    // пешка: большая круглая голова, шея, ступенька и основание
-    pawn: ['..####..', '.######.', '.######.', '..####..', '...##...', '...##...', '..####..', '.######.', '.######.'],
+    // пешка: маленькая голова, шея, широкое тело и основание
+    pawn: ['...##...', '..####..', '..####..', '...##...', '..####..', '..####..', '.######.', '.######.', '########'],
     // меч: длинный клинок, широкая гарда, короткая рукоять (ниже собирается пешка с мечом)
     blade: ['..##..', '..##..', '..##..', '..##..', '..##..', '..##..', '..##..', '######', '######', '..##..', '..##..'],
     boot: ['.####.....', '.####.....', '.####.....', '.####.....', '.####.....', '.#######..', '.#########', '.#########', '.#########', '.#########'],
@@ -9014,4 +9017,76 @@ abilityCells = function (key) {
     if (res.show) out.show = res.show.filter(ok);
     return out;
 };
+
+// ===== Перетаскивание фигуры на клетку (мышью и пальцем). Обычные клики работают как раньше =====
+(function () {
+    const board = document.getElementById('board');
+    if (!board) return;
+    let d = null, swallow = false;
+    const stop = () => {
+        if (d && d.ghost) d.ghost.remove();
+        board.querySelectorAll('.drag-src').forEach(x => x.classList.remove('drag-src'));
+        document.body.classList.remove('piece-drag');
+        d = null;
+    };
+    const place = (g, x, y) => { g.style.left = x + 'px'; g.style.top = y + 'px'; };
+    board.addEventListener('pointerdown', e => {
+        if (d || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        const cell = e.target.closest('.cell');
+        if (!cell || !G || G.over || G.pendingPromo || REPLAY.on || REW.idx >= 0) return;
+        const r = +cell.dataset.r, c = +cell.dataset.c, p = G.board[r] && G.board[r][c];
+        if (!p || p.c !== G.turn || (NET.on && (NET.lost || !isActor()))) return;      // тащить можно только свою фигуру в свой ход
+        d = { id: e.pointerId, r, c, x0: e.clientX, y0: e.clientY, on: false, ghost: null };
+    });
+    document.addEventListener('pointermove', e => {
+        if (!d || e.pointerId !== d.id) return;
+        if (!d.on) {
+            if (Math.abs(e.clientX - d.x0) + Math.abs(e.clientY - d.y0) < 10) return;
+            if (!G || G.over || G.mode) { stop(); return; }      // во время способностей перетаскивание не нужно
+            const same = G.sel && G.sel.r === d.r && G.sel.c === d.c;
+            if (!same) {
+                if (G.sel) netDo({ t: 'esc' });
+                CONFIRM.pend = null;
+                netDo({ t: 'cell', r: d.r, c: d.c });
+            }
+            if (!G.sel || G.sel.r !== d.r || G.sel.c !== d.c) { stop(); return; }      // выбрать эту фигуру нельзя
+            const src = board.querySelector(`.cell[data-r="${d.r}"][data-c="${d.c}"] .piece`);
+            if (!src) { stop(); return; }
+            const sz = src.getBoundingClientRect(), g = src.cloneNode(true);
+            g.classList.add('drag-ghost');
+            g.style.width = sz.width + 'px'; g.style.height = sz.height + 'px';
+            document.body.appendChild(g);
+            src.classList.add('drag-src');
+            d.ghost = g; d.on = true; d.w = sz.width; d.h = sz.height;
+            document.body.classList.add('piece-drag');
+            try { board.setPointerCapture(e.pointerId); } catch (x) { }
+        }
+        place(d.ghost, e.clientX - d.w / 2, e.clientY - d.h * 0.8);      // фигура чуть выше пальца, чтобы её было видно
+        e.preventDefault();
+        const el = document.elementFromPoint(e.clientX, e.clientY), cell = el && el.closest ? el.closest('#board .cell') : null;
+        board.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
+        if (cell) cell.classList.add('drag-over');
+    }, { passive: false });
+    const finish = (e, drop) => {
+        if (!d || e.pointerId !== d.id) return;
+        const was = d.on;
+        let cell = null;
+        if (was && drop) { const el = document.elementFromPoint(e.clientX, e.clientY); cell = el && el.closest ? el.closest('#board .cell') : null; }
+        board.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
+        const from = d;
+        stop();
+        if (was) {
+            swallow = true; setTimeout(() => { swallow = false; }, 350);      // клик после перетаскивания игнорируем
+            if (cell) {
+                const r = +cell.dataset.r, c = +cell.dataset.c;
+                if (r !== from.r || c !== from.c) boardCellAct(r, c);      // отпустили на другой клетке: как обычное нажатие на неё
+            }
+        }
+    };
+    document.addEventListener('pointerup', e => finish(e, true));
+    document.addEventListener('pointercancel', e => finish(e, false));
+    document.addEventListener('click', e => { if (swallow) { e.stopPropagation(); e.preventDefault(); swallow = false; } }, true);
+    board.addEventListener('dragstart', e => e.preventDefault());
+})();
+
 tryResume();
