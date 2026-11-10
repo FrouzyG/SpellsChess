@@ -354,7 +354,7 @@ Object.assign(ABILITIES, {
 });
 HEROES.magician = { icon: '🎩', name: 'Фокусник', tag: 'Фокусы и пропажи', passive: 'sawing', abilities: ['fog', 'hatch', 'hocus', 'assistant'] };
 
-// Инженер (в разработке): собирает фигуру-робота по своим правилам и заряжает его на плитке
+// Инженер: собирает фигуру-робота по своим правилам и заряжает его на плитке
 PASSIVES.eureka = {
     icon: '💡', name: 'Эврека',
     desc: 'Один раз за бой можно аннулировать перезарядку любой своей способности: нажмите на способность, которая перезаряжается, и подтвердите выбор галочкой.'
@@ -377,7 +377,7 @@ Object.assign(ABILITIES, {
         desc: 'Тратит ход. Робот перестраивается заново на планшете (как при сборке, прежний выбор остаётся, его можно убрать и добавить новое), у турели радиус выбирается заново. Перезарядка 1, плюс за каждую НОВУЮ клетку или направление: у робота как при сборке, у турели по 2.'
     }
 });
-HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника · в разработке', passive: 'eureka', abilities: ['assemble', 'charger', 'turret', 'reprogram'], dev: true };
+HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника', passive: 'eureka', abilities: ['assemble', 'charger', 'turret', 'reprogram'], dev: true };
 
 // Способности, у которых выбор идёт в два шага: сначала фигура, потом клетка
 const ACTIVE_PASSIVES = ['aim', 'teleport', 'timeslow'];
@@ -2315,7 +2315,14 @@ function startTurn() {
         const name = f.kind === 'shell' ? '🎯 Выстрел турели' : arrow ? '🏹 Стрела' : '💥 Взрыв';
         const sq = sqName(f.r, f.c);
         const p = G.board[f.r][f.c];
-        const fd = queueFlight(f.owner, f, arrow ? 'arrow' : 'fire', p);      // сколько секунд летит снаряд (0 = мгновенно)
+        let fd;      // сколько секунд летит снаряд (0 = мгновенно)
+        if (f.kind === 'shell') {      // выстрел турели: пуля летит от самой турели; если турель уже уничтожена, выстрела нет
+            let src = null;
+            G.board.forEach((row, r0) => row.forEach((q0, c0) => { if (q0 && q0.t === 'u' && q0.uid === f.tu && q0.c === f.owner) src = [r0, c0]; }));
+            if (!src) { addLog(c, `${name} на ${sq}: турель уничтожена, выстрела не будет`); return; }
+            fd = queueBullet(src, [f.r, f.c], p, 0.55);
+            G.fx.push({ r: src[0], c: src[1], type: 'zap' });
+        } else fd = queueFlight(f.owner, f, arrow ? 'arrow' : 'fire', p);
         G.fx.push({ r: f.r, c: f.c, type: arrow ? 'arrowhit' : 'boom', delay: fd });
         sfxLater(arrow ? 'arrow' : 'boom', fd);
         if (!p) addLog(c, `${name} на ${sq}: там никого нет`);
@@ -2432,7 +2439,7 @@ function sweepChargers() {
     G.board.forEach((row, r) => row.forEach((p, c) => {
         if (!p) return;
         if (!on.has(r + ',' + c)) { if (p.onChg) delete p.onChg; return; }
-        if (p.onChg || p.ghost) return;      // разряд только в момент, когда фигура встала на плитку
+        if (p.onChg || p.ghost || p.t === 'u') return;      // разряд только в момент, когда фигура встала на плитку (турель не ходит, ей разряд ни к чему)
         p.onChg = true;
         const here = sqName(r, c);
         if (p.t === 'x') {
@@ -2449,6 +2456,35 @@ function sweepChargers() {
         sfx('zap');
         addLog('n', p.invis ? '⚡ Невидимая фигура получает разряд и оглушена' : `⚡ ${pieceSym(p)} на ${here} получает разряд и пропустит следующий ход`);
     }));
+    chargerTurrets();
+}
+// Турель на плитке-зарядке работает как конденсатор: в конце каждого хода отдаёт разряд фигурам сверху, снизу, слева и справа.
+// Роботы получают заряд (бесплатный ход), остальные фигуры (кроме королей) оглушены, пока турель стоит на месте
+function chargerTurrets() {
+    const hit = new Set();
+    G.board.forEach((row, r) => row.forEach((t, c) => {
+        if (!t || t.t !== 'u' || t.ghost || !(G.chargers || []).some(x => x.r === r && x.c === c)) return;
+        [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([dr, dc]) => {
+            const rr = r + dr, cc = c + dc;
+            if (rr < 0 || rr >= N || cc < 0 || cc >= N) return;
+            const p = G.board[rr][cc];
+            if (!p || p.ghost || p.t === 'u') return;
+            if (p.t === 'x') {
+                p.chg = 1;
+            } else {
+                if (kSafe(p) || p.warded > 0) return;
+                p.snared = 1; p.shock = true;
+            }
+            hit.add(p);
+            if (!p.capt) {      // в журнал и на экран только в первый раз, чтобы не засорять
+                p.capt = true;
+                G.fx.push({ r: rr, c: cc, type: 'zap' });
+                sfx('zap');
+                addLog('n', p.invis ? '⚡ Турель-конденсатор заряжает невидимую фигуру' : (p.t === 'x' ? `🔋 Турель-конденсатор на ${sqName(r, c)} заряжает робота на ${sqName(rr, cc)}` : `⚡ Турель-конденсатор на ${sqName(r, c)} оглушает ${pieceSym(p)} на ${sqName(rr, cc)}`));
+            }
+        });
+    }));
+    G.board.forEach(row => row.forEach(p => { if (p && p.capt && !hit.has(p)) delete p.capt; }));      // отошла от турели или турель уничтожена
 }
 
 // Вирус: фигура (не король), вставшая на заражённую плитку, становится зомби
@@ -4255,7 +4291,7 @@ const psFreeDot = pk => ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePass
 /* ---------- Замки героев и магические шары ---------- */
 // Замки работают только в рейтинговых онлайн-партиях. В дружеских комнатах и на одном экране открыты все герои.
 const lockActive = () => !!(NET.on && NET.rated);
-const heroOpen = id => !(HEROES[id] && HEROES[id].dev) && (CONFIG.freeHeroes.includes(id) || UNL.heroes.includes(id));      // герои «в разработке» (dev) в рейтинге закрыты
+const heroOpen = id => !(HEROES[id] && HEROES[id].dev) && (CONFIG.freeHeroes.includes(id) || UNL.heroes.includes(id));      // герои с пометкой dev в рейтинге закрыты (сервер их пока не знает)
 
 async function loadUnlocks() {
     if (!SB || !ACC.user) { UNL.orbs = 0; UNL.heroes = []; return; }
@@ -4283,7 +4319,7 @@ function showOrbNote(gained) {
 // Открыть героя за шар: подтверждение, запрос в Supabase, анимация замка
 async function tryUnlock(id, card) {
     if (UNL.busy) return;
-    if (HEROES[id] && HEROES[id].dev) { uiAlert(L('Этот герой ещё в разработке: его можно выбрать в дружеских партиях и на одном экране.', 'This hero is still in development: you can pick them in friendly games and on one screen.')); return; }
+    if (HEROES[id] && HEROES[id].dev) { uiAlert(L('Этот герой пока доступен только в дружеских партиях и на одном экране.', 'This hero is only available in friendly games and on one screen for now.')); return; }
     if (!SB || !ACC.user) { uiAlert(L('Нужен вход в аккаунт.', 'Please sign in first.')); return; }
     await loadUnlocks();
     if (heroOpen(id)) { refreshHeroViews(); return; }
@@ -5529,7 +5565,7 @@ Object.assign(EN, {
 });
 Object.assign(EN, {
     "Инженер": "Engineer",
-    "Робототехника · в разработке": "Robotics · in development",
+    "Робототехника": "Robotics",
     [PASSIVES.eureka.name]: "Eureka",
     [PASSIVES.eureka.desc]: "Once per game you can nullify the cooldown of any of your abilities: click an ability that is recharging and confirm with the check mark.",
     " (использована)": " (used)",
@@ -5544,13 +5580,17 @@ Object.assign(EN, {
     "🛠 Выберите своего робота или свою турель для перепрограммирования (это тратит ход).": "🛠 Choose your robot or your turret to reprogram (this uses your move).",
     "Перестройте фигуру на планшете.": "Rebuild the piece on the tablet.",
     "ПЕРЕПРОГРАММИРОВАНИЕ · КД:": "REPROGRAMMING · CD:",
+    "Турель-конденсатор на": "Capacitor turret on",
+    "заряжает робота на": "charges the robot on",
+    "оглушает": "stuns",
+    "турель уничтожена, выстрела не будет": "the turret is destroyed, no shot",
     "РАДИУС ТУРЕЛИ ЗАНОВО. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.": "TURRET RADIUS FROM SCRATCH. EACH NEW SQUARE +2 CD.",
     "Робот: синие клетки: ходит, красные: ходит и рубит, жёлтые: только рубит.": "Robot: blue squares: moves, red: moves and captures, yellow: captures only.",
     [ABILITIES.assemble.name]: "Robot Assembly",
     [ABILITIES.assemble.desc]: "A tablet opens: you build a robot piece (boot: walks and captures along chosen directions without jumping over pieces, range can be upgraded; wing: jumps to chosen squares of a 5×5 area). The robot appears on a free square of your first two ranks. Cooldown 3 plus extra for every upgrade.",
     [ABILITIES.charger.name]: "Charger",
     [ABILITIES.charger.desc]: "Creates a charger tile on a free square. A piece that steps on the tile gets a discharge: an ordinary piece (not a king) is stunned and skips its next move, like in a trap. A robot gets 1 charge: next time it moves for free without using your main move (this move cannot give check), and then you make your normal move. You may also move another piece: the charge stays.",
-    "Этот герой ещё в разработке: его можно выбрать в дружеских партиях и на одном экране.": "This hero is still in development: you can pick them in friendly games and on one screen.",
+    "Этот герой пока доступен только в дружеских партиях и на одном экране.": "This hero is only available in friendly games and on one screen for now.",
     "🤖 Робот готов: выберите свободную клетку на своих первых двух горизонталях, там он появится.": "🤖 The robot is ready: choose a free square on your first two ranks, it will appear there.",
     "Соберите робота на планшете.": "Build the robot on the tablet.",
     "🔋 Выберите свободную клетку для плитки-зарядки.": "🔋 Choose a free square for the charger tile.",
@@ -6656,7 +6696,7 @@ function revertHare(r, c, p) {
 }
 
 /* =====================================================================
-   ИНЖЕНЕР (в разработке)
+   ИНЖЕНЕР
    Сборка робота и сборка турели: планшет с зелёным ретро-экраном. Каждый нажатый квадрат идёт как обычное действие игрока (t: 'eng'),
    поэтому онлайн и в повторах всё считается одинаково. Робот: фигура типа 'x', её правила лежат в p.rob.
    Турель: неподвижная фигура типа 'u', её радиус лежит в p.tur.
@@ -6930,6 +6970,14 @@ function turretSeen(r, c) {
     if (p && p.tur) p.tur.seen = turEnemies(r, c, p).map(([rr, cc, q]) => turKey(q, rr, cc));
 }
 // В конце каждого хода: мгновенная турель уничтожает врагов в радиусе, артиллерия готовит выстрел на новых
+// Пуля турели: летит по прямой от турели к цели. Возвращает время полёта в секундах
+function queueBullet(from, to, piece, dur) {
+    if (!ANIM.board) return 0;
+    const d = dur || clampN(0.22 + Math.hypot(from[0] - to[0], from[1] - to[1]) * 0.05, 0.28, 0.6);
+    const pc = piece && !piece.invis && !piece.ghost ? { c: piece.c, t: piece.t } : null;
+    queueAnim({ k: 'flight', kind: 'bullet', from: [from[0], from[1]], to: [to[0], to[1]], dur: d, piece: pc });
+    return d;
+}
 function turretScan() {
     const list = [];
     G.board.forEach((row, r) => row.forEach((p, c) => { if (p && p.t === 'u' && p.tur && !p.ghost) list.push([r, c, p]); }));
@@ -6942,8 +6990,10 @@ function turretScan() {
                 if (G.board[rr][cc] !== q) return;
                 const sq = sqName(rr, cc);
                 if (magicProof(G.board, rr, cc, p.c)) { if (!q.invis) addLog('n', `⚡ Турель на ${here} целится в ${sq}: цель неуязвима для магии`); return; }
-                G.fx.push({ r: rr, c: cc, type: 'arrowhit', delay: 0 });
-                sfx('arrow');
+                const fd = queueBullet([r, c], [rr, cc], q);      // пуля вылетает из турели
+                G.fx.push({ r, c, type: 'zap' });                 // вспышка выстрела
+                G.fx.push({ r: rr, c: cc, type: 'arrowhit', delay: fd });
+                sfxLater('arrow', fd);
                 if (q.ghost) { vanishGhost(rr, cc, 'выстрел турели'); addLog('n', `⚡ Турель на ${here} стреляет в ${sq}`); died = true; return; }
                 const dp = guardSwap(rr, cc) || q;
                 G.board[rr][cc] = null;
@@ -6956,7 +7006,7 @@ function turretScan() {
             near.forEach(([rr, cc, q]) => {
                 if (seen.has(turKey(q, rr, cc))) return;
                 if (G.fire.some(f => f.kind === 'shell' && f.r === rr && f.c === cc && f.owner === p.c)) return;
-                G.fire.push({ r: rr, c: cc, owner: p.c, kind: 'shell', wait: 1 });
+                G.fire.push({ r: rr, c: cc, owner: p.c, kind: 'shell', wait: 1, tu: uidOf(p) });
                 addLog('n', `🎯 Турель на ${here} наводится на ${sqName(rr, cc)}: выстрел через ход`);
             });
             turretSeen(r, c);
@@ -6996,11 +7046,11 @@ function eurekaAsk(k) {
         document.body.appendChild(dlg);
     }
     dlg.dataset.k = k;
-    dlg.innerHTML = `<div class="eng-tab"><div class="eng-screen">
+    dlg.innerHTML = `<div class="eng-tab"><div class="eng-screen"><div class="eng-inner">
         <div class="eng-head"><span class="eng-title">💡 ЭВРЕКА</span></div>
         <div class="eng-body"><div class="eng-note ask">ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ «<b class="eu-name">${ABILITIES[k].name}</b>»? ЭТО МОЖНО СДЕЛАТЬ ОДИН РАЗ ЗА БОЙ.</div>
         <div class="eng-row"><button class="eng-sq big" data-eu="yes">${engPix('check')}<i>ДА</i></button><button class="eng-sq big" data-eu="no">${engPix('cross')}<i>НЕТ</i></button></div></div>
-      </div></div>`;
+      </div></div></div>`;
     dlg.classList.remove('hidden');
     SFX.engSwitch();
 }
@@ -7093,8 +7143,8 @@ document.getElementById('board').addEventListener('click', e => {
 
 /* ---------- Пиксельные картинки и экран планшета ---------- */
 const ENG_SPR = {
-    // пешка: большая голова, шея, ступенька и основание
-    pawn: ['..####..', '..####..', '...##...', '...##...', '...##...', '..####..', '.######.', '.######.'],
+    // пешка: большая круглая голова, шея, ступенька и основание
+    pawn: ['..####..', '.######.', '.######.', '..####..', '...##...', '...##...', '..####..', '.######.', '.######.'],
     // меч: длинный клинок, широкая гарда, короткая рукоять (ниже собирается пешка с мечом)
     blade: ['..##..', '..##..', '..##..', '..##..', '..##..', '..##..', '..##..', '######', '######', '..##..', '..##..'],
     boot: ['.####.....', '.####.....', '.####.....', '.####.....', '.####.....', '.#######..', '.#########', '.#########', '.#########', '.#########'],
@@ -7204,13 +7254,13 @@ function engTabletHTML(m) {
         }
     }
     return `<div class="eng-tab"><button class="eng-close" data-eng="close" title="Закрыть планшет">✕</button><button class="eng-min" data-eng="min" title="Свернуть планшет">—</button>
-      <div class="eng-screen">
+      <div class="eng-screen"><div class="eng-inner">
         <div class="eng-head"><span class="eng-title">${title}</span>${x2 ? '<button class="eng-btn eng-x2" data-eng="x2" ' + (m.walk.length ? '' : 'disabled') + '>ПОДТВЕРДИТЬ ×2</button>' : ''}</div>
         <div class="eng-body">${body}</div>
         <div class="eng-note">${note}</div>
         <div class="eng-cost">${costLine}</div>
         <div class="eng-foot"><button class="eng-btn" data-eng="back">◀ НАЗАД</button><button class="eng-btn" data-eng="next" ${ok ? '' : 'disabled'}>${nextLabel}</button></div>
-      </div></div>`;
+      </div></div></div>`;
 }
 
 /* ---------- Звуки планшета: ретро-пиксельные «пшик» и бипы (только у того, кто нажимает) ---------- */
@@ -7242,6 +7292,7 @@ Object.assign(SFX, {
     raise: () => { tone(70, 0.5, 'sawtooth', 0.07); tone(110, 0.4, 'square', 0.04, 0.2);[150, 120, 170, 110, 140].forEach((f, i) => tone(f, 0.05, 'square', 0.025, 0.12 + i * 0.09)); engNoise(0.35, 0.03, 0.1, 600); }      // и земля сыплется
 });
 
+let ENG_POS = { x: 0, y: 0 };      // куда сдвинули планшет мышкой
 let ENG_MIN = false;      // планшет свёрнут: на доску можно смотреть, ничего не сбрасывается
 let ENG_LAST = null;      // какой экран планшета был показан в прошлый раз (для «глюка» при переходе)
 function renderEngTablet() {
@@ -7252,7 +7303,7 @@ function renderEngTablet() {
         if (ov) ov.classList.add('hidden');
         if (mini) mini.classList.add('hidden');
         if (ENG_LAST && m && ENG_TAB_MODES.includes(m.type) && m.stage === 'spawn' && isActor() && !REPLAY.on) SFX.engOk();      // сборка подтверждена
-        ENG_MIN = false; ENG_LAST = null;
+        ENG_MIN = false; ENG_LAST = null; ENG_POS = { x: 0, y: 0 };
         return;
     }
     if (!ov) {
@@ -7272,6 +7323,25 @@ function renderEngTablet() {
             let v = b.dataset.v;
             if (v !== undefined) { if (v.includes(',')) v = v.split(',').map(Number); else if (/^-?\d+$/.test(v)) v = Number(v); }
             netDo({ t: 'eng', a: act, v });
+        });
+        // на компьютере планшет можно таскать за серую рамку или заголовок, как окно
+        ov.addEventListener('pointerdown', e => {
+            if (e.pointerType === 'touch' || e.button > 0) return;
+            const tab = e.target.closest('.eng-tab');
+            if (!tab || e.target.closest('button') || !(e.target === tab || e.target.closest('.eng-head'))) return;
+            const r0 = tab.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, ox = ENG_POS.x, oy = ENG_POS.y;
+            tab.setPointerCapture(e.pointerId);
+            tab.classList.add('dragging');
+            const mv = ev => {
+                const nl = clampN(r0.left + ev.clientX - sx, 0, Math.max(0, innerWidth - r0.width)), nt = clampN(r0.top + ev.clientY - sy, 0, Math.max(0, innerHeight - r0.height));
+                ENG_POS = { x: ox + nl - r0.left, y: oy + nt - r0.top };
+                tab.style.transform = `translate(${ENG_POS.x}px,${ENG_POS.y}px)`;
+            };
+            const up = () => { tab.classList.remove('dragging'); tab.removeEventListener('pointermove', mv); tab.removeEventListener('pointerup', up); tab.removeEventListener('pointercancel', up); };
+            tab.addEventListener('pointermove', mv);
+            tab.addEventListener('pointerup', up);
+            tab.addEventListener('pointercancel', up);
+            e.preventDefault();
         });
         document.body.appendChild(ov);
     }
@@ -7293,8 +7363,9 @@ function renderEngTablet() {
     mini.classList.add('hidden');
     ov.innerHTML = engTabletHTML(m);
     ov.classList.remove('hidden');
+    { const tb = ov.querySelector('.eng-tab'); if (tb && (ENG_POS.x || ENG_POS.y)) tb.style.transform = `translate(${ENG_POS.x}px,${ENG_POS.y}px)`; }
     if (key !== ENG_LAST) {      // переход между экранами: экран на микросекунду «глючит» и расплывается, как переключение камер
-        const sc = ov.querySelector('.eng-screen');
+        const sc = ov.querySelector('.eng-inner');      // дрожит только содержимое, серая рамка и край экрана стоят на месте
         if (sc) sc.classList.add('glitch');
         SFX.engSwitch();
     }
@@ -7500,7 +7571,7 @@ function runAnimQueue() {
                 const ang = Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI;
                 const at = (x, y, sc, rot) => `translate(${x}px,${y}px) translate(-50%,-50%) rotate(${rot}deg) scale(${sc})`;
                 let frames;
-                if (a.kind === 'arrow') {
+                if (a.kind === 'arrow' || a.kind === 'bullet') {
                     frames = [{ transform: at(x0, y0, 0.8, ang), offset: 0 }, { transform: at(x1, y1, 1, ang), offset: 1 }];
                 } else {
                     const lift = Math.min(140, 40 + Math.hypot(x1 - x0, y1 - y0) * 0.25);
@@ -7510,7 +7581,7 @@ function runAnimQueue() {
                         { transform: at(x1, y1, 1, 360), offset: 1 }
                     ];
                 }
-                const an = pr.animate(frames, { duration: a.dur * 1000, easing: a.kind === 'arrow' ? 'cubic-bezier(.3,0,.8,.6)' : 'linear', fill: 'forwards' });
+                const an = pr.animate(frames, { duration: a.dur * 1000, easing: a.kind === 'arrow' ? 'cubic-bezier(.3,0,.8,.6)' : 'linear', fill: 'forwards' });      // пуля летит ровно
                 an.onfinish = () => pr.remove();
                 setTimeout(() => pr.remove(), a.dur * 1000 + 400);
             } else if (a.k === 'slide') {

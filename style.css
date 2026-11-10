@@ -5771,7 +5771,7 @@ button {
         display: none;
     }
 
-.eng-screen.glitch {
+.eng-inner.glitch {
     animation: engGlitch 0.18s linear;
 }
 
@@ -5818,7 +5818,7 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .eng-screen.glitch {
+    .eng-inner.glitch {
         animation: none;
     }
 }
@@ -5836,11 +5836,11 @@ button {
         left: 14%;
         right: 14%;
         bottom: -2%;
-        height: 24%;
+        height: 30%;
         border-radius: 50% 50% 0 0;
         background: radial-gradient(ellipse at 50% 100%, #6b4527 0, #4a2d18 62%, transparent 64%);
         opacity: 0;
-        animation: moundUp 1.2s ease-out forwards;
+        animation: moundUp 1.6s ease-out forwards;
     }
 
     .fx-raise .dirt {
@@ -5893,7 +5893,7 @@ button {
         transform: scaleY(1);
     }
 
-    80% {
+    85% {
         opacity: 1;
     }
 
@@ -5904,55 +5904,50 @@ button {
 }
 
 .piece.crawl {
-    animation: crawlOut 1.2s ease-out;
+    animation: crawlOut 1.35s ease-out 0.12s backwards;
 }
 
+/* фигура поднимается из-под земли: сначала показывается голова, нижняя часть скрыта «землёй» (обрезка по линии клетки) */
 @keyframes crawlOut {
     0% {
-        transform: translateY(55%) rotate(-6deg);
-        clip-path: inset(88% 0 0 0);
+        transform: translate(0%, 100%) rotate(-5deg);
+        clip-path: inset(-30% -30% 100% -30%);
     }
 
-    12% {
-        transform: translateY(48%) rotate(8deg);
-        clip-path: inset(72% 0 0 0);
+    14% {
+        transform: translate(-2%, 84%) rotate(8deg);
+        clip-path: inset(-30% -30% 84% -30%);
     }
 
-    26% {
-        transform: translateY(38%) rotate(-9deg);
-        clip-path: inset(58% 0 0 0);
+    28% {
+        transform: translate(2%, 66%) rotate(-9deg);
+        clip-path: inset(-30% -30% 66% -30%);
     }
 
-    40% {
-        transform: translateY(28%) rotate(7deg);
-        clip-path: inset(42% 0 0 0);
+    42% {
+        transform: translate(-2%, 48%) rotate(7deg);
+        clip-path: inset(-30% -30% 48% -30%);
     }
 
-    54% {
-        transform: translateY(18%) rotate(-6deg);
-        clip-path: inset(28% 0 0 0);
+    56% {
+        transform: translate(2%, 32%) rotate(-6deg);
+        clip-path: inset(-30% -30% 32% -30%);
     }
 
     70% {
-        transform: translateY(8%) rotate(4deg);
-        clip-path: inset(12% 0 0 0);
+        transform: translate(-2%, 18%) rotate(4deg);
+        clip-path: inset(-30% -30% 18% -30%);
     }
 
-    85% {
-        transform: translateY(2%) rotate(-2deg);
-        clip-path: inset(-10% -10% 0 -10%);
+    84% {
+        transform: translate(2%, 7%) rotate(-2deg);
+        clip-path: inset(-30% -30% 7% -30%);
     }
 
     100% {
         transform: none;
         clip-path: inset(-30% -30% -10% -30%);
     }
-}
-
-/* пешка с мечом шире остальных картинок: даём ей больше места в клетке планшета */
-.eng-pix.wide {
-    width: 92%;
-    height: 92%;
 }
 
 /* заряд робота: значок и свечение */
@@ -5986,4 +5981,45 @@ button {
 
 .eng-note .eu-name {
     text-transform: uppercase;
+}
+
+/* экран планшета: рамка и край экрана неподвижны, дрожит только содержимое */
+.eng-screen {
+    overflow: hidden;
+}
+
+.eng-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* пуля турели */
+.proj-bullet {
+    width: calc(var(--cell) * 0.32);
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, rgba(255, 190, 60, 0) 0, #ffe9a0 55%, #fff 100%);
+    box-shadow: 0 0 10px 3px rgba(255, 200, 80, 0.9);
+    z-index: 95;
+}
+
+/* на компьютере планшет можно таскать за серую рамку и заголовок */
+@media (hover: hover) and (pointer: fine) {
+    .eng-tab {
+        cursor: grab;
+    }
+
+        .eng-tab button {
+            cursor: pointer;
+        }
+
+            .eng-tab button:disabled {
+                cursor: default;
+            }
+}
+
+.eng-tab.dragging {
+    cursor: grabbing;
+    user-select: none;
 }
