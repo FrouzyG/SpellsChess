@@ -5630,8 +5630,8 @@ button {
 }
 
 .cell.rbi-c {
-    box-shadow: inset 0 0 0 100px rgba(170, 80, 255, 0.6);
-    outline: 2px solid #aa50ff;
+    box-shadow: inset 0 0 0 100px rgba(255, 225, 60, 0.6);
+    outline: 2px solid #ffe13c;
     outline-offset: -2px;
 }
 
@@ -5953,4 +5953,37 @@ button {
 .eng-pix.wide {
     width: 92%;
     height: 92%;
+}
+
+/* заряд робота: значок и свечение */
+.piece .chg {
+    position: absolute;
+    z-index: 5;
+    left: 2%;
+    top: 2%;
+    font-size: calc(var(--cell) * 0.24);
+    line-height: 1;
+    pointer-events: none;
+    text-shadow: 0 0 3px #000;
+}
+
+/* Эврека: способность на перезарядке, которую можно обнулить */
+.ab.eureka-ready {
+    cursor: pointer;
+    border-style: dashed;
+    border-color: #d3dae3;
+    box-shadow: 0 0 10px rgba(205, 214, 226, 0.55);
+}
+
+    .ab.eureka-ready .ab-cd {
+        color: #e8eef5;
+    }
+
+.eng-note.ask {
+    font-size: 13px;
+    padding: 6px 4px 30px;
+}
+
+.eng-note .eu-name {
+    text-transform: uppercase;
 }

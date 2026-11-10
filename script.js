@@ -355,9 +355,9 @@ Object.assign(ABILITIES, {
 HEROES.magician = { icon: '🎩', name: 'Фокусник', tag: 'Фокусы и пропажи', passive: 'sawing', abilities: ['fog', 'hatch', 'hocus', 'assistant'] };
 
 // Инженер (в разработке): собирает фигуру-робота по своим правилам и заряжает его на плитке
-PASSIVES.engWip = {
-    icon: '🔧', name: 'Пассивка в разработке',
-    desc: 'У Инженера пока нет пассивки: герой ещё в разработке.'
+PASSIVES.eureka = {
+    icon: '💡', name: 'Эврека',
+    desc: 'Один раз за бой можно аннулировать перезарядку любой своей способности: нажмите на способность, которая перезаряжается, и подтвердите выбор галочкой.'
 };
 Object.assign(ABILITIES, {
     assemble: {
@@ -366,18 +366,18 @@ Object.assign(ABILITIES, {
     },
     charger: {
         icon: '🔋', name: 'Зарядка',
-        desc: 'Создаёт на свободной клетке плитку-зарядку. Пока ваш робот стоит на зарядке, он может сделать бесплатный ход, который не тратит ваш основной ход (ходить им необязательно). Один бесплатный ход за ход на каждого робота.'
+        desc: 'Создаёт на свободной клетке плитку-зарядку. Фигура, которая встала на плитку, получает разряд: обычная фигура (кроме короля) оглушается и пропускает свой следующий ход, как в капкане. Робот получает 1 заряд: в следующий раз он сходит бесплатно, не тратя основной ход (шаховать этим ходом нельзя), и после этого вы делаете обычный ход. Можно походить и другой фигурой: заряд останется.'
     },
     turret: {
         icon: '🗼', name: 'Сборка турели',
         desc: 'Открывается планшет: вы собираете неподвижную турель. Мгновенная стрельба: выбираете клетки радиуса 3×3, враг, оказавшийся в них, уничтожается сразу. Дальняя артиллерия: выбираете клетки радиуса 5×5, если в одной из них появится новый враг, через ход туда прилетит выстрел. Турель появляется на свободной клетке ваших первых трёх горизонталей. Перезарядка 5 и ещё плюс за каждую клетку радиуса.'
     },
     reprogram: {
-        icon: '🛠', name: 'Перепрограммирование', free: true,
-        desc: 'Не тратит ход. Перенастраивает радиус вашей турели или ТОЛЬКО ходьбу вашего робота. Перезарядка 1, плюс 2 за каждую новую клетку турели и плюс 1 за каждую новую клетку или направление ходьбы робота.'
+        icon: '🛠', name: 'Перепрограммирование',
+        desc: 'Тратит ход. Робот перестраивается заново на планшете (как при сборке, прежний выбор остаётся, его можно убрать и добавить новое), у турели радиус выбирается заново. Перезарядка 1, плюс за каждую НОВУЮ клетку или направление: у робота как при сборке, у турели по 2.'
     }
 });
-HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника · в разработке', passive: 'engWip', abilities: ['assemble', 'charger', 'turret', 'reprogram'], dev: true };
+HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника · в разработке', passive: 'eureka', abilities: ['assemble', 'charger', 'turret', 'reprogram'], dev: true };
 
 // Способности, у которых выбор идёт в два шага: сначала фигура, потом клетка
 const ACTIVE_PASSIVES = ['aim', 'teleport', 'timeslow'];
@@ -2107,7 +2107,7 @@ function abilityAvailable(col, k) {
 }
 
 // Способности Шута, не тратящие ход и не спасающие короля (кожура, помидор): для мата и пата не считаются «действием»
-const NOT_AN_ESCAPE = ['banana', 'tomato', 'fog', 'reprogram'];
+const NOT_AN_ESCAPE = ['banana', 'tomato', 'fog'];
 function hasAnyAction(col) {
     if (col === G.turn && G.forced && G.forced.length) return true;
     if (anyLegalMove(G.board, col)) return true;
@@ -2170,7 +2170,7 @@ function newState(board, hero, win) {
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
         cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
-        bananas: [], walls: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false }, chargers: [], chargeUsed: [], engCost: { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 },
+        bananas: [], walls: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false }, chargers: [], chargeUsed: [], eurekaUsed: { w: false, b: false }, engCost: { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 },
         win
     };
 }
@@ -2425,6 +2425,32 @@ function sweepTraps() {
     });
 }
 
+// Зарядка Инженера: фигура, вставшая на плитку, получает разряд.
+// Обычная фигура (не король) оглушается и пропускает свой следующий ход (как в капкане), робот получает 1 заряд
+function sweepChargers() {
+    const on = new Set((G.chargers || []).map(x => x.r + ',' + x.c));
+    G.board.forEach((row, r) => row.forEach((p, c) => {
+        if (!p) return;
+        if (!on.has(r + ',' + c)) { if (p.onChg) delete p.onChg; return; }
+        if (p.onChg || p.ghost) return;      // разряд только в момент, когда фигура встала на плитку
+        p.onChg = true;
+        const here = sqName(r, c);
+        if (p.t === 'x') {
+            p.chg = 1;
+            G.fx.push({ r, c, type: 'zap' });
+            sfx('zap');
+            addLog('n', p.invis ? '🔋 Невидимый робот получает заряд' : `🔋 Робот на ${here} получает заряд: его следующий ход будет бесплатным`);
+            return;
+        }
+        if (kSafe(p)) return;
+        if (p.warded > 0) { addLog('n', p.invis ? '✴ Невидимая фигура под Очищением не боится разряда' : `✴ ${pieceSym(p)} на ${here} под Очищением не боится разряда`); return; }
+        p.snared = 1; p.shock = true;
+        if (!p.invis) G.fx.push({ r, c, type: 'zap' });
+        sfx('zap');
+        addLog('n', p.invis ? '⚡ Невидимая фигура получает разряд и оглушена' : `⚡ ${pieceSym(p)} на ${here} получает разряд и пропустит следующий ход`);
+    }));
+}
+
 // Вирус: фигура (не король), вставшая на заражённую плитку, становится зомби
 function sweepVirus() {
     G.virus = G.virus.filter(v => {
@@ -2533,7 +2559,7 @@ function endTurn() {
         }
         // Заморозка и капкан спадают в конце хода владельца фигуры
         if (p.c === c && p.frozen > 0) p.frozen--;
-        if (p.c === c && p.snared > 0) p.snared--;
+        if (p.c === c && p.snared > 0) { p.snared--; if (!p.snared) delete p.shock; }
         if (p.c === c && p.altruist > 0) { p.altruist--; if (!p.altruist) delete p.altruist; }
         if (p.c === c && p.warded > 0) { p.warded--; if (!p.warded) delete p.warded; }
         if (p.c === c && p.scaredT > 0) {
@@ -2558,12 +2584,13 @@ function endTurn() {
         }
     }));
     if (G.conv.length || G.portals.length) {      // ловушки срабатывают и на фигуре, которую конвейер/портал сейчас сдвинет
-        sweepBananas(); sweepBurn(); sweepTraps(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true);
+        sweepBananas(); sweepBurn(); sweepTraps(); sweepChargers(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true);
     }
     applyEffects(G.board, true);
     sweepBananas();
     sweepBurn();
     sweepTraps();
+    sweepChargers();
     sweepVirus();
     sweepVines();
     sweepLures();
@@ -2597,9 +2624,9 @@ function endTurn() {
 function tryMove(mv, ctx) {
     if (mv.decoy) { if (!mv.redirect) return; mv = mv.redirect; }   // «сквозь» невидимую фигуру: на деле рубка её (или ход невозможен)
     ctx = ctx || (G.bonus ? { bonus: true, zw: G.bonus.kind === 'zw' ? G.bonus.step : 0 } : {});
-    if (!G.bonus && !ctx.pairSecond && !ctx.apo && !ctx.charge) {      // Зарядка: ход робота с плитки бесплатный, обычный ход остаётся
+    if (!G.bonus && !ctx.pairSecond && !ctx.apo && !ctx.charge) {      // Зарядка: ход заряженного робота бесплатный (обычный ход остаётся), но им нельзя ставить шах
         const q0 = G.board[mv.fr][mv.fc];
-        if (chargeFree(q0, mv.fr, mv.fc)) ctx = { ...ctx, charge: true, cuid: uidOf(q0) };
+        if (chargeFree(q0, mv.fr, mv.fc) && !engGivesCheck(mv)) ctx = { ...ctx, charge: true, cuid: uidOf(q0), cpiece: q0 };
     }
     G.sel = null; G.moves = [];
     if (mv.promo) {
@@ -2752,7 +2779,8 @@ function executeMove(mv, promo, ctx) {
         if (ctx.charge) {
             if (!G.chargeUsed) G.chargeUsed = [];
             G.chargeUsed.push(ctx.cuid);
-            addLog('n', '🔋 Зарядка: бесплатный ход робота сделан, обычный ход ещё впереди');
+            if (ctx.cpiece) ctx.cpiece.chg = 0;      // заряд потрачен
+            addLog('n', '🔋 Заряд потрачен: бесплатный ход робота сделан, обычный ход ещё впереди');
             continueTurn();
             return;
         }
@@ -2901,7 +2929,7 @@ function finishAbility(key, text) {
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = key;
     addLog(col, text);
-    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog' || key === 'reprogram') { continueTurn(); return; }   // свободное действие: после него обычный ход
+    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog') { continueTurn(); return; }   // свободное действие: после него обычный ход
     G.ep = null;
     if (G.hero[col] === 'architect') {      // пассивка «Мастер на все руки»: способности не заканчивают ход
         G.archUsed = true;
@@ -3167,7 +3195,7 @@ function confusionLanding(p) {
             addLog('n', p.invis ? '⏳ Ход сурка: невидимая фигура вернулась назад' : `⏳ Ход сурка: ${pieceSym(p)} возвращается с ${sqName(pos[0], pos[1])} на ${sqName(pv[0], pv[1])}`);
         }
     }
-    sweepBananas(); sweepBurn(); sweepTraps(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true); sweepGens();      // тот же порядок, что в конце обычного хода
+    sweepBananas(); sweepBurn(); sweepTraps(); sweepChargers(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true); sweepGens();      // тот же порядок, что в конце обычного хода
     if (!pieceObjAt(p)) return 'dead';
     return p.snared > 0 ? 'snared' : null;
 }
@@ -3405,7 +3433,7 @@ function startMode(k, via) {
     G.sel = null; G.moves = [];
     const base = via ? { type: k, via } : { type: k };
     if (k === 'turret') { G.mode = { ...base, stage: 'tkind', cells: [], hist: [], sel: null, tk: null, tc: [] }; return; }
-    if (k === 'reprogram') { G.mode = { ...base, stage: 'piece', cells: abilityCells('reprogram', G.turn), hist: [], sel: null, target: null, rp: null }; return; }
+    if (k === 'reprogram') { G.mode = { ...base, stage: 'piece', cells: abilityCells('reprogram', G.turn), hist: [], sel: null, target: null, rp: null, rb: false }; return; }
     if (k === 'assemble') { G.mode = { ...base, stage: 'kind', cells: [], hist: [], kind: null, sel: null, walk: [], atk: [], wr: 1, ja: [], jw: [] }; return; }      // планшет Инженера
     if (k === 'resurrect' || k === 'raise') G.mode = { ...base, piece: null, cells: [] };
     else if (k === 'timeslow' || k === 'tomato') G.mode = { ...base, cells: [] };
@@ -3789,6 +3817,7 @@ function applyInput(m) {
         case 'end': if (G.archUsed && !G.check && !G.pendingPromo) endTurn(); break;
         case 'esc': cancelAll(); break;
         case 'eng': engInput(m); break;
+        case 'eureka': doEureka(m.k); break;
     }
 }
 
@@ -3966,7 +3995,7 @@ function renderBoard() {
                 if (p.zombie) html += '<span class="zb">☠</span>';
                 if (p.hypno) html += `<span class="hy">👁${p.hypno}</span>`;
                 if (p.frozen > 0) html += `<span class="fz">❄${p.frozen}</span>`;
-                if (p.snared > 0) html += '<span class="sn">🪤</span>';
+                if (p.snared > 0) html += `<span class="sn">${p.shock ? '⚡' : '🪤'}</span>`;
                 if (p.lure) html += '<span class="lr">🎣</span>';
                 if (p.soul) html += '<span class="so">🔗</span>';
                 if (p.scared) html += `<span class="sc">😱${p.scaredT || ''}</span>`;
@@ -3974,6 +4003,7 @@ function renderBoard() {
                 if (p.altruist > 0) html += `<span class="al">👼${p.altruist}</span>`;
                 if (p.t === 'j') html += `<span class="jl">${Number.isFinite(p.life) ? '⏳' + p.life : '∞'}</span>`;
                 if (p.t === 'x' && p.rob) html += `<span class="rb">${p.rob.kind === 'wing' ? '🪽' : '👢'}</span>`;
+                if (p.t === 'x' && p.chg > 0) html += '<span class="chg">🔋</span>';
                 if (p.t === 'u' && p.tur) html += `<span class="rb">${p.tur.kind === 'instant' ? '⚡' : '🎯'}</span>`;
                 if (p.hare) html += `<span class="jl">🐇${p.hare.left}</span>`;
                 if (p.cap > 0 && jesterSees(p.capBy)) html += `<span class="cp">🤡${p.cap}</span>`;
@@ -4015,7 +4045,7 @@ function panelHTML(col) {
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
     <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div></div>
     ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}</div>`;
-    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b></div><div class="abilities">`;
+    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b>${hero.passive === 'eureka' && G.eurekaUsed && G.eurekaUsed[col] ? ' (использована)' : ''}</div><div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
     const tomMode = !G.over && G.mode && G.mode.type === 'tomato' && col !== G.turn && isActor();
@@ -4042,6 +4072,7 @@ function panelHTML(col) {
         }
         const on = active && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
         const can = active && !lock && abilityAvailable(col, k);
+        const eu = active && !lock && !G.mode && !G.bonus && cd > 0 && !offT && !hideCd && eurekaReady(col);      // Эврека: можно обнулить перезарядку
         let sub = 'готово';
         if (cd > 0) sub = '';
         else if (active && G.bonus) sub = 'доп. ход';
@@ -4051,7 +4082,8 @@ function panelHTML(col) {
         else if (k === 'copy' && can) sub = '→ ' + ABILITIES[G.lastAb[other(col)]].name;
         if (offT) sub = '🍅 отключена';
         if (hideCd) sub = 'скрыто';      // применение не должно быть видно по перезарядке
-        h += `<button class="ab ${on ? 'on' : ''}${offT ? ' tomatoed' : ''}" data-ab="${k}" ${can || on ? '' : 'disabled'} title="${abilityDesc(k)}">
+        if (eu) sub = '💡 Эврека?';
+        h += `<button class="ab ${on ? 'on' : ''}${offT ? ' tomatoed' : ''}${eu ? ' eureka-ready' : ''}" ${eu ? `data-eureka="${k}"` : `data-ab="${k}" ${can || on ? '' : 'disabled'}`} title="${abilityDesc(k)}">
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}${offT ? `<span class="tm-badge">🍅${offT}</span>` : ''}</button>`;
     });
 
@@ -4166,7 +4198,7 @@ function renderStatus() {
         else if (t === 'assemble') h = m.stage === 'spawn' ? '🤖 Робот готов: выберите свободную клетку на своих первых двух горизонталях, там он появится.' : 'Соберите робота на планшете.';
         else if (t === 'charger') h = '🔋 Выберите свободную клетку для плитки-зарядки.';
         else if (t === 'turret') h = m.stage === 'spawn' ? '🗼 Турель готова: выберите свободную клетку на своих первых трёх горизонталях, там она появится.' : 'Соберите турель на планшете.';
-        else if (t === 'reprogram') h = m.stage === 'piece' ? '🛠 Выберите своего робота или свою турель для перепрограммирования (ход не тратится).' : 'Перенастройте фигуру на планшете.';
+        else if (t === 'reprogram') h = m.stage === 'piece' ? '🛠 Выберите своего робота или свою турель для перепрограммирования (это тратит ход).' : 'Перестройте фигуру на планшете.';
         else if (t === 'hatchexit') h = m.plan ? '🪵 ' + m.label + ' попала на люк: выберите люк, из которого она вылезет.' : '🪵 Фигура провалилась в люк: выберите свободный люк, из которого она вылезет.';
         if (m.via) h = '🪞 Зеркало: ' + h;
     } else if (G.sel && G.board[G.sel.r][G.sel.c] && G.board[G.sel.r][G.sel.c].betray === G.turn && G.board[G.sel.r][G.sel.c].c !== G.turn) {
@@ -4484,6 +4516,8 @@ $('#app').addEventListener('click', e => {
     if (tm && !tm.disabled) { netDo({ t: 'tomato', k: tm.dataset.tomato }); return; }
     const sl = e.target.closest('[data-slow]');
     if (sl && !sl.disabled) { netDo({ t: 'slow', k: sl.dataset.slow }); return; }
+    const eu = e.target.closest('[data-eureka]');
+    if (eu && !eu.disabled) { eurekaAsk(eu.dataset.eureka); return; }
     const ab = e.target.closest('[data-ab]');
     if (ab && !ab.disabled) { netDo({ t: 'ab', k: ab.dataset.ab }); return; }
     const gp = e.target.closest('[data-gi]');
@@ -5496,12 +5530,26 @@ Object.assign(EN, {
 Object.assign(EN, {
     "Инженер": "Engineer",
     "Робототехника · в разработке": "Robotics · in development",
-    [PASSIVES.engWip.name]: "Passive in development",
-    [PASSIVES.engWip.desc]: "The Engineer has no passive yet: the hero is still in development.",
+    [PASSIVES.eureka.name]: "Eureka",
+    [PASSIVES.eureka.desc]: "Once per game you can nullify the cooldown of any of your abilities: click an ability that is recharging and confirm with the check mark.",
+    " (использована)": " (used)",
+    "💡 Эврека?": "💡 Eureka?",
+    "💡 ЭВРЕКА": "💡 EUREKA",
+    "ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ": "NULLIFY THE COOLDOWN OF",
+    "? ЭТО МОЖНО СДЕЛАТЬ ОДИН РАЗ ЗА БОЙ.": "? YOU CAN DO THIS ONCE PER GAME.",
+    "ДА": "YES",
+    "НЕТ": "NO",
+    "🔋 Робот заряжен: этот ход бесплатный (шаховать им нельзя), потом вы ещё сходите как обычно.": "🔋 The robot is charged: this move is free (it cannot give check), then you still make your normal move.",
+    "🔋 Заряд потрачен: бесплатный ход робота сделан, обычный ход ещё впереди": "🔋 Charge spent: the free robot move is done, your normal move is still ahead",
+    "🛠 Выберите своего робота или свою турель для перепрограммирования (это тратит ход).": "🛠 Choose your robot or your turret to reprogram (this uses your move).",
+    "Перестройте фигуру на планшете.": "Rebuild the piece on the tablet.",
+    "ПЕРЕПРОГРАММИРОВАНИЕ · КД:": "REPROGRAMMING · CD:",
+    "РАДИУС ТУРЕЛИ ЗАНОВО. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.": "TURRET RADIUS FROM SCRATCH. EACH NEW SQUARE +2 CD.",
+    "Робот: синие клетки: ходит, красные: ходит и рубит, жёлтые: только рубит.": "Robot: blue squares: moves, red: moves and captures, yellow: captures only.",
     [ABILITIES.assemble.name]: "Robot Assembly",
     [ABILITIES.assemble.desc]: "A tablet opens: you build a robot piece (boot: walks and captures along chosen directions without jumping over pieces, range can be upgraded; wing: jumps to chosen squares of a 5×5 area). The robot appears on a free square of your first two ranks. Cooldown 3 plus extra for every upgrade.",
     [ABILITIES.charger.name]: "Charger",
-    [ABILITIES.charger.desc]: "Creates a charger tile on a free square. While your robot stands on the charger, it can make a free move that does not use your main move (moving it is optional). One free move per turn for each robot.",
+    [ABILITIES.charger.desc]: "Creates a charger tile on a free square. A piece that steps on the tile gets a discharge: an ordinary piece (not a king) is stunned and skips its next move, like in a trap. A robot gets 1 charge: next time it moves for free without using your main move (this move cannot give check), and then you make your normal move. You may also move another piece: the charge stays.",
     "Этот герой ещё в разработке: его можно выбрать в дружеских партиях и на одном экране.": "This hero is still in development: you can pick them in friendly games and on one screen.",
     "🤖 Робот готов: выберите свободную клетку на своих первых двух горизонталях, там он появится.": "🤖 The robot is ready: choose a free square on your first two ranks, it will appear there.",
     "Соберите робота на планшете.": "Build the robot on the tablet.",
@@ -5553,7 +5601,7 @@ Object.assign(EN, {
     [ABILITIES.turret.name]: "Turret Assembly",
     [ABILITIES.turret.desc]: "A tablet opens: you build a stationary turret. Instant fire: you choose squares of a 3×3 radius; an enemy that ends up in them is destroyed at once. Long-range artillery: you choose squares of a 5×5 radius; if a new enemy appears in one of them, a shot lands there after a turn. The turret appears on a free square of your first three ranks. Cooldown 5 plus extra for every square of the radius.",
     [ABILITIES.reprogram.name]: "Reprogramming",
-    [ABILITIES.reprogram.desc]: "Does not use your move. Reconfigures the radius of your turret or ONLY the walking of your robot. Cooldown 1, plus 2 for every new turret square and plus 1 for every new walking square or direction of the robot.",
+    [ABILITIES.reprogram.desc]: "Uses your move. A robot is rebuilt from scratch on the tablet (as when assembling, the previous choice stays and can be removed or added to), a turret's radius is chosen anew. Cooldown 1, plus extra for every NEW square or direction: for a robot as when assembling, for a turret 2 each.",
     "🗼 Турель готова: выберите свободную клетку на своих первых трёх горизонталях, там она появится.": "🗼 The turret is ready: choose a free square on your first three ranks, it will appear there.",
     "Соберите турель на планшете.": "Build the turret on the tablet.",
     "🛠 Выберите своего робота или свою турель для перепрограммирования (ход не тратится).": "🛠 Choose your robot or your turret to reprogram (does not use your move).",
@@ -6635,7 +6683,7 @@ function engCells(key, col) {
         rows.forEach(r => {
             if (r < 0 || r >= N) return;
             for (let c = 0; c < N; c++) {
-                if (!isFreeCell(r, c)) continue;
+                if (wallAt(r, c) || (G.board[r][c] && !(VIEWER && hiddenFor(G.board[r][c], VIEWER)))) continue;      // роботу и турели нужна клетка без фигур, плитки не мешают
                 const nb = cloneBoard(b);
                 nb[r][c] = { ...sample };
                 if (safeAfter(nb, col)) cells.push([r, c]);
@@ -6670,6 +6718,7 @@ function engBuild(m, col) {
 }
 
 function engFinish(m) {
+    if (m.rb) { if (engReproRobState(m).changed) doReproRobot(m); return; }      // перепрограммирование робота: ничего не менялось, планшет остаётся
     m.stage = 'spawn'; m.sel = null;
     m.cells = abilityCells(m.type, G.turn);
     if (!m.cells.length) { cancelAbilityMode(); return; }
@@ -6677,15 +6726,21 @@ function engFinish(m) {
     render();
 }
 
-// Перепрограммирование: что изменилось и сколько это стоит
+// Перепрограммирование турели: что изменилось и сколько это стоит
 function engReproState(m) {
     const rp = m.rp;
-    if (!rp) return { cost: 0, changed: false, valid: false, per: 1 };
+    if (!rp) return { cost: 0, changed: false, valid: false };
     const key = d => d[0] + ',' + d[1];
     const diff = (a, b) => a.filter(d => !b.some(x => key(x) === key(d))).length;      // клеток в a, которых нет в b
-    if (rp.kind === 'turret') return { cost: 2 * diff(rp.tc, rp.old), changed: diff(rp.tc, rp.old) + diff(rp.old, rp.tc) > 0, valid: rp.tc.length >= 1, per: 2 };
-    if (rp.kind === 'wing') return { cost: diff(rp.jw, rp.old), changed: diff(rp.jw, rp.old) + diff(rp.old, rp.jw) > 0, valid: true, per: 1 };
-    return { cost: diff(rp.walk, rp.old), changed: diff(rp.walk, rp.old) + diff(rp.old, rp.walk) > 0, valid: rp.walk.length + rp.atk.length >= 1, per: 1 };
+    return { cost: 2 * diff(rp.tc, rp.old), changed: diff(rp.tc, rp.old) + diff(rp.old, rp.tc) > 0, valid: rp.tc.length >= 1 };
+}
+// Перепрограммирование робота: заново проходится сборка, прежний выбор остаётся. Платятся только новые клетки и направления
+function engReproRobState(m) {
+    const o = m.old, key = d => d[0] + ',' + d[1];
+    const diff = (a, b) => a.filter(d => !b.some(x => key(x) === key(d))).length;
+    const same = (a, b) => diff(a, b) === 0 && diff(b, a) === 0;
+    if (m.kind === 'wing') return { cost: 2 * diff(m.ja, o.ja) + diff(m.jw, o.jw), changed: !(same(m.ja, o.ja) && same(m.jw, o.jw)) };
+    return { cost: diff(m.walk, o.walk) + diff(m.atk, o.atk) + Math.max(0, m.wr - o.wr) * (engSame(m) ? 2 : 1), changed: !(same(m.walk, o.walk) && same(m.atk, o.atk) && m.wr === o.wr) };
 }
 
 function engInput(msg) {
@@ -6698,7 +6753,7 @@ function engInput(msg) {
     if (a === 'back') {
         if (!m.hist.length) { cancelAbilityMode(); return; }
         m.stage = m.hist.pop(); m.sel = null;
-        if (m.stage === 'piece') { m.cells = abilityCells('reprogram', G.turn); m.rp = null; m.target = null; }
+        if (m.stage === 'piece') { m.cells = abilityCells('reprogram', G.turn); m.rp = null; m.target = null; m.rb = false; m.hist = []; }
         render();
         return;
     }
@@ -6716,22 +6771,15 @@ function engInput(msg) {
         render();
         return;
     }
-    if (m.type === 'reprogram') {
+    if (m.type === 'reprogram' && !m.rb) {      // перепрограммирование турели: радиус заново
         const rp = m.rp;
         if (st !== 'rp' || !rp) return;
-        if (a === 'dir') {
-            if (rp.kind !== 'boot' || !okD(v, 1)) return;
-            engToggle(rp.walk, v);
-        } else if (a === 'jump') {
-            if (rp.kind === 'turret') { if (!okD(v, rp.tk === 'instant' ? 1 : 2)) return; engToggle(rp.tc, v); }
-            else if (rp.kind === 'wing') {
-                if (!okD(v, 2) || engHas(rp.ja, v)) return;
-                if (!engHas(rp.jw, v) && rp.ja.length + rp.jw.length >= ENG_MAX_JUMP) return;
-                engToggle(rp.jw, v);
-            } else return;
+        if (a === 'jump') {
+            if (!okD(v, rp.tk === 'instant' ? 1 : 2)) return;
+            engToggle(rp.tc, v);
         } else if (a === 'next') {
-            const s = engReproState(m);
-            if (!s.valid || !s.changed) return;
+            const s2 = engReproState(m);
+            if (!s2.valid || !s2.changed) return;
             doReprogram(m);
             return;
         } else return;
@@ -6750,7 +6798,9 @@ function engInput(msg) {
     } else if (a === 'jump') {
         if (!okD(v, 2)) return;
         if (st === 'wing') {
-            if (!engHas(m.ja, v) && m.ja.length >= ENG_MAX_JUMP) return;
+            const had = engHas(m.ja, v), inJw = engHas(m.jw, v);
+            if (!had && !inJw && m.ja.length + m.jw.length >= ENG_MAX_JUMP) return;
+            if (!had && inJw) { const k2 = m.jw.findIndex(x => x[0] === v[0] && x[1] === v[1]); m.jw.splice(k2, 1); }      // клетка из «только ходьба» становится «ходьба и атака»
             engToggle(m.ja, v);
         } else if (st === 'wingplus') {
             if (engHas(m.ja, v)) return;
@@ -6770,7 +6820,7 @@ function engInput(msg) {
         else if (st === 'atk') { if (m.walk.length + m.atk.length < 1) return; go('after'); }
         else if (st === 'after') {
             if (m.sel === 'boot') go('range');
-            else if (m.sel === 'x') { m.wr = 1; engFinish(m); return; }
+            else if (m.sel === 'x') { if (!m.rb) m.wr = 1; engFinish(m); return; }
             else return;
         }
         else if (st === 'range') { engFinish(m); return; }
@@ -6815,20 +6865,30 @@ function doTurret(r, c) {
     finishAbility('turret', `${A.icon} ${A.name}: ${tur.kind === 'instant' ? 'мгновенная стрельба' : 'дальняя артиллерия'} на ${sqName(r, c)}`);
 }
 
-// Перепрограммирование: свободное действие, ход не тратится
+// Перепрограммирование турели: радиус заново, тратит ход
 function doReprogram(m) {
     const col = G.turn, A = ABILITIES.reprogram;
-    const [r, c] = m.target, p = G.board[r][c], s = engReproState(m), rp = m.rp;
-    if (!p) { cancelAbilityMode(); return; }
-    const abs = d => engAbs(col, d);
-    if (rp.kind === 'turret') { p.tur.cells = rp.tc.map(abs); turretSeen(r, c); }
-    else if (rp.kind === 'wing') p.rob.jw = rp.jw.map(abs);
-    else p.rob.walk = rp.walk.map(abs);
+    const [r, c] = m.target, p = G.board[r][c], s2 = engReproState(m), rp = m.rp;
+    if (!p || !p.tur) { cancelAbilityMode(); return; }
+    p.tur.cells = rp.tc.map(d => engAbs(col, d));
+    turretSeen(r, c);
     if (!G.engCost) G.engCost = { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 };
-    G.engCost[col + 'r'] = s.cost;
+    G.engCost[col + 'r'] = s2.cost;
     G.fx.push({ r, c, type: 'cast' });
     sfx('cast');
-    finishAbility('reprogram', `${A.icon} ${A.name}: ${p.t === 'u' ? 'турель' : 'робот'} на ${sqName(r, c)} перенастроен${p.t === 'u' ? 'а' : ''}`);
+    finishAbility('reprogram', `${A.icon} ${A.name}: турель на ${sqName(r, c)} перенастроена`);
+}
+// Перепрограммирование робота: правила собираются заново по тому же планшету, тратит ход
+function doReproRobot(m) {
+    const col = G.turn, A = ABILITIES.reprogram;
+    const [r, c] = m.target, p = G.board[r][c], s2 = engReproRobState(m);
+    if (!p || p.t !== 'x') { cancelAbilityMode(); return; }
+    p.rob = engBuild(m, col);
+    if (!G.engCost) G.engCost = { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 };
+    G.engCost[col + 'r'] = s2.cost;
+    G.fx.push({ r, c, type: 'cast' });
+    sfx('cast');
+    finishAbility('reprogram', `${A.icon} ${A.name}: робот на ${sqName(r, c)} перестроен`);
 }
 
 // Плитка-зарядка
@@ -6842,8 +6902,14 @@ function doCharger(r, c) {
     finishAbility('charger', `${A.icon} ${A.name}: плитка на ${sqName(r, c)}`);
 }
 
-// Бесплатный ход: свой робот стоит на своей зарядке и ещё не пользовался ею в этот ход
-const chargeFree = (p, r, c) => !!p && p.t === 'x' && !p.ghost && p.c === G.turn && !p.orig && (G.chargers || []).some(x => x.r === r && x.c === c && x.owner === p.c) && !(G.chargeUsed || []).includes(p.uid);
+// Бесплатный ход: у робота есть заряд (он получает его, вставая на плитку-зарядку) и он ещё не ходил бесплатно в этот ход
+const chargeFree = (p, r, c) => !!p && p.t === 'x' && p.chg > 0 && !p.ghost && p.c === G.turn && !p.orig && !(G.chargeUsed || []).includes(p.uid);
+// Ход ставит шах сопернику? Бесплатным ходом шаховать нельзя: такой ход идёт как обычный и заряд не тратит
+function engGivesCheck(mv) {
+    const nb = cloneBoard(G.board);
+    applyMove(nb, mv, 'q');
+    return kingAttacked(nb, other(G.turn));
+}
 
 /* ---------- Турель: радиус, срабатывание, выстрел ---------- */
 const turKey = (q, rr, cc) => (q.ghost ? 'g' + (q.pair || 0) + ':' + rr + ',' + cc : String(uidOf(q)));
@@ -6899,6 +6965,46 @@ function turretScan() {
     if (died) { soulSync(); checkIllusions(); }
 }
 
+/* ---------- Эврека: один раз за бой аннулировать перезарядку способности ---------- */
+const eurekaReady = col => !!G && G.hero[col] === 'engineer' && !(G.eurekaUsed && G.eurekaUsed[col]);
+function doEureka(k) {
+    const col = G.turn;
+    if (G.over || G.mode || G.bonus || !eurekaReady(col) || !HEROES[G.hero[col]].abilities.includes(k) || !(G.cd[col][k] > 0)) return;
+    G.cd[col][k] = 0;
+    if (!G.eurekaUsed) G.eurekaUsed = { w: false, b: false };
+    G.eurekaUsed[col] = true;
+    G.fx.push({ r: -1, c: -1, type: 'cast' });
+    sfx('shield');
+    addLog(col, `💡 Эврека! Перезарядка способности «${ABILITIES[k].name}» аннулирована`);
+    render();
+}
+// Подтверждение: два зелёных квадрата, галочка и крестик
+function eurekaAsk(k) {
+    if (!G || !eurekaReady(G.turn) || !isActor()) return;
+    let dlg = document.getElementById('eurekaDlg');
+    if (!dlg) {
+        dlg = document.createElement('div');
+        dlg.id = 'eurekaDlg';
+        dlg.className = 'eng-ov hidden';
+        dlg.addEventListener('click', e => {
+            const b = e.target.closest('[data-eu]');
+            if (!b) return;
+            dlg.classList.add('hidden');
+            if (b.dataset.eu === 'yes') { SFX.engOk(); netDo({ t: 'eureka', k: dlg.dataset.k }); }
+            else SFX.engBack();
+        });
+        document.body.appendChild(dlg);
+    }
+    dlg.dataset.k = k;
+    dlg.innerHTML = `<div class="eng-tab"><div class="eng-screen">
+        <div class="eng-head"><span class="eng-title">💡 ЭВРЕКА</span></div>
+        <div class="eng-body"><div class="eng-note ask">ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ «<b class="eu-name">${ABILITIES[k].name}</b>»? ЭТО МОЖНО СДЕЛАТЬ ОДИН РАЗ ЗА БОЙ.</div>
+        <div class="eng-row"><button class="eng-sq big" data-eu="yes">${engPix('check')}<i>ДА</i></button><button class="eng-sq big" data-eu="no">${engPix('cross')}<i>НЕТ</i></button></div></div>
+      </div></div>`;
+    dlg.classList.remove('hidden');
+    SFX.engSwitch();
+}
+
 /* ---------- Подсветка клеток робота и турели при нажатии ---------- */
 let ENG_INFO = null;      // { r, c, stamp }: осмотр чужой (или любой, когда не ваш ход) фигуры-робота или турели
 const engSpecial = p => !!p && !p.ghost && ((p.t === 'x' && p.rob) || (p.t === 'u' && p.tur));
@@ -6950,17 +7056,15 @@ function engPaintInfo() {
             p.tur.cells.forEach(([dr, dc]) => { const rr = r + dr, cc = c + dc; if (rr < 0 || rr >= N || cc < 0 || cc >= N) return; const el = cellEl(rr, cc); if (el) el.classList.add(p.tur.kind === 'instant' ? 'rbi-t' : 'rbi-a'); });
         }
         const LEG = p.t === 'x'
-            ? ['Робот: синие клетки: ходит, красные: ходит и рубит, фиолетовые: только рубит.', 'Robot: blue squares: moves, red: moves and captures, purple: captures only.']
+            ? ['Робот: синие клетки: ходит, красные: ходит и рубит, жёлтые: только рубит.', 'Robot: blue squares: moves, red: moves and captures, yellow: captures only.']
             : p.tur.kind === 'instant'
                 ? ['Турель: красные клетки: враг в них уничтожается сразу.', 'Turret: red squares: an enemy there is destroyed at once.']
                 : ['Турель: жёлтые клетки: если в них появится враг, через ход туда прилетит выстрел.', 'Turret: yellow squares: if an enemy appears there, a shot lands on it after a turn.'];
         ['hint', 'mHint'].forEach(id => { const h = document.getElementById(id); if (h) h.textContent = L(LEG[0], LEG[1]); });
     }
-    // робот на зарядке: бесплатный ход
-    if (!G.mode && isActor()) {
-        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (chargeFree(G.board[r][c], r, c)) { const el = cellEl(r, c), pe = el && el.querySelector('.piece'); if (pe) pe.classList.add('charged'); }
-        if (G.sel && chargeFree(G.board[G.sel.r][G.sel.c], G.sel.r, G.sel.c)) ['hint', 'mHint'].forEach(id => { const h = document.getElementById(id); if (h) h.textContent = L('🔋 Робот на зарядке: этот ход бесплатный, после него вы ещё сходите как обычно.', '🔋 The robot is on a charger: this move is free, you still make your normal move after it.'); });
-    }
+    // заряженный робот: его ход бесплатный
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) { const q = G.board[r][c]; if (q && q.t === 'x' && q.chg > 0) { const el = cellEl(r, c), pe = el && el.querySelector('.piece'); if (pe) pe.classList.add('charged'); } }
+    if (!G.mode && isActor() && G.sel && chargeFree(G.board[G.sel.r][G.sel.c], G.sel.r, G.sel.c)) ['hint', 'mHint'].forEach(id => { const h = document.getElementById(id); if (h) h.textContent = L('🔋 Робот заряжен: этот ход бесплатный (шаховать им нельзя), потом вы ещё сходите как обычно.', '🔋 The robot is charged: this move is free (it cannot give check), then you still make your normal move.'); });
 }
 // Нажатие на чужого (или, когда не ваш ход, любого) робота или турель: показать, куда они дотягиваются, ничего не отправляя сопернику
 document.getElementById('board').addEventListener('click', e => {
@@ -7001,6 +7105,7 @@ const ENG_SPR = {
     bolt: ['.....###.', '....###..', '...###...', '..######.', '.....##..', '....##...', '...##....', '..#......', '.#.......'],
     target: ['...###...', '.##...##.', '.#..#..#.', '#...#...#', '#.#####.#', '#...#...#', '.#..#..#.', '.##...##.', '...###...'],
     tower: ['..####..', '.######.', '..####..', '..####..', '.######.', '.######.', '########', '########'],
+    check: ['.........', '........#', '.......##', '......##.', '#....##..', '##..##...', '.####....', '..##.....', '...#.....'],
     cross: Array.from({ length: 9 }, (_, i) => Array.from({ length: 9 }, (_, j) => (Math.abs(i - j) <= 1 || Math.abs(i + j - 8) <= 1) ? '#' : '.').join(''))
 };
 // пешка с мечом: пешка внизу слева, меч справа
@@ -7049,17 +7154,17 @@ function engTabletHTML(m) {
             note = `КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО ${m.tc.length}. НУЖНА ХОТЯ БЫ ОДНА.`;
             ok = m.tc.length >= 1;
         }
-    } else if (m.type === 'reprogram') {
-        const rp = m.rp, s = engReproState(m);
+    } else if (m.type === 'reprogram' && !m.rb) {
+        const rp = m.rp, s2 = engReproState(m);
         title = 'ПЕРЕПРОГРАММИРОВАНИЕ';
         nextLabel = 'ПРИМЕНИТЬ ▶';
-        ok = s.valid && s.changed;
-        costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: 1 + ${s.cost} = ${1 + s.cost}`;
-        if (rp.kind === 'turret') { body = cellGrid(rp.tk === 'instant' ? 3 : 5, rp.tc, null, false, 'tower'); note = 'РАДИУС ТУРЕЛИ. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.'; }
-        else if (rp.kind === 'wing') { body = cellGrid(5, rp.jw, rp.ja, true, 'pawn'); note = 'ТОЛЬКО ХОДЬБА РОБОТА. КАЖДАЯ НОВАЯ КЛЕТКА +1 КД.'; }
-        else { body = dirGrid(rp.walk); note = 'ТОЛЬКО ХОДЬБА РОБОТА. КАЖДОЕ НОВОЕ НАПРАВЛЕНИЕ +1 КД.'; }
+        ok = s2.valid && s2.changed;
+        costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: 1 + ${s2.cost} = ${1 + s2.cost}`;
+        body = cellGrid(rp.tk === 'instant' ? 3 : 5, rp.tc, null, false, 'tower');
+        note = 'РАДИУС ТУРЕЛИ ЗАНОВО. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.';
     } else {
-        costLine = `СБОРКА РОБОТА · КД: 3 + ${engCost({ ...m, kind: kindNow })} = ${3 + engCost({ ...m, kind: kindNow })}`;
+        if (m.rb) { const rs = engReproRobState(m); costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: 1 + ${rs.cost} = ${1 + rs.cost}`; }
+        else costLine = `СБОРКА РОБОТА · КД: 3 + ${engCost({ ...m, kind: kindNow })} = ${3 + engCost({ ...m, kind: kindNow })}`;
         if (st === 'kind') {
             title = 'ВЫБОР ФИГУРЫ';
             body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'САПОГ<br>+0 КД') + sq('pick', 'wing', m.sel === 'wing', engPix('wing'), 'КРЫЛО<br>+3 КД') + '</div>';
@@ -7206,14 +7311,19 @@ render = function () {
 function engPickRepro(r, c) {
     const m = G.mode, col = G.turn, p = G.board[r][c];
     if (!p || !m.cells.some(x => x[0] === r && x[1] === c)) return;
-    const ui = d => engAbs(col, d);
-    m.hist.push('piece'); m.target = [r, c]; m.sel = null; m.stage = 'rp'; m.cells = [];
-    if (p.t === 'u') { const t = p.tur.cells.map(ui); m.rp = { kind: 'turret', tk: p.tur.kind, tc: t.map(d => [d[0], d[1]]), old: t.map(d => [d[0], d[1]]) }; }
-    else if (p.rob.kind === 'wing') { const w = p.rob.jw.map(ui); m.rp = { kind: 'wing', ja: p.rob.ja.map(ui), jw: w.map(d => [d[0], d[1]]), old: w.map(d => [d[0], d[1]]) }; }
-    else { const w = p.rob.walk.map(ui); m.rp = { kind: 'boot', walk: w.map(d => [d[0], d[1]]), atk: p.rob.atk.map(ui), old: w.map(d => [d[0], d[1]]) }; }
+    const ui = d => engAbs(col, d), cp = arr => arr.map(d => [d[0], d[1]]);
+    m.hist = ['piece']; m.target = [r, c]; m.sel = null; m.cells = [];
+    if (p.t === 'u') {
+        const t = cp(p.tur.cells.map(ui));
+        m.rb = false; m.stage = 'rp'; m.rp = { kind: 'turret', tk: p.tur.kind, tc: cp(t), old: cp(t) };
+    } else {
+        m.rb = true; m.rp = null; m.kind = p.rob.kind;
+        if (p.rob.kind === 'wing') { m.ja = cp(p.rob.ja.map(ui)); m.jw = cp(p.rob.jw.map(ui)); m.walk = []; m.atk = []; m.wr = 1; m.stage = 'wing'; }
+        else { m.walk = cp(p.rob.walk.map(ui)); m.atk = cp(p.rob.atk.map(ui)); m.wr = p.rob.wr; m.ja = []; m.jw = []; m.stage = 'walk'; }
+        m.old = { walk: cp(m.walk), atk: cp(m.atk), wr: m.wr, ja: cp(m.ja), jw: cp(m.jw) };      // что было до перепрограммирования
+    }
     render();
 }
-
 
 /* =====================================================================
    АНИМАЦИИ СПОСОБНОСТЕЙ
