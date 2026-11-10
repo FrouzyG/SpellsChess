@@ -102,6 +102,7 @@
             </div>
         </div>
         <div id="panel-b" class="panel"></div>
+        <button id="infoFab" class="info-fab" data-info title="Описание способностей">i</button>
 
         <!-- Мобильная версия: строка статуса и нижняя панель (на компьютере скрыты) -->
         <div id="mStrip" class="m-strip">
@@ -163,6 +164,15 @@
             </details>
         </aside>
     </main>
+
+    <!-- Описание способностей героев партии -->
+    <div id="abInfo" class="overlay hidden">
+        <div class="small-card ab-info-card">
+            <h2>ⓘ Способности героев</h2>
+            <div id="abInfoBody" class="ab-info-body"></div>
+            <button id="abInfoClose" class="small-btn">Закрыть</button>
+        </div>
+    </div>
 
     <!-- Жалоба на игрока -->
     <div id="report" class="overlay hidden">
@@ -254,6 +264,7 @@
             </div>
             <input id="authEmail" type="email" autocomplete="email" placeholder="Почта">
             <input id="authPass" type="password" autocomplete="current-password" placeholder="Пароль (от 6 символов)">
+            <input id="authPass2" type="password" autocomplete="new-password" placeholder="Повторите пароль" class="hidden">
             <input id="authNick" maxlength="16" autocomplete="nickname" placeholder="Ник (3–16 символов)" class="hidden">
             <p id="authMsg" class="auth-msg"></p>
             <button id="authSubmit" class="big-btn">Войти</button>
@@ -311,6 +322,8 @@
             <h3 class="prof-h">История партий</h3>
             <div id="profGames" class="top-list"></div>
             <div class="prof-actions">
+                <button id="profNickBtn" class="small-btn hidden">✏️ Сменить ник (🔮 1)</button>
+                <button id="profPassBtn" class="small-btn hidden">🔑 Сменить пароль</button>
                 <button id="profBlockBtn" class="small-btn hidden">🚫 Заблокировать</button>
                 <button id="profDelBtn" class="small-btn hidden">🗑 Удалить аккаунт</button>
             </div>
