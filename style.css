@@ -5835,8 +5835,8 @@ button {
         position: absolute;
         left: 14%;
         right: 14%;
-        bottom: -2%;
-        height: 30%;
+        bottom: -9%;
+        height: 28%;
         border-radius: 50% 50% 0 0;
         background: radial-gradient(ellipse at 50% 100%, #6b4527 0, #4a2d18 62%, transparent 64%);
         opacity: 0;
