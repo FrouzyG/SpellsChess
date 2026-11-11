@@ -357,7 +357,7 @@ HEROES.magician = { icon: '🎩', name: 'Фокусник', tag: 'Фокусы �
 // Инженер: собирает фигуру-робота по своим правилам и заряжает его на плитке
 PASSIVES.eureka = {
     icon: '💡', name: 'Эврика',
-    desc: 'Можно аннулировать перезарядку любой своей способности: нажмите на способность, которая перезаряжается, и подтвердите выбор галочкой. Сама Эврика после использования перезаряжается 20 секунд.'
+    desc: 'Можно аннулировать перезарядку любой своей способности: нажмите на способность, которая перезаряжается, и подтвердите выбор галочкой. Сама Эврика после использования перезаряжается 20 ходов.'
 };
 Object.assign(ABILITIES, {
     assemble: {
@@ -793,35 +793,35 @@ function pseudoMoves(b, r, c) {
 
     const robMoves = rb => {
         if (!rb) return;
-        // сапог: ходьба (без рубки, фигуры не перепрыгивает) и рубка (только по своим направлениям, фигуры не перепрыгивает)
-        (rb.walk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
-            if (path.length >= rb.wr) return true;
-            if (!t) { add(tr, tc, { path: path.slice() }); return false; }
-            if (t.ghost) { if (t.c === p.c || !ghost) add(tr, tc, { path: path.slice() }); return false; }
-            if (passThru(t, p.c, tr, tc)) return false;
-            if (!ghost && supOpen(b, t)) { add(tr, tc, { path: path.slice() }); return false; }
-            return true;
-        }));
-        (rb.atk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
-            if (path.length >= rb.ar) return true;
-            if (!t || t.ghost) return false;
-            if (passThru(t, p.c, tr, tc)) { if (t.c !== p.c && canTake(t, tr, tc)) add(tr, tc, { path: path.slice() }); return false; }
-            if (!ghost && supOpen(b, t)) return false;
-            if (canTake(t, tr, tc)) add(tr, tc, { path: path.slice() });
-            return true;
-        }));
-        // крыло: прыжки по клеткам 5×5 (ja: ходят и рубят, jw: только ходят)
-        (rb.ja || []).forEach(([dr, dc]) => {
-            const tr = r + dr, tc = wcol(p, c + dc);
-            if (tr < 0 || tr >= N || tc < 0) return;
-            const t = b[tr][tc];
-            if (passable(t) || canTake(t, tr, tc)) add(tr, tc, { path: [] });
-        });
-        (rb.jw || []).forEach(([dr, dc]) => {
-            const tr = r + dr, tc = wcol(p, c + dc);
-            if (tr < 0 || tr >= N || tc < 0) return;
-            if (passable(b[tr][tc])) add(tr, tc, { path: [] });
-        });
+                // сапог: ходьба (без рубки, фигуры не перепрыгивает) и рубка (только по своим направлениям, фигуры не перепрыгивает)
+                (rb.walk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
+                    if (path.length >= rb.wr) return true;
+                    if (!t) { add(tr, tc, { path: path.slice() }); return false; }
+                    if (t.ghost) { if (t.c === p.c || !ghost) add(tr, tc, { path: path.slice() }); return false; }
+                    if (passThru(t, p.c, tr, tc)) return false;
+                    if (!ghost && supOpen(b, t)) { add(tr, tc, { path: path.slice() }); return false; }
+                    return true;
+                }));
+                (rb.atk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
+                    if (path.length >= rb.ar) return true;
+                    if (!t || t.ghost) return false;
+                    if (passThru(t, p.c, tr, tc)) { if (t.c !== p.c && canTake(t, tr, tc)) add(tr, tc, { path: path.slice() }); return false; }
+                    if (!ghost && supOpen(b, t)) return false;
+                    if (canTake(t, tr, tc)) add(tr, tc, { path: path.slice() });
+                    return true;
+                }));
+                // крыло: прыжки по клеткам 5×5 (ja: ходят и рубят, jw: только ходят)
+                (rb.ja || []).forEach(([dr, dc]) => {
+                    const tr = r + dr, tc = wcol(p, c + dc);
+                    if (tr < 0 || tr >= N || tc < 0) return;
+                    const t = b[tr][tc];
+                    if (passable(t) || canTake(t, tr, tc)) add(tr, tc, { path: [] });
+                });
+                (rb.jw || []).forEach(([dr, dc]) => {
+                    const tr = r + dr, tc = wcol(p, c + dc);
+                    if (tr < 0 || tr >= N || tc < 0) return;
+                    if (passable(b[tr][tc])) add(tr, tc, { path: [] });
+                });
     };
 
     if (p.scared) {                               // испуг: дальность хода 1 клетка
@@ -2370,6 +2370,7 @@ function startTurn() {
 
     // 2. Перезарядка способностей
     Object.keys(G.cd[c]).forEach(k => { if (k !== 'sawing' && G.cd[c][k] > 0) G.cd[c][k]--; });
+    if (G.eurekaCd && G.eurekaCd[c] > 0) G.eurekaCd[c]--;      // перезарядка Эврики
     if (G.cd[other(c)] && G.cd[other(c)].sawing > 0) G.cd[other(c)].sawing--;      // Распиливание: перезарядка идёт по ходам соперника, чтобы угрозы от края видел и шах, и тот, кому он грозит
 
     G.chargeUsed = [];      // Зарядка: в каждый ход у каждого робота на плитке один бесплатный ход
@@ -4141,7 +4142,7 @@ function panelHTML(col) {
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
     <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div>${panelNick(col)}</div>
     ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}${hero.plain ? '' : '<button class="pn-info" data-info title="Описание способностей">i</button>'}</div>`;
-    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (перезаряжается)' : ''}</div><div class="abilities">`;
+    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (' + L('КД ', 'CD ') + eurekaLeft(col) + ')' : ''}</div><div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
     const tomMode = !G.over && G.mode && G.mode.type === 'tomato' && col !== G.turn && isActor();
@@ -5635,13 +5636,13 @@ Object.assign(EN, {
     "Инженер": "Engineer",
     "Робототехника": "Robotics",
     [PASSIVES.eureka.name]: "Eureka",
-    [PASSIVES.eureka.desc]: "You can nullify the cooldown of any of your abilities: click an ability that is recharging and confirm with the check mark. After use, Eureka itself recharges for 20 seconds.",
+    [PASSIVES.eureka.desc]: "You can nullify the cooldown of any of your abilities: click an ability that is recharging and confirm with the check mark. After use, Eureka itself recharges for 20 turns.",
     " (использована)": " (used)",
     " (перезаряжается)": " (recharging)",
     "💡 Эврика?": "💡 Eureka?",
     "💡 ЭВРИКА": "💡 EUREKA",
     "ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ": "NULLIFY THE COOLDOWN OF",
-    "? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 20 СЕКУНД.": "? AFTER THAT, EUREKA RECHARGES FOR 20 SECONDS.",
+    "? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 20 ХОДОВ.": "? AFTER THAT, EUREKA RECHARGES FOR 20 TURNS.",
     "ДА": "YES",
     "НЕТ": "NO",
     "🔋 Робот заряжен: этот ход бесплатный (шаховать им нельзя), потом вы ещё сходите как обычно.": "🔋 The robot is charged: this move is free (it cannot give check), then you still make your normal move.",
@@ -7088,16 +7089,15 @@ function turretScan() {
 }
 
 /* ---------- Эврика: один раз за бой аннулировать перезарядку способности ---------- */
-const EUREKA_CD = 20000;      // перезарядка самой Эврики: 20 секунд
-const eurekaLeft = col => (G && G.eurekaAt && G.eurekaAt[col]) ? Math.max(0, EUREKA_CD - (Date.now() - G.eurekaAt[col])) : 0;
+const EUREKA_CD = 20;      // перезарядка самой Эврики: 20 своих ходов (тикает вместе с перезарядкой способностей)
+const eurekaLeft = col => (G && G.eurekaCd && G.eurekaCd[col] > 0) ? G.eurekaCd[col] : 0;
 const eurekaReady = col => !!G && G.hero[col] === 'engineer' && eurekaLeft(col) <= 0;
 function doEureka(k) {
     const col = G.turn;
     if (G.over || G.mode || G.bonus || !eurekaReady(col) || !HEROES[G.hero[col]].abilities.includes(k) || !(G.cd[col][k] > 0)) return;
     G.cd[col][k] = 0;
-    if (!G.eurekaAt) G.eurekaAt = { w: 0, b: 0 };
-    G.eurekaAt[col] = Date.now();
-    setTimeout(() => { if (G && !G.over) render(); }, EUREKA_CD + 60);      // когда 20 секунд пройдут, кнопка снова станет доступна
+    if (!G.eurekaCd) G.eurekaCd = { w: 0, b: 0 };
+    G.eurekaCd[col] = EUREKA_CD;
     G.fx.push({ r: -1, c: -1, type: 'cast' });
     sfx('shield');
     addLog(col, `💡 Эврика! Перезарядка способности «${ABILITIES[k].name}» аннулирована`);
@@ -7123,7 +7123,7 @@ function eurekaAsk(k) {
     dlg.dataset.k = k;
     dlg.innerHTML = `<div class="eng-tab"><div class="eng-screen"><div class="eng-inner">
         <div class="eng-head"><span class="eng-title">💡 ЭВРИКА</span></div>
-        <div class="eng-body"><div class="eng-note ask">ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ «<b class="eu-name">${ABILITIES[k].name}</b>»? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 20 СЕКУНД.</div>
+        <div class="eng-body"><div class="eng-note ask">ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ «<b class="eu-name">${ABILITIES[k].name}</b>»? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 20 ХОДОВ.</div>
         <div class="eng-row"><button class="eng-sq big" data-eu="yes">${engPix('check')}<i>ДА</i></button><button class="eng-sq big" data-eu="no">${engPix('cross')}<i>НЕТ</i></button></div></div>
       </div></div></div>`;
     dlg.classList.remove('hidden');
