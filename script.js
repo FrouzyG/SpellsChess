@@ -446,7 +446,30 @@ function tone(f, d, type = 'sine', v = 0.06, delay = 0) {
         o.start(t); o.stop(t + d);
     } catch (e) { /* звук не критичен */ }
 }
+// Тон со скольжением частоты (для писклявого смеха)
+function slideTone(f0, f1, d, type = 'sawtooth', v = 0.04, delay = 0) {
+    if (!CONFIG.sound) return;
+    try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const o = actx.createOscillator(), g = actx.createGain(), lp = actx.createBiquadFilter(), t = actx.currentTime + delay;
+        o.type = type;
+        o.frequency.setValueAtTime(f0, t);
+        o.frequency.exponentialRampToValueAtTime(f1, t + d);
+        lp.type = 'lowpass'; lp.frequency.value = 3200;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(v, t + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        o.connect(lp); lp.connect(g); g.connect(actx.destination);
+        o.start(t); o.stop(t + d + 0.02);
+    } catch (e) { /* звук не критичен */ }
+}
 const SFX = {
+    // зловещий писклявый смех: «хи-хи-хи-хи… ха-ха-ха…» и долгий визг в конце
+    cackle: () => {
+        [0, 0.13, 0.26, 0.39].forEach((d, i) => slideTone(1450 + i * 110, 1950 + i * 120, 0.09, 'sawtooth', 0.035, d));
+        [0.58, 0.76, 0.94].forEach((d, i) => slideTone(1150 - i * 90, 720 - i * 50, 0.14, 'square', 0.03, d));
+        slideTone(2000, 1250, 0.34, 'sawtooth', 0.03, 1.14);
+    },
     move: () => tone(300, 0.08, 'triangle'),
     capture: () => { tone(180, 0.12, 'square', 0.05); tone(110, 0.16, 'square', 0.05, 0.05); },
     boom: () => { tone(90, 0.5, 'sawtooth', 0.09); tone(55, 0.6, 'square', 0.08, 0.05); },
@@ -2348,8 +2371,7 @@ function startTurn() {
             let src = null;
             G.board.forEach((row, r0) => row.forEach((q0, c0) => { if (q0 && q0.t === 'u' && q0.uid === f.tu && q0.c === f.owner) src = [r0, c0]; }));
             if (!src) { addLog(c, `${name} на ${sq}: турель уничтожена, выстрела не будет`); return; }
-            fd = queueBullet(src, [f.r, f.c], p, 0.55);
-            G.fx.push({ r: src[0], c: src[1], type: 'zap' });
+            fd = queueBullet(src, [f.r, f.c], p, 0.55);      // пуля вылетает из турели, сама турель не вспыхивает
         } else fd = queueFlight(f.owner, f, arrow ? 'arrow' : 'fire', p);
         G.fx.push({ r: f.r, c: f.c, type: arrow ? 'arrowhit' : 'boom', delay: fd });
         sfxLater(arrow ? 'arrow' : 'boom', fd);
@@ -2594,11 +2616,31 @@ function sweepSharp(pre) {      // pre: проверка до конвейера
     if (G.sharp.length < before) addLog('n', '🗡 Острые клетки исчезли');
 }
 
+// Предатель Шута созрел: зловещий смех, доска плавно темнеет, на ней проступает тень клоунской ухмылки
+function jesterCackle() {
+    sfx('cackle');
+    if (REPLAY_REC || typeof document === 'undefined' || ANIM.board === false) return;
+    const bd = document.getElementById('board');
+    if (!bd) return;
+    const rc = bd.getBoundingClientRect();
+    const ov = document.createElement('div');
+    ov.className = 'grin-ov';
+    ov.style.cssText = `left:${rc.left}px;top:${rc.top}px;width:${rc.width}px;height:${rc.height}px`;
+    ov.innerHTML = `<svg viewBox="0 0 200 140" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <path class="gr-eye" d="M42 28 Q62 14 80 36 Q62 34 42 28 Z"/>
+        <path class="gr-eye" d="M158 28 Q138 14 120 36 Q138 34 158 28 Z"/>
+        <path class="gr-mouth" d="M8 50 Q100 120 192 50 Q186 118 100 132 Q14 118 8 50 Z"/>
+        <path class="gr-teeth" d="M23 60 L31 82 L40 70 Z M40 70 L48 91 L57 77 Z M57 77 L66 97 L74 82 Z M74 82 L83 101 L91 85 Z M91 85 L100 102 L109 85 Z M109 85 L117 101 L126 82 Z M126 82 L134 97 L143 77 Z M143 77 L152 91 L160 70 Z M160 70 L169 82 L177 60 Z"/>
+    </svg>`;
+    document.body.appendChild(ov);
+    setTimeout(() => ov.remove(), 1500);
+}
+
 function endTurn() {
     const c = G.turn;
     if (!G.done) G.done = { w: 0, b: 0 };
     G.done[c]++;
-    if (G.done[c] === CONFIG.betrayAfter && G.board.some(row => row.some(q => q && q.betray === other(c)))) addLog('n', '🃏 Одна из фигур готова предавать');
+    if (G.done[c] === CONFIG.betrayAfter && G.board.some(row => row.some(q => q && q.betray === other(c)))) { addLog('n', '🃏 Одна из фигур готова предавать'); jesterCackle(); }
     soulSync();
     G.bonus = null;
     G.noZForce = false;
@@ -7064,8 +7106,7 @@ function turretScan() {
                 if (seenI.has(turKey(q, rr, cc))) return;
                 const sq = sqName(rr, cc);
                 if (magicProof(G.board, rr, cc, p.c)) { if (!q.invis) addLog('n', `⚡ Турель на ${here} целится в ${sq}: цель неуязвима для магии`); return; }
-                const fd = queueBullet([r, c], [rr, cc], q);      // пуля вылетает из турели
-                G.fx.push({ r, c, type: 'zap' });                 // вспышка выстрела
+                const fd = queueBullet([r, c], [rr, cc], q);      // пуля вылетает из турели, сама турель не вспыхивает
                 G.fx.push({ r: rr, c: cc, type: 'arrowhit', delay: fd });
                 sfxLater('arrow', fd);
                 if (q.ghost) { vanishGhost(rr, cc, 'выстрел турели'); addLog('n', `⚡ Турель на ${here} стреляет в ${sq}`); died = true; return; }

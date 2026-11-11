@@ -6223,3 +6223,65 @@ body.piece-drag {
 #gameover .small-card .big-btn:not(.secondary) {
     box-shadow: 0 0 16px rgba(242, 193, 78, 0.35);
 }
+
+
+/* ---- «предатель созрел»: плавное затемнение доски и тень клоунской ухмылки ---- */
+.grin-ov {
+    position: fixed;
+    z-index: 800;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    border-radius: 6px;
+    background: radial-gradient(ellipse at center, rgba(30, 0, 40, 0.62), rgba(5, 0, 12, 0.82));
+    opacity: 0;
+    animation: grinFade 1.4s ease-in-out forwards;
+}
+
+    .grin-ov svg {
+        width: 78%;
+        height: auto;
+        transform: scale(0.88);
+        animation: grinGrow 1.4s ease-in-out forwards;
+        filter: blur(0.6px);
+    }
+
+.gr-mouth, .gr-eye {
+    fill: #000;
+}
+
+.gr-teeth {
+    fill: rgba(255, 255, 255, 0.16);
+}
+
+.gr-eye {
+    fill: rgba(0, 0, 0, 0.9);
+}
+
+@keyframes grinFade {
+    0% {
+        opacity: 0;
+    }
+
+    30% {
+        opacity: 1;
+    }
+
+    62% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes grinGrow {
+    0% {
+        transform: scale(0.88) rotate(-2deg);
+    }
+
+    100% {
+        transform: scale(1.06) rotate(1.5deg);
+    }
+}
