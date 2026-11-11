@@ -4098,6 +4098,40 @@ function renderBoard() {
     runAnimQueue();
 }
 
+const escH = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function avaHTML(a) {
+    if (typeof a === 'string' && a.startsWith('ach:')) { const d = ACH[a.slice(4)]; if (d && d.img) return `<img class="ava-img" src="${escH(d.img)}" alt="">`; }
+    return escH(a && !String(a).startsWith('ach:') ? a : '👤');
+}
+// Ник и маленькая аватарка игрока на карточке (в онлайн-партии, если игрок вошёл в аккаунт)
+function panelNick(col) {
+    if (!NET.on) return '';
+    let nick = '', ava = '';
+    if (col === NET.me) { if (ACC.profile) { nick = ACC.profile.nick; ava = ACC.profile.avatar; } }
+    else if (NET.oppNick) { nick = NET.oppNick; ava = NET.oppAvatar; }
+    if (!nick) return '';
+    return `<div class="pnick" data-notr><span class="pn-ava">${avaHTML(ava)}</span><span class="pn-name">${escH(nick)}</span></div>`;
+}
+// Окно «Описание способностей»: пассивки и способности героев обеих сторон
+function openAbInfo() {
+    if (!G) return;
+    let h = '';
+    ['w', 'b'].forEach(col => {
+        const hero = HEROES[G.hero[col]];
+        if (!hero || hero.plain) return;
+        const ps = PASSIVES[hero.passive];
+        h += `<div class="ai-hero ${col}"><h3>${hero.icon} ${hero.name} <small>· ${colorName(col)}</small></h3>`;
+        h += `<div class="ai-row"><b>${ps.icon} ${ps.name}</b> <i>пассивка</i><p>${ps.desc}</p></div>`;
+        hero.abilities.forEach(k => { const a = ABILITIES[k]; h += `<div class="ai-row"><b>${a.icon} ${a.name}</b>${abFreeDot(k)}<p>${abilityDesc(k)}</p></div>`; });
+        h += '</div>';
+    });
+    $('#abInfoBody').innerHTML = h || 'В этой партии нет героев.';
+    $('#abInfo').classList.remove('hidden');
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-info]')) openAbInfo(); });
+$('#abInfoClose').addEventListener('click', () => $('#abInfo').classList.add('hidden'));
+$('#abInfo').addEventListener('click', e => { if (e.target.id === 'abInfo') $('#abInfo').classList.add('hidden'); });
+
 function panelHTML(col) {
     const hero = HEROES[G.hero[col]];
     const ps = PASSIVES[hero.passive];
@@ -4105,8 +4139,8 @@ function panelHTML(col) {
     const active = isTurn && (!NET.on || col === NET.me);      // кнопки доступны только своему игроку
     const lock = !!(G.bonus || G.pairStep || (G.mode && G.mode.locked) || G.pendingPromo);
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
-    <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div></div>
-    ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}</div>`;
+    <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div>${panelNick(col)}</div>
+    ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}${hero.plain ? '' : '<button class="pn-info" data-info title="Описание способностей">i</button>'}</div>`;
     h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (перезаряжается)' : ''}</div><div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
@@ -4278,7 +4312,10 @@ function renderStatus() {
     } else if (G.check) {
         h = 'Королю угрожает опасность: нужно защититься.';
     }
-    if (NET.on && G.turn !== NET.me) h = NET.lost ? 'Соединение потеряно.' : '⏳ Ход соперника...';
+    if (NET.on && G.turn !== NET.me) {
+        const tm = G.mode && ENG_TAB_MODES.includes(G.mode.type) && G.mode.stage !== 'spawn' && G.mode.stage !== 'piece';      // соперник сидит в планшете Инженера
+        h = NET.lost ? 'Соединение потеряно.' : tm ? '🔧 Враг мастерит...' : '⏳ Ход соперника...';
+    }
     hi.textContent = h;
     renderChat();
     const ni = $('#netInfo');
@@ -4779,6 +4816,8 @@ function netRecv(m) {
             break;
         case 'peer':
             NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0; NET.oppId = /^[0-9a-f-]{36}$/i.test(m.id || '') ? m.id : null; if (isBlocked(NET.oppId)) NET.muted = true;
+            NET.oppAvatar = null;
+            if (NET.oppId && SB) SB.from('profiles').select('avatar').eq('id', NET.oppId).maybeSingle().then(rs => { if (rs && rs.data) { NET.oppAvatar = rs.data.avatar; if (G) render(); } }).catch(() => { });
             updatePeerLabel(); if (G) render();
             break;
         case 'ready':
@@ -7838,16 +7877,17 @@ async function loadProfile() {
 
 function openAuth(mode) {
     authMode = mode;
-    const nick = mode === 'nick', signup = mode === 'signup', reset = mode === 'reset', newp = mode === 'newpass';
-    $('#authTitle').textContent = nick ? 'Как вас называть?' : signup ? 'Регистрация' : reset ? 'Восстановление пароля' : newp ? 'Новый пароль' : 'Вход';
-    $('#authGoogleBox').classList.toggle('hidden', nick || reset || newp || !!window.Capacitor);   // в приложении вход через Google пока скрыт: Google не пускает во встроенный браузер
-    $('#authEmail').classList.toggle('hidden', nick || newp);
-    $('#authPass').classList.toggle('hidden', nick || reset);
-    $('#authNick').classList.toggle('hidden', !(nick || signup));
+    const nick = mode === 'nick', signup = mode === 'signup', reset = mode === 'reset', newp = mode === 'newpass', cn = mode === 'changenick';
+    $('#authTitle').textContent = cn ? 'Новый ник (1 🔮)' : nick ? 'Как вас называть?' : signup ? 'Регистрация' : reset ? 'Восстановление пароля' : newp ? 'Новый пароль' : 'Вход';
+    $('#authGoogleBox').classList.toggle('hidden', nick || reset || newp || cn || !!window.Capacitor);   // в приложении вход через Google пока скрыт: Google не пускает во встроенный браузер
+    $('#authEmail').classList.toggle('hidden', nick || newp || cn);
+    $('#authPass').classList.toggle('hidden', nick || reset || cn);
+    $('#authPass2').classList.toggle('hidden', !newp);
+    $('#authNick').classList.toggle('hidden', !(nick || signup || cn));
     $('#authPass').autocomplete = (signup || newp) ? 'new-password' : 'current-password';
     $('#authPass').placeholder = newp ? L('Новый пароль (от 6 символов)', 'New password (6+ characters)') : L('Пароль (от 6 символов)', 'Password (6+ characters)');
-    $('#authSubmit').textContent = nick ? 'Сохранить ник' : signup ? 'Регистрация' : reset ? 'Отправить письмо' : newp ? 'Сохранить пароль' : 'Войти';
-    $('#authSwitch').classList.toggle('hidden', nick || newp);
+    $('#authSubmit').textContent = cn ? 'Сменить ник за 🔮' : nick ? 'Сохранить ник' : signup ? 'Регистрация' : reset ? 'Отправить письмо' : newp ? 'Сохранить пароль' : 'Войти';
+    $('#authSwitch').classList.toggle('hidden', nick || newp || cn);
     $('#authSwitch').textContent = signup ? 'Уже есть аккаунт? Войти' : reset ? 'Вспомнили пароль? Войти' : 'Нет аккаунта? Регистрация';
     $('#authForgot').classList.toggle('hidden', mode !== 'login');
     authMsg('');
@@ -7856,6 +7896,8 @@ function openAuth(mode) {
 
 function authError(err) {
     const m = String((err && err.message) || '');
+    if (/no_orb/i.test(m)) return 'Для смены ника нужен 1 магический шар. Его дают после рейтинговой партии.';
+    if (/reauthentication|reauth/i.test(m)) return 'Для смены пароля нужно войти заново. Выйдите и войдите снова или нажмите «Забыли пароль?».';
     if (/nick_taken/i.test(m)) return 'Этот ник уже занят, придумайте другой.';
     if (/bad_nick/i.test(m)) return 'Ник: 3–16 символов, буквы, цифры, пробел, _ и -.';
     if (/bad_avatar/i.test(m)) return 'Не удалось сменить аватар.';
@@ -7885,6 +7927,18 @@ async function authSubmit() {
             await loadProfile();
             return;
         }
+        if (authMode === 'changenick') {      // смена ника за 1 магический шар (всё проверяет и списывает сервер Supabase)
+            const nick = $('#authNick').value.trim();
+            if (!NICK_RE.test(nick)) { authMsg('Ник: 3–16 символов, буквы, цифры, пробел, _ и -.'); return; }
+            if (ACC.profile && nick === ACC.profile.nick) { authMsg('Это ваш текущий ник.'); return; }
+            if (!uiConfirm(`Сменить ник на «${nick}» за 1 магический шар? Шар будет потрачен.`)) return;
+            const { error } = await SB.rpc('change_nick', { p_nick: nick });
+            if (error) { authMsg(authError(error)); return; }
+            $('#auth').classList.add('hidden');
+            ACC.loading = false; await loadProfile(); await loadUnlocks();
+            if (ACC.user) openProfile(ACC.user.id);
+            return;
+        }
         if (authMode === 'reset') {      // забыли пароль: письмо со ссылкой на новый пароль
             const mail = $('#authEmail').value.trim();
             if (!mail) { authMsg('Введите почту, на которую зарегистрирован аккаунт.'); return; }
@@ -7896,10 +7950,12 @@ async function authSubmit() {
         if (authMode === 'newpass') {      // пришли по ссылке из письма: задаём новый пароль
             const np = $('#authPass').value;
             if (np.length < 6) { authMsg('Пароль должен быть не короче 6 символов.'); return; }
+            if (np !== $('#authPass2').value) { authMsg('Пароли не совпадают.'); return; }
             const { error } = await SB.auth.updateUser({ password: np });
             if (error) { authMsg(authError(error)); return; }
-            $('#authPass').value = '';
+            $('#authPass').value = ''; $('#authPass2').value = '';
             $('#auth').classList.add('hidden');
+            uiAlert('Пароль изменён.');
             return;
         }
         const email = $('#authEmail').value.trim(), pass = $('#authPass').value;
@@ -7975,7 +8031,7 @@ async function openProfile(uid, selMode) {
     $('#profNick').textContent = '…'; $('#profAva').textContent = ''; $('#profSub').textContent = '';
     $('#profStats').textContent = ''; $('#profGraph').innerHTML = '';
     $('#profAvaPick').classList.add('hidden'); $('#profAvaBtn').classList.add('hidden');
-    $('#profDelBtn').classList.add('hidden'); $('#profBlockBtn').classList.add('hidden');
+    $('#profDelBtn').classList.add('hidden'); $('#profBlockBtn').classList.add('hidden'); $('#profNickBtn').classList.add('hidden'); $('#profPassBtn').classList.add('hidden');
     gl.textContent = 'Загрузка...';
     try {
         const pr = await SB.from('profiles').select(PLAYER_COLS + ',created_at').eq('id', uid).maybeSingle();
@@ -7998,6 +8054,7 @@ async function openProfile(uid, selMode) {
         $('#profAvaBtn').classList.toggle('hidden', !mine);
         PROF.uid = uid;
         $('#profDelBtn').classList.toggle('hidden', !mine);
+        $('#profNickBtn').classList.toggle('hidden', !mine); $('#profPassBtn').classList.toggle('hidden', !mine);
         $('#profBlockBtn').classList.toggle('hidden', !!mine);
         $('#profBlockBtn').textContent = isBlocked(uid) ? '✅ Разблокировать' : '🚫 Заблокировать';
 
@@ -8118,6 +8175,20 @@ $('#topTabs').addEventListener('click', e => { const b = e.target.closest('butto
 $('#topSearch').addEventListener('keydown', e => { if (e.key === 'Enter') findPlayers(); });
 $('#profClose').addEventListener('click', () => $('#prof').classList.add('hidden'));
 $('#profAvaBtn').addEventListener('click', openAvatarPick);
+$('#profNickBtn').addEventListener('click', async () => {
+    if (!SB || !ACC.user) return;
+    await loadUnlocks();
+    if (UNL.orbs < 1) { uiAlert(L('Чтобы сменить ник, нужен 1 магический шар. Его дают после каждой рейтинговой партии (победа, поражение или ничья).', 'Changing your nickname costs 1 magic orb. You get one after every rated game (win, loss or draw).')); return; }
+    $('#prof').classList.add('hidden');
+    $('#authNick').value = ACC.profile ? ACC.profile.nick : '';
+    openAuth('changenick');
+});
+$('#profPassBtn').addEventListener('click', () => {
+    if (!SB || !ACC.user) return;
+    $('#prof').classList.add('hidden');
+    $('#authPass').value = ''; $('#authPass2').value = '';
+    openAuth('newpass');
+});
 $('#setupPeer').addEventListener('click', () => { if (NET.oppId) openProfile(NET.oppId); });
 $('#topClose').addEventListener('click', () => $('#top').classList.add('hidden'));
 $('#accColl').addEventListener('click', () => {
@@ -8470,8 +8541,9 @@ $('#installBtn').addEventListener('click', async () => {
    Фигуры хранятся строками: заглавные буквы белые фигуры, строчные чёрные, точка пустая клетка.
    Плитки хранятся списком: { k: вид, r, c, o: владелец, d: направление, id: пара портала, s: знак генератора }.
    ===================================================================== */
-const BOARD_SLOTS = 5;
-const ED_CH = '.KQRBNPJkqrbnpj';      // J/j: заводные челюсти без таймера жизни
+const BOARD_SLOTS = 10;
+const ED_CH = '.KQRBNPJXkqrbnpjx';      // X/x: роботы Инженера (правила лежат в cfg.robs)
+//      // J/j: заводные челюсти без таймера жизни
 const CLASSIC_ROWS = ['rnbqkbnr', 'pppppppp', '........', '........', '........', '........', 'PPPPPPPP', 'RNBQKBNR'];
 const chColor = ch => (ch === ch.toUpperCase() ? 'w' : 'b');
 const swapCase = ch => (ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase());
@@ -8479,7 +8551,7 @@ const ROOMBOARD = { mode: 'classic', cfg: null }, LOCALBOARD = { mode: 'classic'
 const ROOMCOLOR = { v: 'r' };      // цвет хозяина комнаты: 'w', 'b' или 'r' (случайный, по умолчанию)
 try { const sc = localStorage.getItem('sc_roomcolor'); if (sc === 'w' || sc === 'b' || sc === 'r') ROOMCOLOR.v = sc; } catch (e) { }
 
-const TILE_KINDS = ['wall', 'conv', 'portal', 'gen', 'virus', 'vine', 'ritual', 'hatch', 'trap', 'lure', 'banana', 'burn', 'hog', 'fog'];
+const TILE_KINDS = ['wall', 'conv', 'portal', 'gen', 'virus', 'vine', 'ritual', 'hatch', 'trap', 'lure', 'banana', 'burn', 'hog', 'fog', 'charger'];
 const TILE_DIRS = { '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' };
 // Что показывается в панели плиток. own: у плитки есть владелец; dir: нужно направление; pair: пара портала
 const TILE_PALETTE = [
@@ -8497,6 +8569,7 @@ const TILE_PALETTE = [
     { id: 'banana', k: 'banana', ico: '🍌', ru: 'Банан', en: 'Banana', own: true, neu: true, dir: true },
     { id: 'burn', k: 'burn', ico: '🔥', ru: 'Горящая клетка', en: 'Burning square', own: true },
     { id: 'hog', k: 'hog', ico: '⏳', ru: 'Ход сурка', en: 'Groundhog tile', own: true },
+    { id: 'charger', k: 'charger', ico: '🔋', ru: 'Плитка-зарядка', en: 'Charger tile', own: true },
     { id: 'fog', k: 'fog', ico: '🌫️', ru: 'Дым (поверх всего)', en: 'Smoke (over anything)', own: true }
 ];
 
@@ -8542,12 +8615,52 @@ function normCfg(x) {
         tiles.push(nt);
     }
     if (Object.values(pairs).some(v => v !== 2)) return null;      // у портала должна быть ровно одна пара
+    const robs = [], robKey = new Set();
+    for (const o of (Array.isArray(x.robs) ? x.robs.slice(0, 100) : [])) {
+        if (!o || !Number.isInteger(o.r) || !Number.isInteger(o.c) || o.r < 0 || o.r >= sz || o.c < 0 || o.c >= sz) return null;
+        if (!'Xx'.includes(rows[o.r][o.c])) return null;
+        const key = o.r + ',' + o.c;
+        if (robKey.has(key)) return null;
+        robKey.add(key);
+        const rb = normRob(o.rob, sz);
+        if (!rb) return null;
+        robs.push({ r: o.r, c: o.c, rob: rb });
+    }
+    for (let r = 0; r < sz; r++) for (let c = 0; c < sz; c++) if ('Xx'.includes(rows[r][c]) && !robKey.has(r + ',' + c)) return null;      // у каждого робота должны быть правила
     const win = {};
     ['w', 'b'].forEach(sd => {
         const k = n['k' + sd];
         win[sd] = k === 0 ? 'all' : (x.win && x.win[sd] === 'all' ? 'all' : 'mate');
     });
-    return { v: 2, size: sz, plain: !!x.plain, name: String(x.name || '').slice(0, 20), rows, tiles, win };
+    return { v: 2, size: sz, plain: !!x.plain, name: String(x.name || '').slice(0, 20), rows, tiles, robs, win };
+}
+// Правила робота из редактора (или от соперника): строгая проверка
+function normRob(rb, sz) {
+    if (!rb || typeof rb !== 'object') return null;
+    const dirs = (a, lim, max) => {
+        if (!Array.isArray(a) || a.length > max) return null;
+        const out = [], seen = new Set();
+        for (const d of a) {
+            if (!Array.isArray(d) || d.length !== 2 || !d.every(v => Number.isInteger(v) && Math.abs(v) <= lim) || (!d[0] && !d[1])) return null;
+            const k = d[0] + ',' + d[1];
+            if (seen.has(k)) return null;
+            seen.add(k); out.push([d[0], d[1]]);
+        }
+        return out;
+    };
+    if (rb.kind === 'wing') {
+        const ja = dirs(rb.ja, 2, ENG_MAX_JUMP), jw = dirs(rb.jw, 2, ENG_MAX_JUMP);
+        if (!ja || !jw || !ja.length || ja.length + jw.length > ENG_MAX_JUMP) return null;
+        if (jw.some(d => ja.some(e => e[0] === d[0] && e[1] === d[1]))) return null;
+        return { kind: 'wing', ja, jw };
+    }
+    if (rb.kind === 'boot') {
+        const walk = dirs(rb.walk, 1, 8), atk = dirs(rb.atk, 1, 8);
+        if (!walk || !atk || walk.length + atk.length < 1) return null;
+        if (!Number.isInteger(rb.wr) || rb.wr < 1 || rb.wr > sz - 1 || !Number.isInteger(rb.ar) || rb.ar < 1 || rb.ar > sz - 1) return null;
+        return { kind: 'boot', walk, atk, wr: rb.wr, ar: rb.ar };
+    }
+    return null;
 }
 
 function boardFromCfg(cfg) {
@@ -8557,6 +8670,7 @@ function boardFromCfg(cfg) {
         if (t === 'k') p.moved = !(std && r === home && c === 4);                     // рокировка возможна, только если король и ладья на своих местах
         if (t === 'r') p.moved = !(std && r === home && (c === 0 || c === 7));
         if (t === 'j') { p.moved = true; p.life = Infinity; }      // челюсти из редактора живут всю партию
+        if (t === 'x') { p.moved = true; const o = (cfg.robs || []).find(q => q.r === r && q.c === c); if (o) p.rob = JSON.parse(JSON.stringify(o.rob)); }      // робот Инженера со своими правилами
         return p;
     }));
 }
@@ -8581,6 +8695,7 @@ function installTiles(g, cfg) {
             case 'burn': g.burn.push({ ...b, life: Infinity }); break;
             case 'hog': g.hogs.push({ ...b, exempt: null, visible: true }); break;
             case 'fog': g.fogs.push({ ...b, left: Infinity }); break;
+            case 'charger': if (!g.chargers) g.chargers = []; g.chargers.push({ r: t.r, c: t.c, owner: t.o }); break;
         }
     });
     if (maxId) g.nextPortal = maxId + 1;
@@ -8596,7 +8711,7 @@ const cfgPieceCount = cfg => cfg.rows.join('').replace(/\./g, '').length;
 const cfgTileCount = cfg => (cfg.tiles || []).length;
 
 // ---------- состояние редактора ----------
-const ED = { n: 8, plain: false, rows: null, tiles: [], tool: 'P', tab: 'pieces', tileId: 'wall', opt: { o: 'w', d: [1, 0], pair: 1 }, mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
+const ED = { n: 8, plain: false, rows: null, tiles: [], robs: [], tool: 'P', tab: 'pieces', tileId: 'wall', opt: { o: 'w', d: [1, 0], pair: 1 }, mirror: 0, slot: 0, win: { w: null, b: null }, onPick: null, msg: '', slots: [] };
 const edSideName = sd => (sd === 'w' ? L('белых', 'White') : L('чёрных', 'Black'));
 const edBaseAt = (r, c) => ED.tiles.find(t => t.r === r && t.c === c && t.k !== 'fog');
 const edFogAt = (r, c) => ED.tiles.find(t => t.r === r && t.c === c && t.k === 'fog');
@@ -8614,7 +8729,7 @@ function edCounts() {
 function edCfg() {
     const cnt = edCounts(), win = {};
     ['w', 'b'].forEach(sd => { win[sd] = cnt[sd].k === 0 ? 'all' : (ED.win[sd] === 'all' ? 'all' : 'mate'); });
-    return { v: 2, size: ED.n, plain: !!ED.plain, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), tiles: ED.tiles.map(t => ({ ...t, d: t.d ? [...t.d] : undefined })), win };
+    return { v: 2, size: ED.n, plain: !!ED.plain, name: $('#edName').value.trim().slice(0, 20), rows: ED.rows.map(r => r.join('')), tiles: ED.tiles.map(t => ({ ...t, d: t.d ? [...t.d] : undefined })), robs: ED.robs.map(o => ({ r: o.r, c: o.c, rob: JSON.parse(JSON.stringify(o.rob)) })), win };
 }
 
 function edOpen(onPick, cfg) {
@@ -8623,6 +8738,7 @@ function edOpen(onPick, cfg) {
     ED.plain = !!base.plain;
     ED.rows = base.rows.map(r => [...r]);
     ED.tiles = (base.tiles || []).map(t => ({ ...t, d: t.d ? [...t.d] : undefined }));
+    ED.robs = (base.robs || []).map(o => ({ r: o.r, c: o.c, rob: JSON.parse(JSON.stringify(o.rob)) }));
     ED.win = { w: null, b: null };
     const cnt = edCounts();
     ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 1 && base.win && base.win[sd]) ED.win[sd] = base.win[sd]; });
@@ -8650,6 +8766,7 @@ function edTileHtml(t) {
         case 'burn': return `<div class="burn-mark"><span>🔥</span><i>∞</i></div><span class="ed-own ${t.o}"></span>`;
         case 'hog': return `<div class="tile-mark hog-mark">⏳</div><span class="ed-own ${t.o}"></span>`;
         case 'fog': return `<div class="fog-mark"></div><span class="ed-own ${t.o}"></span>`;
+        case 'charger': return `<div class="tile-mark charger-mark ${t.o}"><span>⚡</span></div><span class="ed-own ${t.o}"></span>`;
     }
     return '';
 }
@@ -8667,9 +8784,13 @@ function edResize(nn) {
     const inv = r => { for (let q = 0; q < nn; q++) if (mapR(q) === r) return q; return -1; };
     const tiles = [];
     ED.tiles.forEach(t => { const nr = inv(t.r), nc = t.c + off; if (nr >= 0 && nc >= 0 && nc < nn) tiles.push({ ...t, r: nr, c: nc, d: t.d ? [...t.d] : undefined }); });
-    ED.n = nn; ED.rows = rows; ED.tiles = tiles; ED.msg = ''; edFixWin(); edRender();
+    const robs = [];
+    ED.robs.forEach(o => { const nr = inv(o.r), nc = o.c + off; if (nr >= 0 && nc >= 0 && nc < nn) robs.push({ r: nr, c: nc, rob: o.rob }); });
+    ED.n = nn; ED.rows = rows; ED.tiles = tiles; ED.robs = robs; ED.msg = ''; edFixWin(); edRender();
 }
 function edRender() {
+    for (let r = 0; r < ED.n; r++) for (let c = 0; c < ED.n; c++) if ('Xx'.includes(ED.rows[r][c]) && !ED.robs.some(o => o.r === r && o.c === c)) ED.rows[r][c] = '.';      // робот без правил не бывает
+    ED.robs = ED.robs.filter(o => ED.rows[o.r] && 'Xx'.includes(ED.rows[o.r][o.c]));
     $('#edBoard').style.setProperty('--en', ED.n);
     $('#edPlain').checked = !!ED.plain;
     $('#edSize').innerHTML = [8, 10, 12, 14, 16].map(v => `<button data-sz="${v}" class="${ED.n === v ? 'on' : ''}">${v}×${v}</button>`).join('');
@@ -8682,7 +8803,7 @@ function edRender() {
         if (r === ED.n - 1) h += `<span class="coord file">${FILES[c]}</span>`;
         const bt = edBaseAt(r, c);
         if (bt) h += edTileHtml(bt);
-        if (ch !== '.') h += `<div class="piece ${chColor(ch)} t-${ch.toLowerCase()}">${GLYPH[ch.toLowerCase()]}</div>`;
+        if (ch !== '.') h += `<div class="piece ${chColor(ch)} t-${ch.toLowerCase()}">${GLYPH[ch.toLowerCase()]}${'Xx'.includes(ch) ? `<span class="ed-rb">${(ED.robs.find(o => o.r === r && o.c === c) || { rob: {} }).rob.kind === 'wing' ? '🪽' : '👢'}</span>` : ''}</div>`;
         const ft = edFogAt(r, c);
         if (ft) h += edTileHtml(ft);
         h += '</div>';
@@ -8693,9 +8814,9 @@ function edRender() {
     $('#edPalette').classList.toggle('hidden', ED.tab !== 'pieces');
     $('#edTilePanel').classList.toggle('hidden', ED.tab !== 'tiles');
     // фигуры для расстановки
-    const nm = { k: L('король', 'king'), q: L('ферзь', 'queen'), r: L('ладья', 'rook'), b: L('слон', 'bishop'), n: L('конь', 'knight'), p: L('пешка', 'pawn'), j: L('заводные челюсти (без таймера)', 'windup jaws (no timer)') };
+    const nm = { k: L('король', 'king'), q: L('ферзь', 'queen'), r: L('ладья', 'rook'), b: L('слон', 'bishop'), n: L('конь', 'knight'), p: L('пешка', 'pawn'), j: L('заводные челюсти (без таймера)', 'windup jaws (no timer)'), x: L('робот Инженера (настраивается на планшете, нажмите на робота на доске, чтобы перенастроить)', 'Engineer robot (set up on a tablet; click a robot on the board to reconfigure)') };
     let p = '';
-    ['K', 'Q', 'R', 'B', 'N', 'P', 'J', 'k', 'q', 'r', 'b', 'n', 'p', 'j'].forEach(ch => {
+    ['K', 'Q', 'R', 'B', 'N', 'P', 'J', 'X', 'k', 'q', 'r', 'b', 'n', 'p', 'j', 'x'].forEach(ch => {
         p += `<button class="ed-tool${ED.tab === 'pieces' && ED.tool === ch ? ' on' : ''}" data-tool="${ch}" title="${(chColor(ch) === 'w' ? L('Белая ', 'White ') : L('Чёрная ', 'Black ')) + nm[ch.toLowerCase()]}">${pImg(chColor(ch), ch.toLowerCase())}</button>`;
     });
     p += `<button class="ed-tool erase${ED.tool === '.' ? ' on' : ''}" data-tool="." title="${L('Ластик: сначала убирает дым, потом фигуру, потом плитку', 'Eraser: removes smoke first, then the piece, then the tile')}">✖</button>`;
@@ -8748,6 +8869,12 @@ function edFixWin() { const cnt = edCounts();['w', 'b'].forEach(sd => { if (cnt[
 function edPlace(r, c) {
     let ch = ED.tool;
     if (ch === '.') return edErase(r, c);
+    if (ch === 'X' || ch === 'x') {      // робот: сначала планшет, потом он встаёт на доску
+        const wl = edBaseAt(r, c);
+        if (wl && wl.k === 'wall') { ED.msg = L('На стене фигуру ставить нельзя: сначала уберите стену.', 'A piece cannot stand on a wall: remove the wall first.'); edRender(); return; }
+        edRobOpen(r, c, chColor(ch));
+        return;
+    }
     if (ED.rows[r][c] === ch) ch = '.';          // повторное нажатие той же фигурой убирает её
     const t = edMirrorCells(r, c).map(([tr, tc, fv]) => [tr, tc, fv ? swapCase(ch) : ch]);
     if ((ch === 'P' || ch === 'p') && t.some(x => x[0] === 0 || x[0] === ED.n - 1)) {
@@ -8844,6 +8971,7 @@ $('#edBoard').addEventListener('click', e => {
     if (!cell) return;
     const r = +cell.dataset.r, c = +cell.dataset.c;
     if (ED.tool === '.') edErase(r, c);
+    else if (ED.tab === 'pieces' && 'Xx'.includes(ED.rows[r][c])) edRobOpen(r, c, chColor(ED.rows[r][c]));      // нажатие на робота: перенастроить
     else if (ED.tab === 'tiles') edPlaceTile(r, c);
     else edPlace(r, c);
 });
@@ -8857,7 +8985,7 @@ $('.ed-tabs').addEventListener('click', e => {
     const b = e.target.closest('[data-tab]');
     if (!b) return;
     ED.tab = b.dataset.tab;
-    if (ED.tab === 'pieces' && !'KQRBNPkqrbnp.'.includes(ED.tool)) ED.tool = 'P';
+    if (ED.tab === 'pieces' && !'KQRBNPJXkqrbnpjx.'.includes(ED.tool)) ED.tool = 'P';
     if (ED.tab === 'tiles' && ED.tool !== '.') ED.tool = 'T';
     edRender();
 });
@@ -8881,8 +9009,8 @@ $('#edSlots').addEventListener('click', e => { const b = e.target.closest('[data
 $('#edPlain').addEventListener('change', e => { ED.plain = e.target.checked; });
 $('#edSize').addEventListener('click', e => { const b = e.target.closest('[data-sz]'); if (b) edResize(+b.dataset.sz); });
 $('#edWin').addEventListener('change', e => { const i = e.target.closest('[data-win]'); if (i) { ED.win[i.dataset.win] = i.value; ED.msg = ''; edRender(); } });
-$('#edClassic').addEventListener('click', () => { ED.n = 8; ED.rows = CLASSIC_ROWS.map(r => [...r]); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
-$('#edClear').addEventListener('click', () => { ED.rows = Array.from({ length: ED.n }, () => Array(ED.n).fill('.')); ED.tiles = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
+$('#edClassic').addEventListener('click', () => { ED.n = 8; ED.rows = CLASSIC_ROWS.map(r => [...r]); ED.tiles = []; ED.robs = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
+$('#edClear').addEventListener('click', () => { ED.rows = Array.from({ length: ED.n }, () => Array(ED.n).fill('.')); ED.tiles = []; ED.robs = []; ED.win = { w: null, b: null }; ED.msg = ''; edRender(); });
 $('#edSave').addEventListener('click', () => {
     const bad = edValidate();
     if (bad) { ED.msg = bad; edRender(); return; }
@@ -8900,6 +9028,7 @@ $('#edLoad').addEventListener('click', () => {
     ED.plain = !!cfg.plain;
     ED.rows = cfg.rows.map(r => [...r]);
     ED.tiles = (cfg.tiles || []).map(t => ({ ...t, d: t.d ? [...t.d] : undefined }));
+    ED.robs = (cfg.robs || []).map(o => ({ r: o.r, c: o.c, rob: JSON.parse(JSON.stringify(o.rob)) }));
     ED.win = { w: null, b: null };
     const cnt = edCounts();
     ['w', 'b'].forEach(sd => { if (cnt[sd].k >= 1) ED.win[sd] = cfg.win[sd]; });
@@ -8922,6 +9051,136 @@ $('#edUse').addEventListener('click', () => {
     if (ED.onPick) ED.onPick(cfg);
 });
 $('#edClose').addEventListener('click', () => $('#editor').classList.add('hidden'));
+
+/* ---------- Роботы в редакторе: тот же планшет Инженера, но без перезарядки и без партии ---------- */
+let EDROB = null;      // { r, c, col, m, last }
+function edRobMode(col, rob) {
+    const sg = engSign(col), view = d => [d[0] * sg, d[1] * sg];      // из «вида игрока» в доску и обратно: знак тот же
+    const m = { type: 'assemble', stage: 'kind', kind: null, sel: null, walk: [], atk: [], ja: [], jw: [], wr: 1, hist: [], rb: false, ed: true };
+    if (rob) {
+        m.kind = rob.kind; m.sel = rob.kind; m.rb = true;      // уже стоящий робот: прежний выбор остаётся, его можно изменить
+        if (rob.kind === 'wing') { m.ja = rob.ja.map(view); m.jw = rob.jw.map(view); } else { m.walk = rob.walk.map(view); m.atk = rob.atk.map(view); m.wr = rob.wr; }
+        m.old = { kind: m.kind, walk: m.walk.map(d => [...d]), atk: m.atk.map(d => [...d]), ja: m.ja.map(d => [...d]), jw: m.jw.map(d => [...d]), wr: m.wr };
+    }
+    return m;
+}
+function edRobOpen(r, c, col) {
+    const cur = ED.robs.find(o => o.r === r && o.c === c);
+    EDROB = { r, c, col, m: edRobMode(col, cur && ED.rows[r][c] === (col === 'w' ? 'X' : 'x') ? cur.rob : null), last: null };
+    edRobDraw();
+}
+function edRobDraw() {
+    let ov = document.getElementById('edRobTab');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'edRobTab';
+        ov.className = 'eng-ov hidden';
+        ov.style.zIndex = 4000;
+        ov.addEventListener('click', e => {
+            const b = e.target.closest('[data-eng]');
+            if (!b || b.disabled || !EDROB) return;
+            const act = b.dataset.eng;
+            if (act === 'pick') SFX.engPick();
+            else if (act === 'dir' || act === 'jump') (b.classList.contains('on') ? SFX.engOff : SFX.engOn)();
+            else if (act === 'range') SFX.engOn();
+            else if (act === 'back' || act === 'close') SFX.engBack();
+            else SFX.engClick();
+            let v = b.dataset.v;
+            if (v !== undefined) { if (v.includes(',')) v = v.split(',').map(Number); else if (/^-?\d+$/.test(v)) v = Number(v); }
+            edRobInput(act, v);
+        });
+        document.body.appendChild(ov);
+    }
+    if (!EDROB) { ov.classList.add('hidden'); return; }
+    ov.innerHTML = engTabletHTML(EDROB.m)
+        .replace(/<div class="eng-cost">[\s\S]*?<\/div>/, `<div class="eng-cost">${L('РЕДАКТОР ДОСКИ: ' + (EDROB.col === 'w' ? 'БЕЛЫЙ РОБОТ' : 'ЧЁРНЫЙ РОБОТ'), 'BOARD EDITOR: ' + (EDROB.col === 'w' ? 'WHITE ROBOT' : 'BLACK ROBOT'))}</div>`)
+        .replace(/<button class="eng-min"[^>]*>[^<]*<\/button>/, '');
+    ov.classList.remove('hidden');
+    const key = EDROB.m.stage;
+    if (key !== EDROB.last) {
+        const sc = ov.querySelector('.eng-inner');
+        if (sc && EDROB.last !== null && ANIM.board !== false) sc.classList.add('glitch');      // при выключенных анимациях экран не дрожит
+        if (EDROB.last !== null) SFX.engSwitch();
+    }
+    EDROB.last = key;
+}
+function edRobInput(a, v) {
+    const m = EDROB.m, st = m.stage;
+    const go = ns => { m.hist.push(st); m.stage = ns; m.sel = null; };
+    const okD = (d, lim) => Array.isArray(d) && d.length === 2 && d.every(x => Number.isInteger(x) && Math.abs(x) <= lim) && (d[0] || d[1]);
+    if (a === 'close') { EDROB = null; edRobDraw(); return; }
+    if (a === 'back') {
+        if (!m.hist.length) { EDROB = null; edRobDraw(); return; }
+        m.stage = m.hist.pop(); m.sel = null; edRobDraw(); return;
+    }
+    if (a === 'pick') {
+        if ((st === 'kind' && (v === 'boot' || v === 'wing')) || ((st === 'after' || st === 'wingafter') && (v === 'boot' || v === 'x'))) {
+            if (st === 'wingafter' && v === 'boot' && m.ja.length >= ENG_MAX_JUMP) return;
+            m.sel = v;
+        } else return;
+    } else if (a === 'dir') {
+        if (!okD(v, 1)) return;
+        if (st === 'walk') engToggle(m.walk, v); else if (st === 'atk') engToggle(m.atk, v); else return;
+    } else if (a === 'jump') {
+        if (!okD(v, 2)) return;
+        if (st === 'wing') {
+            const had = engHas(m.ja, v), inJw = engHas(m.jw, v);
+            if (!had && !inJw && m.ja.length + m.jw.length >= ENG_MAX_JUMP) return;
+            if (!had && inJw) { const k2 = m.jw.findIndex(x => x[0] === v[0] && x[1] === v[1]); m.jw.splice(k2, 1); }
+            engToggle(m.ja, v);
+        } else if (st === 'wingplus') {
+            if (engHas(m.ja, v)) return;
+            if (!engHas(m.jw, v) && m.ja.length + m.jw.length >= ENG_MAX_JUMP) return;
+            engToggle(m.jw, v);
+        } else return;
+    } else if (a === 'range') {
+        if (st !== 'range' || (v !== 1 && v !== -1)) return;
+        m.wr = Math.max(1, Math.min(ED.n - 1, m.wr + v));
+    } else if (a === 'x2') {
+        if (st !== 'walk' || !m.walk.length) return;
+        m.atk = m.walk.map(d => [d[0], d[1]]);
+        go('after');
+    } else if (a === 'next') {
+        if (st === 'kind') { if (m.sel !== 'boot' && m.sel !== 'wing') return; m.kind = m.sel; go(m.sel === 'boot' ? 'walk' : 'wing'); }
+        else if (st === 'walk') go('atk');
+        else if (st === 'atk') { if (m.walk.length + m.atk.length < 1) return; go('after'); }
+        else if (st === 'after') {
+            if (m.sel === 'boot') go('range');
+            else if (m.sel === 'x') { if (!m.rb) m.wr = 1; edRobFinish(); return; }
+            else return;
+        }
+        else if (st === 'range') { edRobFinish(); return; }
+        else if (st === 'wing') { if (!m.ja.length) return; go('wingafter'); }
+        else if (st === 'wingafter') {
+            if (m.sel === 'boot') { if (m.ja.length >= ENG_MAX_JUMP) return; go('wingplus'); }
+            else if (m.sel === 'x') { edRobFinish(); return; }
+            else return;
+        }
+        else if (st === 'wingplus') { edRobFinish(); return; }
+    } else return;
+    edRobDraw();
+}
+// Планшет закрыт галочкой: робот встаёт на доску (с учётом зеркала: копии отражаются)
+function edRobFinish() {
+    const { r, c, col, m } = EDROB;
+    const base = engBuild(m, col), cells = edMirrorCells(r, c);
+    if (cells.some(([tr, tc]) => { const b = edBaseAt(tr, tc); return b && b.k === 'wall'; })) {
+        ED.msg = L('На стене фигуру ставить нельзя: сначала уберите стену.', 'A piece cannot stand on a wall: remove the wall first.');
+        EDROB = null; edRobDraw(); edRender(); return;
+    }
+    const refl = (d, fv, fh) => [fv ? -d[0] : d[0], fh ? -d[1] : d[1]];
+    cells.forEach(([tr, tc, fv, fh]) => {
+        const cc = fv ? other(col) : col;
+        const rob = base.kind === 'wing'
+            ? { kind: 'wing', ja: base.ja.map(d => refl(d, fv, fh)), jw: base.jw.map(d => refl(d, fv, fh)) }
+            : { kind: 'boot', walk: base.walk.map(d => refl(d, fv, fh)), atk: base.atk.map(d => refl(d, fv, fh)), wr: base.wr, ar: base.ar };
+        ED.rows[tr][tc] = cc === 'w' ? 'X' : 'x';
+        ED.robs = ED.robs.filter(o => !(o.r === tr && o.c === tc));
+        ED.robs.push({ r: tr, c: tc, rob });
+    });
+    EDROB = null; ED.msg = ''; edFixWin(); edRobDraw(); edRender();
+    SFX.engOk();
+}
 
 // ---------- выбор доски в комнатах и на одном экране ----------
 function boardPicker(root, st, allowFischer) {
@@ -9122,4 +9381,23 @@ abilityCells = function (key) {
     board.addEventListener('dragstart', e => e.preventDefault());
 })();
 
+Object.assign(EN, {
+    "🔧 Враг мастерит...": "🔧 The enemy is tinkering...",
+    "Описание способностей": "Abilities guide",
+    "ⓘ Способности героев": "ⓘ Hero abilities",
+    "пассивка": "passive",
+    "В этой партии нет героев.": "There are no heroes in this game.",
+    "✏️ Сменить ник (🔮 1)": "✏️ Change nickname (🔮 1)",
+    "🔑 Сменить пароль": "🔑 Change password",
+    "Новый ник (1 🔮)": "New nickname (1 🔮)",
+    "Сменить ник за 🔮": "Change nickname for 🔮",
+    "Повторите пароль": "Repeat the password",
+    "Пароли не совпадают.": "The passwords do not match.",
+    "Пароль изменён.": "Password changed.",
+    "Это ваш текущий ник.": "This is your current nickname.",
+    "Для смены ника нужен 1 магический шар. Его дают после рейтинговой партии.": "Changing your nickname costs 1 magic orb. You get one after a rated game.",
+    "Для смены пароля нужно войти заново. Выйдите и войдите снова или нажмите «Забыли пароль?».": "To change your password, sign in again: sign out and in, or press “Forgot password?”.",
+    "Плитка-зарядка": "Charger tile",
+    "РЕДАКТОР ДОСКИ": "BOARD EDITOR"
+});
 tryResume();

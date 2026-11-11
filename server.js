@@ -5,6 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const zlib = require('zlib');
+const FILE_CACHE = new Map();      // файл -> { etag, raw, gz }: сжатые копии текстовых файлов лежат в памяти
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.svg', '.json', '.webmanifest']);
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -375,10 +378,33 @@ const server = http.createServer((req, res) => {
         return cur;
     };
     file = findCI(file) || file;
-    fs.readFile(file, (err, data) => {
-        if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Не найдено: ' + url.pathname); return; }
-        res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-        res.end(data);
+    // Файлы отдаём сжатыми (gzip) и с ETag: повторный заход почти ничего не качает (ответ 304). Это сильно экономит трафик Render.
+    fs.stat(file, (err, st) => {
+        if (err || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Не найдено: ' + url.pathname); return; }
+        const ext = path.extname(file).toLowerCase();
+        const etag = '"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
+        const head = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache', 'ETag': etag, 'Vary': 'Accept-Encoding' };
+        if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); res.end(); return; }
+        const wantGzip = COMPRESSIBLE.has(ext) && /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+        const hit = FILE_CACHE.get(file);
+        const send = c => {
+            if (wantGzip && c.gz) { res.writeHead(200, { ...head, 'Content-Encoding': 'gzip', 'Content-Length': c.gz.length }); res.end(c.gz); }
+            else { res.writeHead(200, { ...head, 'Content-Length': c.raw.length }); res.end(c.raw); }
+        };
+        if (COMPRESSIBLE.has(ext)) {
+            if (hit && hit.etag === etag) { send(hit); return; }
+            fs.readFile(file, (e2, data) => {
+                if (e2) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Не найдено: ' + url.pathname); return; }
+                const c = { etag, raw: data, gz: data.length > 800 ? zlib.gzipSync(data, { level: 9 }) : null };
+                FILE_CACHE.set(file, c);
+                send(c);
+            });
+        } else {
+            fs.readFile(file, (e2, data) => {
+                if (e2) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Не найдено: ' + url.pathname); return; }
+                send({ raw: data, gz: null });
+            });
+        }
     });
 });
 
