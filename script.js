@@ -464,11 +464,51 @@ function slideTone(f0, f1, d, type = 'sawtooth', v = 0.04, delay = 0) {
     } catch (e) { /* звук не критичен */ }
 }
 const SFX = {
-    // зловещий писклявый смех: «хи-хи-хи-хи… ха-ха-ха…» и долгий визг в конце
+    // зловещий смех «ХА… ХА… ХАааа»: низкий хрипловатый голос, медленно, с небольшим эхом
     cackle: () => {
-        [0, 0.13, 0.26, 0.39].forEach((d, i) => slideTone(1450 + i * 110, 1950 + i * 120, 0.09, 'sawtooth', 0.035, d));
-        [0.58, 0.76, 0.94].forEach((d, i) => slideTone(1150 - i * 90, 720 - i * 50, 0.14, 'square', 0.03, d));
-        slideTone(2000, 1250, 0.34, 'sawtooth', 0.03, 1.14);
+        if (!CONFIG.sound) return;
+        try {
+            actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+            const t0 = actx.currentTime + 0.02;
+            const out = actx.createGain(); out.gain.value = 1;
+            const dly = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
+            dly.delayTime.value = 0.23; fb.gain.value = 0.32; wet.gain.value = 0.38;      // эхо: повтор через 0,23 с, затухает
+            out.connect(actx.destination);
+            out.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(actx.destination);
+            // один слог «ха»: выдох (шум) + голос с падающей высотой, звук «а» делают два форманта
+            const ha = (at, f0, f1, dur, vol, wobble) => {
+                const t = t0 + at;
+                const nb = actx.createBuffer(1, Math.ceil(actx.sampleRate * 0.12), actx.sampleRate), nd = nb.getChannelData(0);
+                for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+                const ns = actx.createBufferSource(); ns.buffer = nb;
+                const nf = actx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 1800; nf.Q.value = 0.8;
+                const ng = actx.createGain();
+                ng.gain.setValueAtTime(vol * 0.9, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+                ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t);
+                const o = actx.createOscillator(); o.type = 'sawtooth';
+                o.frequency.setValueAtTime(f0, t + 0.04);
+                o.frequency.exponentialRampToValueAtTime(f1, t + 0.04 + dur);
+                if (wobble) {      // дрожание голоса в длинном «аааа»
+                    const lfo = actx.createOscillator(), lg = actx.createGain();
+                    lfo.frequency.value = 6.5; lg.gain.value = wobble;
+                    lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.2);
+                }
+                const g = actx.createGain();
+                g.gain.setValueAtTime(0.0001, t + 0.03);
+                g.gain.exponentialRampToValueAtTime(vol, t + 0.09);
+                g.gain.setValueAtTime(vol, t + 0.04 + dur * 0.55);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06 + dur);
+                [[760, 5], [1250, 6]].forEach(([fq, q]) => {
+                    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fq; bp.Q.value = q;
+                    o.connect(bp); bp.connect(g);
+                });
+                g.connect(out);
+                o.start(t); o.stop(t + 0.1 + dur);
+            };
+            ha(0.00, 330, 250, 0.22, 0.34);
+            ha(0.55, 350, 260, 0.22, 0.36);
+            ha(1.10, 370, 170, 0.95, 0.4, 9);
+        } catch (e) { /* звук не критичен */ }
     },
     move: () => tone(300, 0.08, 'triangle'),
     capture: () => { tone(180, 0.12, 'square', 0.05); tone(110, 0.16, 'square', 0.05, 0.05); },
@@ -816,35 +856,35 @@ function pseudoMoves(b, r, c) {
 
     const robMoves = rb => {
         if (!rb) return;
-                // сапог: ходьба (без рубки, фигуры не перепрыгивает) и рубка (только по своим направлениям, фигуры не перепрыгивает)
-                (rb.walk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
-                    if (path.length >= rb.wr) return true;
-                    if (!t) { add(tr, tc, { path: path.slice() }); return false; }
-                    if (t.ghost) { if (t.c === p.c || !ghost) add(tr, tc, { path: path.slice() }); return false; }
-                    if (passThru(t, p.c, tr, tc)) return false;
-                    if (!ghost && supOpen(b, t)) { add(tr, tc, { path: path.slice() }); return false; }
-                    return true;
-                }));
-                (rb.atk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
-                    if (path.length >= rb.ar) return true;
-                    if (!t || t.ghost) return false;
-                    if (passThru(t, p.c, tr, tc)) { if (t.c !== p.c && canTake(t, tr, tc)) add(tr, tc, { path: path.slice() }); return false; }
-                    if (!ghost && supOpen(b, t)) return false;
-                    if (canTake(t, tr, tc)) add(tr, tc, { path: path.slice() });
-                    return true;
-                }));
-                // крыло: прыжки по клеткам 5×5 (ja: ходят и рубят, jw: только ходят)
-                (rb.ja || []).forEach(([dr, dc]) => {
-                    const tr = r + dr, tc = wcol(p, c + dc);
-                    if (tr < 0 || tr >= N || tc < 0) return;
-                    const t = b[tr][tc];
-                    if (passable(t) || canTake(t, tr, tc)) add(tr, tc, { path: [] });
-                });
-                (rb.jw || []).forEach(([dr, dc]) => {
-                    const tr = r + dr, tc = wcol(p, c + dc);
-                    if (tr < 0 || tr >= N || tc < 0) return;
-                    if (passable(b[tr][tc])) add(tr, tc, { path: [] });
-                });
+        // сапог: ходьба (без рубки, фигуры не перепрыгивает) и рубка (только по своим направлениям, фигуры не перепрыгивает)
+        (rb.walk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
+            if (path.length >= rb.wr) return true;
+            if (!t) { add(tr, tc, { path: path.slice() }); return false; }
+            if (t.ghost) { if (t.c === p.c || !ghost) add(tr, tc, { path: path.slice() }); return false; }
+            if (passThru(t, p.c, tr, tc)) return false;
+            if (!ghost && supOpen(b, t)) { add(tr, tc, { path: path.slice() }); return false; }
+            return true;
+        }));
+        (rb.atk || []).forEach(([dr, dc]) => rayWalk(b, r, c, dr, dc, (tr, tc, t, path) => {
+            if (path.length >= rb.ar) return true;
+            if (!t || t.ghost) return false;
+            if (passThru(t, p.c, tr, tc)) { if (t.c !== p.c && canTake(t, tr, tc)) add(tr, tc, { path: path.slice() }); return false; }
+            if (!ghost && supOpen(b, t)) return false;
+            if (canTake(t, tr, tc)) add(tr, tc, { path: path.slice() });
+            return true;
+        }));
+        // крыло: прыжки по клеткам 5×5 (ja: ходят и рубят, jw: только ходят)
+        (rb.ja || []).forEach(([dr, dc]) => {
+            const tr = r + dr, tc = wcol(p, c + dc);
+            if (tr < 0 || tr >= N || tc < 0) return;
+            const t = b[tr][tc];
+            if (passable(t) || canTake(t, tr, tc)) add(tr, tc, { path: [] });
+        });
+        (rb.jw || []).forEach(([dr, dc]) => {
+            const tr = r + dr, tc = wcol(p, c + dc);
+            if (tr < 0 || tr >= N || tc < 0) return;
+            if (passable(b[tr][tc])) add(tr, tc, { path: [] });
+        });
     };
 
     if (p.scared) {                               // испуг: дальность хода 1 клетка
