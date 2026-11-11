@@ -5681,55 +5681,72 @@ button {
     background-position: center;
 }
 
-/* ===== Планшет в альбомной ориентации: как на телефоне (враг, статус, свой герой и меню справа), доска слева, всё на одном экране ===== */
+/* ===== Планшет в альбомной ориентации: доска посередине, карточки героев слева и справа,
+   меню слева под карточкой, «Завершить ход» справа под карточкой, всё на одном экране ===== */
 @media (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) and (orientation: landscape) {
     :root {
-        --cell: min((100dvh - 30px) / var(--n), (100vw - 380px) / var(--n));
+        --cell: min((100dvh - 30px) / var(--n), (100vw - 500px) / var(--n));
     }
 
     .game {
         display: grid;
-        grid-template-columns: calc(var(--cell) * var(--n) + 16px) minmax(280px, 1fr);
-        grid-template-rows: auto auto auto auto 1fr;
+        grid-template-columns: minmax(200px, 1fr) calc(var(--cell) * var(--n) + 16px) minmax(200px, 1fr);
+        grid-template-rows: auto auto auto 1fr;
         grid-template-areas: none;
-        column-gap: 12px;
+        column-gap: 10px;
         row-gap: 6px;
         align-content: start;
         justify-items: stretch;
-        padding: 6px 10px;
+        padding: 6px 8px;
     }
 
     .board-col {
-        grid-column: 1;
-        grid-row: 1 / span 5;
+        grid-column: 2;
+        grid-row: 1 / span 4;
         align-self: center;
     }
 
+    /* слева: верхний игрок (соперник), справа: нижний игрок (свой) */
     #panel-b {
-        grid-column: 2;
+        grid-column: 1;
         grid-row: 1;
-    }
-
-    .m-strip {
-        grid-column: 2;
-        grid-row: 2;
     }
 
     #panel-w {
-        grid-column: 2;
-        grid-row: 3;
-    }
-
-    .m-bar {
-        grid-column: 2;
-        grid-row: 4;
-    }
-
-    .flipped #panel-w {
+        grid-column: 3;
         grid-row: 1;
     }
 
+    .flipped #panel-w {
+        grid-column: 1;
+    }
+
     .flipped #panel-b {
+        grid-column: 3;
+    }
+
+    /* нижняя панель распадается на две кнопки: меню слева, завершить ход справа */
+    .m-bar {
+        display: contents;
+    }
+
+        .m-bar #mMenu {
+            grid-column: 1;
+            grid-row: 2;
+            width: 100%;
+            margin: 0;
+        }
+
+        .m-bar #mEnd {
+            grid-column: 3;
+            grid-row: 2;
+            width: 100%;
+            margin: 0;
+        }
+
+    /* строка статуса и подсказки: слева под меню */
+    .m-strip {
+        grid-column: 1;
         grid-row: 3;
     }
 }
