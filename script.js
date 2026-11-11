@@ -1093,6 +1093,7 @@ function applyMove(board, mv, promo) {
     board[mv.fr][mv.fc] = null;
     board[mv.tr][mv.tc] = p;
     p.moved = true;
+    delete p.onChg;                       // сошла с плитки (даже если встала на другую плитку-зарядку): на новой клетке разряд сработает снова
     delete p.scared; delete p.scaredT;    // страх спадает после хода
     if (p.sup) delete p.sup;              // суперпозиция спадает после хода самой фигуры
     p.prev = [mv.fr, mv.fc];
@@ -2207,6 +2208,7 @@ function startGame() {
     N = cfg && cfg.size ? cfg.size : 8;
     document.documentElement.style.setProperty('--n', N);
     const fischer = !cfg && _seed < 0;      // отрицательное общее число = шахматы Фишера (так режим сам доезжает до соперника и в повтор партии)
+    if (NET.on && !NET.mode) { NET.fischer = fischer; NET.custom = !!cfg; }      // «Сыграть ещё» повторяет режим той партии, которая реально началась (даже после переподключения)
     G = newState(cfg ? boardFromCfg(cfg) : initialBoard(fischer), cfg && cfg.plain ? { w: 'none', b: 'none' } : { ...selectedHeroes }, cfg ? { ...cfg.win } : { w: 'mate', b: 'mate' });
     if (cfg) { installTiles(G, cfg); if (cfg.tiles && cfg.tiles.some(t => t.k === 'fog')) syncFog(); }      // плитки из редактора
     HIST = [];

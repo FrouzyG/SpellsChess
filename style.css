@@ -6202,3 +6202,24 @@ body.piece-drag {
     line-height: 1;
     pointer-events: none;
 }
+
+
+/* ---- кнопка «Посмотреть доску» в окне конца партии: под стиль игры ---- */
+#gameover .small-card .big-btn.secondary {
+    color: #fff4d6;
+    background: linear-gradient(135deg, rgba(255, 110, 199, 0.32), rgba(130, 70, 190, 0.38));
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 14px rgba(242, 193, 78, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+    #gameover .small-card .big-btn.secondary:hover {
+        background: linear-gradient(135deg, rgba(255, 110, 199, 0.5), rgba(150, 90, 215, 0.55));
+        box-shadow: 0 0 20px rgba(242, 193, 78, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        filter: none;
+    }
+
+#gameover .small-card .big-btn:not(.secondary) {
+    box-shadow: 0 0 16px rgba(242, 193, 78, 0.35);
+}
