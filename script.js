@@ -475,15 +475,17 @@ const SFX = {
             dly.delayTime.value = 0.23; fb.gain.value = 0.32; wet.gain.value = 0.38;      // эхо: повтор через 0,23 с, затухает
             out.connect(actx.destination);
             out.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(actx.destination);
-            // один слог «ха»: выдох (шум) + голос с падающей высотой, звук «а» делают два форманта
+            // один слог «хаа»: мягкий выдох + голос, который плавно нарастает, тянется и медленно затухает (без резких обрывов)
             const ha = (at, f0, f1, dur, vol, wobble) => {
                 const t = t0 + at;
-                const nb = actx.createBuffer(1, Math.ceil(actx.sampleRate * 0.12), actx.sampleRate), nd = nb.getChannelData(0);
+                const nb = actx.createBuffer(1, Math.ceil(actx.sampleRate * 0.3), actx.sampleRate), nd = nb.getChannelData(0);
                 for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
                 const ns = actx.createBufferSource(); ns.buffer = nb;
-                const nf = actx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 1800; nf.Q.value = 0.8;
+                const nf = actx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 1400; nf.Q.value = 0.6;
                 const ng = actx.createGain();
-                ng.gain.setValueAtTime(vol * 0.9, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+                ng.gain.setValueAtTime(0.0001, t);
+                ng.gain.linearRampToValueAtTime(vol * 0.5, t + 0.05);
+                ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
                 ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t);
                 const o = actx.createOscillator(); o.type = 'sawtooth';
                 o.frequency.setValueAtTime(f0, t + 0.04);
@@ -491,23 +493,23 @@ const SFX = {
                 if (wobble) {      // дрожание голоса в длинном «аааа»
                     const lfo = actx.createOscillator(), lg = actx.createGain();
                     lfo.frequency.value = 6.5; lg.gain.value = wobble;
-                    lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.2);
+                    lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.7);
                 }
                 const g = actx.createGain();
                 g.gain.setValueAtTime(0.0001, t + 0.03);
-                g.gain.exponentialRampToValueAtTime(vol, t + 0.09);
-                g.gain.setValueAtTime(vol, t + 0.04 + dur * 0.55);
-                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06 + dur);
+                g.gain.linearRampToValueAtTime(vol, t + 0.03 + 0.16);      // плавное нарастание
+                g.gain.linearRampToValueAtTime(vol * 0.8, t + 0.04 + dur * 0.7);
+                g.gain.setTargetAtTime(0.0001, t + 0.04 + dur * 0.7, 0.11);      // долгое мягкое затухание
                 [[760, 5], [1250, 6]].forEach(([fq, q]) => {
                     const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fq; bp.Q.value = q;
                     o.connect(bp); bp.connect(g);
                 });
                 g.connect(out);
-                o.start(t); o.stop(t + 0.1 + dur);
+                o.start(t); o.stop(t + dur + 0.8);
             };
-            ha(0.00, 330, 250, 0.22, 0.34);
-            ha(0.55, 350, 260, 0.22, 0.36);
-            ha(1.10, 370, 170, 0.95, 0.4, 9);
+            ha(0.00, 330, 235, 0.5, 0.34);
+            ha(0.72, 350, 245, 0.5, 0.36);
+            ha(1.44, 370, 160, 1.2, 0.4, 9);
         } catch (e) { /* звук не критичен */ }
     },
     move: () => tone(300, 0.08, 'triangle'),
