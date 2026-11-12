@@ -542,40 +542,33 @@ const SFX = {
             note(988, 0.24, 1.0, 0.075, true);
         } catch (e) { /* звук не критичен */ }
     },
-    // Гипноз: завывающее «у-оооо, у-оооо, у-о, уууу» около полутора секунд (гласные плавно перетекают)
+    // Гипноз: завывающее «У-иии, У-иии, У-иииии»: коротко «у», затем тянется тонкое «и», три волны вверх
     hypnosis: () => {
         if (!CONFIG.sound) return;
         try {
             actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-            const t = actx.currentTime + 0.02, dur = 1.55;
+            const t = actx.currentTime + 0.02, dur = 1.65;
             const out = actx.createGain(); out.gain.value = 0.3;
             const dly = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
             dly.delayTime.value = 0.2; fb.gain.value = 0.3; wet.gain.value = 0.35;
             out.connect(actx.destination); out.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(actx.destination);
             const o = actx.createOscillator(); o.type = 'sawtooth';
-            // высота голоса: три волны вверх и протяжное затухающее «уууу»
-            o.frequency.setValueAtTime(240, t);
-            o.frequency.linearRampToValueAtTime(340, t + 0.38);
-            o.frequency.linearRampToValueAtTime(250, t + 0.44);
-            o.frequency.linearRampToValueAtTime(360, t + 0.84);
-            o.frequency.linearRampToValueAtTime(270, t + 0.9);
-            o.frequency.linearRampToValueAtTime(330, t + 1.08);
-            o.frequency.linearRampToValueAtTime(300, t + 1.14);
-            o.frequency.linearRampToValueAtTime(215, t + dur);
-            const lfo = actx.createOscillator(), lg = actx.createGain();      // дрожание голоса
-            lfo.frequency.value = 5.5; lg.gain.value = 7;
+            const pitch = [[0, 270], [0.12, 300], [0.4, 390], [0.46, 280], [0.58, 310], [0.88, 410], [0.96, 295], [1.1, 330], [1.4, 430], [dur, 300]];
+            o.frequency.setValueAtTime(pitch[0][1], t);
+            pitch.slice(1).forEach(([d, f]) => o.frequency.linearRampToValueAtTime(f, t + d));
+            const lfo = actx.createOscillator(), lg = actx.createGain();      // дрожание голоса, к концу сильнее
+            lfo.frequency.value = 6; lg.gain.setValueAtTime(4, t); lg.gain.linearRampToValueAtTime(14, t + dur);
             lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.1);
-            // гласные: «у» (закрытый) ↔ «о» (открытый): положение первого форманта
-            const f1 = actx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 5;
-            f1.frequency.setValueAtTime(300, t);
-            [[0.2, 520], [0.38, 540], [0.44, 300], [0.62, 520], [0.84, 540], [0.9, 300], [1.0, 480], [1.14, 310]].forEach(([d, f]) => f1.frequency.linearRampToValueAtTime(f, t + d));
-            f1.frequency.linearRampToValueAtTime(300, t + dur);
-            const f2 = actx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 6; f2.frequency.value = 900;
-            const g2 = actx.createGain(); g2.gain.value = 0.6;
-            // громкость: три «накатывающих» слога и долгий финал
+            // «у» ↔ «и»: у обеих гласных первый форманта низкий, а второй прыгает с 870 Гц («у») на 2300 Гц («и»)
+            const f1 = actx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 5; f1.frequency.value = 290;
+            const f2 = actx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 7;
+            f2.frequency.setValueAtTime(870, t);
+            [[0.1, 870], [0.2, 2300], [0.38, 2300], [0.46, 870], [0.54, 870], [0.64, 2300], [0.86, 2300], [0.96, 870], [1.04, 870], [1.14, 2300], [1.5, 2300], [dur, 1500]].forEach(([d, f]) => f2.frequency.linearRampToValueAtTime(f, t + d));
+            const g2 = actx.createGain(); g2.gain.value = 0.55;
+            // громкость: «у» тише, «и» ярче; три волны и долгий финал
             const g = actx.createGain();
             g.gain.setValueAtTime(0.0001, t);
-            [[0.12, 0.6], [0.36, 1], [0.44, 0.3], [0.56, 0.65], [0.8, 1], [0.9, 0.3], [0.98, 0.6], [1.08, 0.75], [1.3, 0.55]].forEach(([d, lv]) => g.gain.linearRampToValueAtTime(0.5 * lv, t + d));
+            [[0.08, 0.5], [0.22, 0.9], [0.38, 1], [0.46, 0.3], [0.54, 0.5], [0.66, 0.95], [0.86, 1], [0.96, 0.3], [1.04, 0.5], [1.16, 0.9], [1.4, 0.8]].forEach(([d, lv]) => g.gain.linearRampToValueAtTime(0.5 * lv, t + d));
             g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
             o.connect(f1); f1.connect(g);
             o.connect(f2); f2.connect(g2); g2.connect(g);
