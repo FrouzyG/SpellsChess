@@ -542,6 +542,47 @@ const SFX = {
             note(988, 0.24, 1.0, 0.075, true);
         } catch (e) { /* звук не критичен */ }
     },
+    // Гипноз: завывающее «у-оооо, у-оооо, у-о, уууу» около полутора секунд (гласные плавно перетекают)
+    hypnosis: () => {
+        if (!CONFIG.sound) return;
+        try {
+            actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+            const t = actx.currentTime + 0.02, dur = 1.55;
+            const out = actx.createGain(); out.gain.value = 0.3;
+            const dly = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
+            dly.delayTime.value = 0.2; fb.gain.value = 0.3; wet.gain.value = 0.35;
+            out.connect(actx.destination); out.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(actx.destination);
+            const o = actx.createOscillator(); o.type = 'sawtooth';
+            // высота голоса: три волны вверх и протяжное затухающее «уууу»
+            o.frequency.setValueAtTime(240, t);
+            o.frequency.linearRampToValueAtTime(340, t + 0.38);
+            o.frequency.linearRampToValueAtTime(250, t + 0.44);
+            o.frequency.linearRampToValueAtTime(360, t + 0.84);
+            o.frequency.linearRampToValueAtTime(270, t + 0.9);
+            o.frequency.linearRampToValueAtTime(330, t + 1.08);
+            o.frequency.linearRampToValueAtTime(300, t + 1.14);
+            o.frequency.linearRampToValueAtTime(215, t + dur);
+            const lfo = actx.createOscillator(), lg = actx.createGain();      // дрожание голоса
+            lfo.frequency.value = 5.5; lg.gain.value = 7;
+            lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.1);
+            // гласные: «у» (закрытый) ↔ «о» (открытый): положение первого форманта
+            const f1 = actx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 5;
+            f1.frequency.setValueAtTime(300, t);
+            [[0.2, 520], [0.38, 540], [0.44, 300], [0.62, 520], [0.84, 540], [0.9, 300], [1.0, 480], [1.14, 310]].forEach(([d, f]) => f1.frequency.linearRampToValueAtTime(f, t + d));
+            f1.frequency.linearRampToValueAtTime(300, t + dur);
+            const f2 = actx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 6; f2.frequency.value = 900;
+            const g2 = actx.createGain(); g2.gain.value = 0.6;
+            // громкость: три «накатывающих» слога и долгий финал
+            const g = actx.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            [[0.12, 0.6], [0.36, 1], [0.44, 0.3], [0.56, 0.65], [0.8, 1], [0.9, 0.3], [0.98, 0.6], [1.08, 0.75], [1.3, 0.55]].forEach(([d, lv]) => g.gain.linearRampToValueAtTime(0.5 * lv, t + d));
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            o.connect(f1); f1.connect(g);
+            o.connect(f2); f2.connect(g2); g2.connect(g);
+            g.connect(out);
+            o.start(t); o.stop(t + dur + 0.05);
+        } catch (e) { /* звук не критичен */ }
+    },
     // Скример: протяжное, резкое «ааааа» с дрожью голоса
     scream: () => {
         if (!CONFIG.sound) return;
@@ -3353,7 +3394,7 @@ function useAbility(key, r, c, ref) {
             target.hypno = CONFIG.hypnoTurns; target.fresh = true;
             text = `${A.icon} ${A.name}: ${pieceSym(target)} ${sqName(r, c)} подчиняется на ${CONFIG.hypnoTurns} ${plural(CONFIG.hypnoTurns)}`;
             G.fx.push({ r, c, type: 'hypno' });
-            sfx('hypno');
+            sfx('hypnosis');      // «уоооуоооуоуууу»
         }
     }
     finishAbility(key, text);
@@ -7071,6 +7112,13 @@ function engReproRobState(m) {
     return { cost: diff(m.walk, o.walk) + diff(m.atk, o.atk) + Math.max(0, m.wr - o.wr) * (engSame(m) ? 2 : 1), changed: !(same(m.walk, o.walk) && same(m.atk, o.atk) && m.wr === o.wr) };
 }
 
+// Выделить (или снять) все клетки радиуса турели: 3×3 или 5×5 без центра
+function engSelAll(list, lim) {
+    const total = (2 * lim + 1) ** 2 - 1, full = list.length >= total;
+    list.length = 0;
+    if (full) return;
+    for (let i = -lim; i <= lim; i++) for (let j = -lim; j <= lim; j++) if (i || j) list.push([i, j]);
+}
 function engInput(msg) {
     const m = G.mode;
     if (!m || !ENG_TAB_MODES.includes(m.type) || m.stage === 'spawn' || m.stage === 'piece' || !msg) return;
@@ -7091,6 +7139,9 @@ function engInput(msg) {
         } else if (a === 'jump') {
             if (st !== 'tcells' || !okD(v, m.tk === 'instant' ? 1 : 2)) return;
             engToggle(m.tc, v);
+        } else if (a === 'all') {
+            if (st !== 'tcells') return;
+            engSelAll(m.tc, m.tk === 'instant' ? 1 : 2);
         } else if (a === 'next') {
             if (st === 'tkind') { if (m.sel !== 'instant' && m.sel !== 'artillery') return; if (m.tk !== m.sel) m.tc = []; m.tk = m.sel; go('tcells'); }
             else if (st === 'tcells') { if (!m.tc.length) return; engFinish(m); return; }
@@ -7105,6 +7156,8 @@ function engInput(msg) {
         if (a === 'jump') {
             if (!okD(v, rp.tk === 'instant' ? 1 : 2)) return;
             engToggle(rp.tc, v);
+        } else if (a === 'all') {
+            engSelAll(rp.tc, rp.tk === 'instant' ? 1 : 2);
         } else if (a === 'next') {
             const s2 = engReproState(m);
             if (!s2.valid || !s2.changed) return;
@@ -7465,7 +7518,8 @@ function engPix(name) {
 function engTabletHTML(m) {
     const st = m.stage, d3 = [-1, 0, 1], d5 = [-2, -1, 0, 1, 2];
     const kindNow = m.kind || m.sel;
-    let title = '', body = '', note = '', ok = true, x2 = false, costLine = '', nextLabel = 'ПРОДОЛЖИТЬ ▶';
+    let title = '', body = '', note = '', ok = true, x2 = false, allBtn = '', costLine = '', nextLabel = 'ПРОДОЛЖИТЬ ▶';
+    const selAllBtn = (list, lim) => `<button class="eng-btn eng-x2" data-eng="all">${list.length >= (2 * lim + 1) ** 2 - 1 ? 'СНЯТЬ ВСЕ' : 'ВЫДЕЛИТЬ ВСЕ'}</button>`;
     const sq = (act, val, on, inner, label, dis) => `<button class="eng-sq big${on ? ' on' : ''}" data-eng="${act}" data-v="${val}" ${dis ? 'disabled' : ''}>${inner}<i>${label}</i></button>`;
     // сетка со стрелками (направления робота)
     const dirGrid = list => '<div class="eng-grid g3">' + d3.map(i => d3.map(j => {
@@ -7493,6 +7547,7 @@ function engTabletHTML(m) {
         } else {
             title = m.tk === 'instant' ? 'РАДИУС: МГНОВЕННАЯ СТРЕЛЬБА' : 'РАДИУС: АРТИЛЛЕРИЯ';
             body = cellGrid(m.tk === 'instant' ? 3 : 5, m.tc, null, false, 'tower');
+            allBtn = selAllBtn(m.tc, m.tk === 'instant' ? 1 : 2);
             note = `КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО ${m.tc.length}. НУЖНА ХОТЯ БЫ ОДНА.`;
             ok = m.tc.length >= 1;
         }
@@ -7503,6 +7558,7 @@ function engTabletHTML(m) {
         ok = s2.valid && s2.changed;
         costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: 1 + ${s2.cost} = ${1 + s2.cost}`;
         body = cellGrid(rp.tk === 'instant' ? 3 : 5, rp.tc, null, false, 'tower');
+        allBtn = selAllBtn(rp.tc, rp.tk === 'instant' ? 1 : 2);
         note = 'РАДИУС ТУРЕЛИ ЗАНОВО. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.';
     } else {
         if (m.rb) { const rs = engReproRobState(m); costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: 1 + ${rs.cost} = ${1 + rs.cost}`; }
@@ -7547,7 +7603,7 @@ function engTabletHTML(m) {
     }
     return `<div class="eng-tab"><button class="eng-close" data-eng="close" title="Закрыть планшет">✕</button><button class="eng-min" data-eng="min" title="Свернуть планшет">—</button>
       <div class="eng-screen"><div class="eng-inner">
-        <div class="eng-head"><span class="eng-title">${title}</span>${x2 ? '<button class="eng-btn eng-x2" data-eng="x2" ' + (m.walk.length ? '' : 'disabled') + '>ПОДТВЕРДИТЬ ×2</button>' : ''}</div>
+        <div class="eng-head"><span class="eng-title">${title}</span>${x2 ? '<button class="eng-btn eng-x2" data-eng="x2" ' + (m.walk.length ? '' : 'disabled') + '>ПОДТВЕРДИТЬ ×2</button>' : ''}${allBtn}</div>
         <div class="eng-body">${body}</div>
         <div class="eng-note">${note}</div>
         <div class="eng-cost">${costLine}</div>
@@ -9601,6 +9657,8 @@ abilityCells = function (key) {
 
 Object.assign(EN, {
     "🔧 Враг мастерит...": "🔧 The enemy is tinkering...",
+    "ВЫДЕЛИТЬ ВСЕ": "SELECT ALL",
+    "СНЯТЬ ВСЕ": "CLEAR ALL",
     "Описание способностей": "Abilities guide",
     "ⓘ Способности героев": "ⓘ Hero abilities",
     "пассивка": "passive",
