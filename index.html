@@ -124,15 +124,16 @@
                 <button id="btnDraw" class="small-btn">Ничья</button>
                 <button id="btnResign" class="small-btn">Сдаться</button>
                 <button id="btnNew" class="small-btn">Новая игра</button>
-                <button id="btnConfirm" class="small-btn" title="Подтверждение хода кнопкой">✅</button>
-                <button id="btnBanner" class="small-btn" title="Всплывающие объявления способностей">📢</button>
-                <button id="btnAnim" class="small-btn" title="Анимации на доске (полёты, эффекты)">🎬</button>
-                <button id="btnSound" class="small-btn" title="Звук">🔊</button>
-                <button id="btnLang" class="small-btn">🌐 English</button>
-                <button id="btnTheme" class="small-btn" title="Сменить доску">🎨</button>
-                <button id="btnGhost" class="small-btn" title="Подсвечивать иллюзии Экстрасенса">👁</button>
-                <button id="btnTraps" class="small-btn" title="Показывать капканы Охотника">🪤</button>
-                <button id="btnInvis" class="small-btn" title="Показывать невидимые фигуры Самурая">🥷</button>
+                <button id="btnSettings" class="small-btn" title="Настройки">⚙️ Настройки</button>
+                <button id="btnConfirm" class="small-btn in-settings" title="Подтверждение хода кнопкой">✅</button>
+                <button id="btnBanner" class="small-btn in-settings" title="Всплывающие объявления способностей">📢</button>
+                <button id="btnAnim" class="small-btn in-settings" title="Анимации на доске (полёты, эффекты)">🎬</button>
+                <button id="btnSound" class="small-btn in-settings" title="Звук">🔊</button>
+                <button id="btnLang" class="small-btn in-settings">🌐 English</button>
+                <button id="btnTheme" class="small-btn in-settings" title="Сменить доску">🎨</button>
+                <button id="btnGhost" class="small-btn in-settings" title="Подсвечивать иллюзии Экстрасенса">👁</button>
+                <button id="btnTraps" class="small-btn in-settings" title="Показывать капканы Охотника">🪤</button>
+                <button id="btnInvis" class="small-btn in-settings" title="Показывать невидимые фигуры Самурая">🥷</button>
                 <button id="btnEnd" class="small-btn hidden" disabled title="Архитектор: закончить ход после способностей">Завершить ход</button>
             </div>
 
@@ -182,6 +183,15 @@
             </div>
             <div id="setSwitches"></div>
             <button id="setClose" class="big-btn">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Выбор доски -->
+    <div id="themePick" class="overlay hidden">
+        <div class="small-card theme-card">
+            <h2>🎨 Выбор доски</h2>
+            <div id="themeRow2" class="theme-row"></div>
+            <button id="themePickClose" class="big-btn">Готово</button>
         </div>
     </div>
 

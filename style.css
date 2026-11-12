@@ -6565,3 +6565,24 @@ body.piece-drag {
         flex-direction: column;
     }
 }
+
+
+/* ---- спец-кнопки партии теперь в настройках: на панели остаются сдача, ничья и т.п. ---- */
+.in-settings {
+    display: none !important;
+}
+
+.theme-card {
+    max-width: 560px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+#themeRow2 {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}

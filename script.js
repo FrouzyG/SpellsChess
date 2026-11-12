@@ -4762,10 +4762,13 @@ let themeId = 'pink';
 try { const saved = localStorage.getItem('spellschess-theme'); if (THEMES.some(t => t.id === saved)) themeId = saved; } catch (e) { /* без сохранения */ }
 
 function renderThemePicker() {
-    $('#themeRow').innerHTML = THEMES.map(t => `
+    const html = THEMES.map(t => `
       <button class="theme-btn ${t.id === themeId ? 'chosen' : ''}" data-theme="${t.id}" type="button">
         <span class="tp"><i style="background:${t.light}"></i><i style="background:${t.dark}"></i><i style="background:${t.dark}"></i><i style="background:${t.light}"></i></span>
         <span>${t.name}</span></button>`).join('');
+    $('#themeRow').innerHTML = html;
+    const r2 = document.getElementById('themeRow2');      // то же самое в окне выбора доски (из настроек)
+    if (r2) r2.innerHTML = html;
 }
 
 function applyTheme(id) {
@@ -5157,6 +5160,10 @@ $('#chatSend').addEventListener('click', sendChat);
 $('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
 $('#chatMute').addEventListener('click', () => { NET.muted = !NET.muted; renderChat(); });
 $('#themeRow').addEventListener('click', e => {
+    const b = e.target.closest('[data-theme]');
+    if (b) applyTheme(b.dataset.theme);
+});
+$('#themeRow2').addEventListener('click', e => {
     const b = e.target.closest('[data-theme]');
     if (b) applyTheme(b.dataset.theme);
 });
@@ -9742,13 +9749,17 @@ function buildSettings() {
         const b = document.getElementById(it.id);
         const on = it.sound ? CONFIG.sound : !(b && b.classList.contains('off'));
         return `<div class="set-row"><div class="set-txt"><b>${it.ico} ${it.name}</b><span>${it.desc}</span></div><button class="set-toggle${on ? ' on' : ''}" data-set="${it.id}" aria-pressed="${on}"><i></i></button></div>`;
-    }).join('') + `<div class="set-row"><div class="set-txt"><b>🎨 Доска</b><span>Цвета доски: ${th ? th.name : ''}. Нажмите, чтобы сменить.</span></div><button class="small-btn" data-set="btnTheme">Сменить</button></div>`;
+    }).join('') + `<div class="set-row"><div class="set-txt"><b>🎨 Доска</b><span>Цвета доски: ${th ? th.name : ''}. Откроется окно с выбором доски.</span></div><button class="small-btn" data-theme-open="1">Выбрать</button></div>`;
     translateNode($('#settings'));
 }
-$('#settingsBtn').addEventListener('click', () => { buildSettings(); $('#settings').classList.remove('hidden'); });
+const openSettings = () => { buildSettings(); $('#settings').classList.remove('hidden'); };
+['settingsBtn', 'btnSettings'].forEach(id => $('#' + id).addEventListener('click', openSettings));      // шестерёнка в лобби и кнопка «Настройки» в партии
+$('#themePickClose').addEventListener('click', () => { $('#themePick').classList.add('hidden'); buildSettings(); });
+$('#themePick').addEventListener('click', e => { if (e.target.id === 'themePick') { $('#themePick').classList.add('hidden'); buildSettings(); } });
 $('#setClose').addEventListener('click', () => $('#settings').classList.add('hidden'));
 $('#settings').addEventListener('click', e => {
     if (e.target.id === 'settings') { $('#settings').classList.add('hidden'); return; }
+    if (e.target.closest('[data-theme-open]')) { renderThemePicker(); $('#themePick').classList.remove('hidden'); return; }      // окно выбора доски
     const b = e.target.closest('[data-set]');
     if (!b) return;
     const src = document.getElementById(b.dataset.set);
@@ -9760,7 +9771,6 @@ $('#setVol').addEventListener('change', () => { if (CONFIG.sound && SFX.move) SF
 $('#setLangRu').addEventListener('click', () => { if (LANG !== 'ru') setLang('ru'); buildSettings(); });
 $('#setLangEn').addEventListener('click', () => { if (LANG !== 'en') setLang('en'); buildSettings(); });
 Object.assign(EN, {
-    "⚙️ Настройки": "⚙️ Settings",
     "🌐 Язык": "🌐 Language",
     "🔊 Громкость звуков": "🔊 Sound volume",
     "Подтверждение хода": "Move confirmation",
@@ -9778,6 +9788,11 @@ Object.assign(EN, {
     "Невидимые фигуры Самурая": "Samurai invisible pieces",
     "Показывать невидимые фигуры Самурая на доске.": "Show the Samurai's invisible pieces on the board.",
     "🎨 Доска": "🎨 Board",
+    "Выбрать": "Choose",
+    "🎨 Выбор доски": "🎨 Choose a board",
+    "Готово": "Done",
+    "⚙️ Настройки": "⚙️ Settings",
+    "Цвета доски": "Board colors",
     "Сменить": "Change",
     "Закрыть": "Close",
     "Выйти": "Exit",
