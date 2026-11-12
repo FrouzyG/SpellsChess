@@ -6406,3 +6406,29 @@ body.piece-drag {
         transform: scale(1.5);
     }
 }
+
+
+/* ---- «Сыграть ещё»: знак готовности соперника ---- */
+.go-again {
+    margin: 4px 0 10px;
+    padding: 6px 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #d8ffd8;
+    background: rgba(70, 200, 110, 0.18);
+    border: 1px solid rgba(110, 230, 150, 0.6);
+    border-radius: 10px;
+}
+
+.pn-ready {
+    display: inline-block;
+    margin-top: 2px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #d8ffd8;
+    background: rgba(70, 200, 110, 0.22);
+    border: 1px solid rgba(110, 230, 150, 0.6);
+    border-radius: 999px;
+    white-space: nowrap;
+}

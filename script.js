@@ -411,7 +411,7 @@ const sameMove = (a, b) => a.fr === b.fr && a.fc === b.fc && a.tr === b.tr && a.
    ОНЛАЙН: обе стороны получают одни и те же действия и считают игру одинаково.
    Скрытое (капканы, невидимые фигуры, ловушки сурка) просто не рисуется у соперника.
    ===================================================================== */
-const NET = { on: false, me: null, host: false, conn: null, peer: null, lost: false, ready: false, oppReady: false, oppHero: null, muted: false };
+const NET = { againMe: false, againOpp: false, on: false, me: null, host: false, conn: null, peer: null, lost: false, ready: false, oppReady: false, oppHero: null, muted: false };
 let pickOverride = null, lastPick = null;    // выбор «рокировка или вселение» передаётся сопернику
 const netSend = m => { if (NET.on && NET.conn && NET.conn.open) NET.conn.send(m); };
 const isActor = () => !NET.on || (!!G && G.turn === NET.me);   // можно ли этому игроку сейчас ходить
@@ -540,40 +540,6 @@ const SFX = {
             note(659, 0, 0.15, 0.07);      // ноты идут вверх, переходы быстрые
             note(784, 0.12, 0.15, 0.07);
             note(988, 0.24, 1.0, 0.075, true);
-        } catch (e) { /* звук не критичен */ }
-    },
-    // Гипноз: завывающее «У-иии, У-иии, У-иииии»: коротко «у», затем тянется тонкое «и», три волны вверх
-    hypnosis: () => {
-        if (!CONFIG.sound) return;
-        try {
-            actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-            const t = actx.currentTime + 0.02, dur = 1.65;
-            const out = actx.createGain(); out.gain.value = 0.3;
-            const dly = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
-            dly.delayTime.value = 0.2; fb.gain.value = 0.3; wet.gain.value = 0.35;
-            out.connect(actx.destination); out.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(actx.destination);
-            const o = actx.createOscillator(); o.type = 'sawtooth';
-            const pitch = [[0, 270], [0.12, 300], [0.4, 390], [0.46, 280], [0.58, 310], [0.88, 410], [0.96, 295], [1.1, 330], [1.4, 430], [dur, 300]];
-            o.frequency.setValueAtTime(pitch[0][1], t);
-            pitch.slice(1).forEach(([d, f]) => o.frequency.linearRampToValueAtTime(f, t + d));
-            const lfo = actx.createOscillator(), lg = actx.createGain();      // дрожание голоса, к концу сильнее
-            lfo.frequency.value = 6; lg.gain.setValueAtTime(4, t); lg.gain.linearRampToValueAtTime(14, t + dur);
-            lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.1);
-            // «у» ↔ «и»: у обеих гласных первый форманта низкий, а второй прыгает с 870 Гц («у») на 2300 Гц («и»)
-            const f1 = actx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 5; f1.frequency.value = 290;
-            const f2 = actx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 7;
-            f2.frequency.setValueAtTime(870, t);
-            [[0.1, 870], [0.2, 2300], [0.38, 2300], [0.46, 870], [0.54, 870], [0.64, 2300], [0.86, 2300], [0.96, 870], [1.04, 870], [1.14, 2300], [1.5, 2300], [dur, 1500]].forEach(([d, f]) => f2.frequency.linearRampToValueAtTime(f, t + d));
-            const g2 = actx.createGain(); g2.gain.value = 0.55;
-            // громкость: «у» тише, «и» ярче; три волны и долгий финал
-            const g = actx.createGain();
-            g.gain.setValueAtTime(0.0001, t);
-            [[0.08, 0.5], [0.22, 0.9], [0.38, 1], [0.46, 0.3], [0.54, 0.5], [0.66, 0.95], [0.86, 1], [0.96, 0.3], [1.04, 0.5], [1.16, 0.9], [1.4, 0.8]].forEach(([d, lv]) => g.gain.linearRampToValueAtTime(0.5 * lv, t + d));
-            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-            o.connect(f1); f1.connect(g);
-            o.connect(f2); f2.connect(g2); g2.connect(g);
-            g.connect(out);
-            o.start(t); o.stop(t + dur + 0.05);
         } catch (e) { /* звук не критичен */ }
     },
     // Скример: протяжное, резкое «ааааа» с дрожью голоса
@@ -2432,6 +2398,7 @@ function newState(board, hero, win) {
 }
 
 function startGame() {
+    NET.againMe = false; NET.againOpp = false;      // новая партия: прежние «готов сыграть ещё» сброшены
     const oldOrb = document.getElementById('goOrb'); if (oldOrb) oldOrb.remove();
     const cfg = CUSTOM;      // своя доска из редактора
     N = cfg && cfg.size ? cfg.size : 8;
@@ -3387,7 +3354,6 @@ function useAbility(key, r, c, ref) {
             target.hypno = CONFIG.hypnoTurns; target.fresh = true;
             text = `${A.icon} ${A.name}: ${pieceSym(target)} ${sqName(r, c)} подчиняется на ${CONFIG.hypnoTurns} ${plural(CONFIG.hypnoTurns)}`;
             G.fx.push({ r, c, type: 'hypno' });
-            sfx('hypnosis');      // «уоооуоооуоуууу»
         }
     }
     finishAbility(key, text);
@@ -4199,7 +4165,8 @@ function render() {
 }
 
 function updateEndBtn() {
-    $('#btnNew').classList.toggle('hidden', !!NET.on);      // в онлайн-партии новую игру начать нельзя
+    $('#btnNew').classList.toggle('hidden', !!NET.on && !(G && G.over && !NET.oppLeft));      // в онлайн-партии новую игру начать нельзя, но после конца партии кнопка работает как «Сыграть ещё»
+    updateRematchUI();
     const b = $('#btnEnd');
     if (!b) return;
     const arch = G.hero.w === 'architect' || G.hero.b === 'architect';
@@ -4392,7 +4359,7 @@ function panelHTML(col) {
     const active = isTurn && (!NET.on || col === NET.me);      // кнопки доступны только своему игроку
     const lock = !!(G.bonus || G.pairStep || (G.mode && G.mode.locked) || G.pendingPromo);
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
-    <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div>${panelNick(col)}</div>
+    <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div>${panelNick(col)}${rematchBadge(col)}</div>
     ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}${hero.plain ? '' : '<button class="pn-info" data-info title="Описание способностей">i</button>'}</div>`;
     h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (' + L('КД ', 'CD ') + eurekaLeft(col) + ')' : ''}</div><div class="abilities">`;
 
@@ -4482,7 +4449,11 @@ function renderPanels() {
 
 function renderStatus() {
     const st = $('#status'), hi = $('#hint');
-    if (G.over) { st.textContent = G.over.title; st.className = 'status over'; hi.textContent = G.over.text; return; }
+    if (G.over) {
+        st.textContent = G.over.title; st.className = 'status over';
+        hi.textContent = G.over.text + (NET.on && !NET.oppLeft ? (NET.againOpp ? ' ✅ Соперник готов к новой партии.' : NET.againMe ? ' ⏳ Вы готовы, ждём соперника.' : '') : '');
+        return;
+    }
     let s = `Ход: ${colorName(G.turn)}`;
     if (G.bonus) s += G.bonus.kind === 'zw' ? ` · ZA WARUDO, ход ${G.bonus.step}/2` : ' · доп. ход';
     if (G.check === 'check') s += ' · ШАХ!';
@@ -4777,6 +4748,7 @@ function applyTheme(id) {
 function openSetup() {
     buildSetup();
     NET.ready = false; NET.oppReady = false; NET.oppHero = null; NET.lastStart = null;
+    NET.againMe = false; NET.againOpp = false;
     buildSetup();
     const sn = $('#setupNet');
     sn.classList.remove('warn');
@@ -4886,12 +4858,44 @@ $('#promoBtns').addEventListener('click', e => {
 });
 
 $('#btnNew').addEventListener('click', () => {
+    if (NET.on && G && G.over) { rematchPress(); return; }
     if (!G || G.over || uiConfirm('Начать новую игру? Текущая партия будет потеряна.')) {
         netSend({ t: 'abort' });
         openSetup();
     }
 });
-$('#goNew').addEventListener('click', () => { if (NET.on && NET.oppLeft) { leaveToMenu(); return; } openSetup(); });
+// «Сыграть ещё» в онлайн-партии: игрок остаётся у доски, сопернику приходит знак «готов»; в новую партию оба переходят, когда нажали оба
+function rematchPress() {
+    if (NET.oppLeft) { leaveToMenu(); return; }
+    NET.againMe = !NET.againMe;      // повторное нажатие отменяет готовность
+    netSend({ t: 'again', on: NET.againMe });
+    if (NET.againMe && NET.againOpp) { rematchGo(); return; }
+    render();
+}
+function rematchGo() {
+    NET.againMe = false; NET.againOpp = false;
+    openSetup();
+}
+function updateRematchUI() {
+    const go = $('#goNew'), ag = $('#goAgain'), bn = $('#btnNew');
+    if (!go || !ag || !bn) return;
+    const on = !!(NET.on && G && G.over && !NET.oppLeft);
+    const label = !on ? 'Сыграть ещё' : NET.againMe ? '⏳ Ждём соперника (отменить)' : NET.againOpp ? '✅ Сыграть ещё' : 'Сыграть ещё';
+    if (go.textContent !== label) go.textContent = label;
+    const note = !on ? '' : NET.againOpp ? '✅ Соперник готов к новой партии' : NET.againMe ? '⏳ Вы готовы. Ждём соперника...' : '';
+    if (ag.textContent !== note) ag.textContent = note;
+    ag.classList.toggle('hidden', !note);
+    const bl = on ? label : 'Новая игра';
+    if (bn.textContent !== bl) bn.textContent = bl;
+}
+// Знак на карточке игрока: готов к новой партии
+function rematchBadge(col) {
+    if (!NET.on || !G || !G.over || NET.oppLeft) return '';
+    return (col === NET.me ? NET.againMe : NET.againOpp) ? '<div class="pn-ready">✅ готов сыграть ещё</div>' : '';
+}
+// пока ждём соперника, раз в 3 секунды повторяем знак (на случай потерянного сообщения)
+setInterval(() => { if (NET.on && !NET.lost && NET.againMe && G && G.over) netSend({ t: 'again', on: true }); }, 3000);
+$('#goNew').addEventListener('click', () => { if (NET.on) { rematchPress(); return; } openSetup(); });
 $('#goView').addEventListener('click', () => $('#gameover').classList.add('hidden'));
 $('#btnEnd').addEventListener('click', () => {
     if (G && !G.over && G.archUsed && !G.check && !G.pendingPromo) netDo({ t: 'end' });
@@ -5072,6 +5076,11 @@ function netRecv(m) {
             NET.oppAvatar = null;
             if (NET.oppId && SB) SB.from('profiles').select('avatar').eq('id', NET.oppId).maybeSingle().then(rs => { if (rs && rs.data) { NET.oppAvatar = rs.data.avatar; if (G) render(); } }).catch(() => { });
             updatePeerLabel(); if (G) render();
+            break;
+        case 'again':      // соперник нажал (или отменил) «Сыграть ещё»
+            NET.againOpp = !!m.on;
+            if (NET.againOpp && NET.againMe && G && G.over) { rematchGo(); break; }
+            if (G) render();
             break;
         case 'ready':
             // соперник всё ещё жмёт «Готов», хотя у нас партия уже началась: наше «start» потерялось, шлём ещё раз
@@ -9650,6 +9659,11 @@ abilityCells = function (key) {
 
 Object.assign(EN, {
     "🔧 Враг мастерит...": "🔧 The enemy is tinkering...",
+    "⏳ Ждём соперника (отменить)": "⏳ Waiting for the opponent (cancel)",
+    "✅ Сыграть ещё": "✅ Play again",
+    "✅ Соперник готов к новой партии": "✅ The opponent is ready for a new game",
+    "⏳ Вы готовы. Ждём соперника...": "⏳ You are ready. Waiting for the opponent...",
+    "✅ готов сыграть ещё": "✅ ready to play again",
     "ВЫДЕЛИТЬ ВСЕ": "SELECT ALL",
     "СНЯТЬ ВСЕ": "CLEAR ALL",
     "Описание способностей": "Abilities guide",
