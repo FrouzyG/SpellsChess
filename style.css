@@ -6586,3 +6586,67 @@ body.piece-drag {
     gap: 10px;
     margin-bottom: 8px;
 }
+
+
+/* ---- телефон и планшет: сброс фигур отдельной строкой в самом низу карточки, его можно листать пальцем ---- */
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
+    .panel {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "head" "pas" "abs" "grave";
+    }
+
+        .panel .grave {
+            grid-area: grave;
+            display: flex;
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 3px;
+            width: 100%;
+            max-width: 100%;
+            min-height: 30px;
+            margin-top: 2px;
+            padding: 2px 0 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            touch-action: pan-x;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+
+            .panel .grave .glabel, .panel .grave .empty {
+                display: inline;
+                flex: none;
+                font-size: 11px;
+                white-space: nowrap;
+            }
+}
+
+/* ---- повтор партии: компактная полоска и место под перемотку ---- */
+@media (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) and (orientation: landscape), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px), (max-width: 760px) and (orientation: landscape) and (max-height: 479px) {
+    .replay-bar {
+        gap: 6px;
+        margin: 0 0 3px;
+        padding: 3px 8px;
+        font-size: 12px;
+    }
+
+        .replay-bar .small-btn {
+            height: 24px;
+            padding: 2px 8px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+    #rpTitle {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #app.replaying {
+        --cell: min((100dvh - 78px) / var(--n), (100vw - 340px) / var(--n));
+    }
+}

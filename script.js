@@ -48,7 +48,7 @@ const CONFIG = {
         vine: 5, ritual: 5, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
         fog: 5, hatch: 3, hocus: 7, assistant: 6,        // Фокусник
-        assemble: 3, charger: 4, turret: 5, reprogram: 1  // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
+        assemble: 3, charger: 7, turret: 5, reprogram: 4  // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
@@ -232,7 +232,7 @@ const ABILITIES = {
         desc: 'Бомба на союзной фигуре (не короле) взрывается на вашем ' + CONFIG.bumpukuTurns + '-м ходе после применения и убивает всех в 3×3. Срубленная фигура не взрывается. Ход не тратится.'
     },
     generator: {
-        icon: '⚡', name: 'Генератор',
+        icon: '⚡', name: 'Короткое замыкание',
         desc: 'Плитки плюс и минус. Все плюсы связаны со всеми минусами: если фигуры стоят и на плюсе, и на минусе, их убивает разряд.'
     },
     groundhog: {
@@ -377,7 +377,7 @@ HEROES.magician = { icon: '🎩', name: 'Фокусник', tag: 'Фокусы �
 // Инженер: собирает фигуру-робота по своим правилам и заряжает его на плитке
 PASSIVES.eureka = {
     icon: '💡', name: 'Эврика',
-    desc: 'Можно аннулировать перезарядку любой своей способности: нажмите на способность, которая перезаряжается, и подтвердите выбор галочкой. Сама Эврика после использования перезаряжается 20 ходов.'
+    desc: 'Можно аннулировать перезарядку любой своей способности: нажмите на способность, которая перезаряжается, и подтвердите выбор галочкой. Сама Эврика после использования перезаряжается 30 ходов.'
 };
 Object.assign(ABILITIES, {
     assemble: {
@@ -394,7 +394,7 @@ Object.assign(ABILITIES, {
     },
     reprogram: {
         icon: '🛠', name: 'Перепрограммирование',
-        desc: 'Тратит ход. Робот перестраивается заново на планшете (как при сборке, прежний выбор остаётся, его можно убрать и добавить новое), у турели радиус выбирается заново. Перезарядка 1, плюс за каждую НОВУЮ клетку или направление: у робота как при сборке, у турели по 2.'
+        desc: 'Тратит ход. Робот перестраивается заново на планшете (как при сборке, прежний выбор остаётся, его можно убрать и добавить новое), у турели радиус выбирается заново. Перезарядка 4, плюс за каждую НОВУЮ клетку или направление: у робота как при сборке, у турели по 2. Каждая УБРАННАЯ убавляет перезарядку на столько же, но ниже базовых 4 она не опускается.'
     }
 });
 HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника', passive: 'eureka', abilities: ['assemble', 'charger', 'turret', 'reprogram'], dev: true };
@@ -2471,7 +2471,7 @@ function logHidden(c, p, real) {
 // Плитки (сейчас только конвейеры) уничтожаются огненным шаром. Ловушки (капкан) плитками не считаются.
 // Новые виды плиток добавлять сюда.
 function destroyTiles(r, c) {
-    [['conv', 'конвейер'], ['gens', 'плитку генератора'], ['virus', 'заражённую плитку'], ['vines', 'лозу'], ['rituals', 'призрачную плитку'], ['hatches', 'потайной люк'], ['chargers', 'зарядку']].forEach(([k, name]) => {
+    [['conv', 'конвейер'], ['gens', 'плитку короткого замыкания'], ['virus', 'заражённую плитку'], ['vines', 'лозу'], ['rituals', 'призрачную плитку'], ['hatches', 'потайной люк'], ['chargers', 'зарядку']].forEach(([k, name]) => {
         if (!G[k]) return;
         const n = G[k].length;
         G[k] = G[k].filter(x => !(x.r === r && x.c === c));
@@ -2775,7 +2775,7 @@ function sweepGens() {
         toGrave(dp);
         G.fx.push({ r: g.r, c: g.c, type: 'boom' });
         sfx('zap');
-        addLog('n', `⚡ Генератор: ${pieceSym(dp)} на ${sqName(g.r, g.c)} поражена разрядом`);
+        addLog('n', `⚡ Короткое замыкание: ${pieceSym(dp)} на ${sqName(g.r, g.c)} поражена разрядом`);
     });
 }
 
@@ -5252,7 +5252,7 @@ const EN = {
     "Бумпуку": "Bumpuku",
     "Бомба на союзной фигуре (не короле) взрывается на вашем ": "A bomb on an allied piece (not a king) explodes on your ",
     "-м ходе после применения и убивает всех в 3×3. Срубленная фигура не взрывается.": "th turn after use and kills everything in 3×3. A captured piece does not explode.",
-    "Генератор": "Generator",
+    "Короткое замыкание": "Short circuit",
     "Плитки плюс и минус. Все плюсы связаны со всеми минусами: если фигуры стоят и на плюсе, и на минусе, их убивает разряд.": "Plus and minus tiles. Every plus is linked to every minus: if pieces stand on both a plus and a minus, a discharge kills them.",
     "Ход сурка": "Groundhog Move",
     "Ловушка (королю не страшна) стоит, пока не сработает один раз: фигура на ней возвращается туда, откуда пришла. На пустой клетке скрыта и ход не тратит, на фигуре видна, тратит ход и срабатывает на новую фигуру.": "A trap (kings are immune) stays until it triggers once: the piece on it goes back to where it came from. On an empty square it is hidden and costs no turn; on a piece it is visible, costs a turn, and triggers on a new piece.",
@@ -5327,7 +5327,7 @@ const EN = {
     ", Чёрные — ": ", Black — ",
     "🥷 Невидимая фигура сделала ход": "🥷 An invisible piece made a move",
     "конвейер": "conveyor",
-    "плитку генератора": "generator tile",
+    "плитку короткого замыкания": "short-circuit tile",
     "заражённую плитку": "infected tile",
     "лозу": "vine",
     "призрачную плитку": "ghost tile",
@@ -5354,7 +5354,7 @@ const EN = {
     " попадает в капкан на ": " falls into a trap on ",
     "☣️ Невидимая фигура заражена и становится зомби": "☣️ An invisible piece is infected and becomes a zombie",
     " заражена и становится зомби": " is infected and becomes a zombie",
-    "⚡ Генератор: ": "⚡ Generator: ",
+    "⚡ Короткое замыкание: ": "⚡ Short circuit: ",
     " поражена разрядом": " was struck by the discharge",
     "острая клетка": "sharp square",
     " гибнет на острой клетке ": " dies on a sharp square ",
@@ -5943,13 +5943,13 @@ Object.assign(EN, {
     "Инженер": "Engineer",
     "Робототехника": "Robotics",
     [PASSIVES.eureka.name]: "Eureka",
-    [PASSIVES.eureka.desc]: "You can nullify the cooldown of any of your abilities: click an ability that is recharging and confirm with the check mark. After use, Eureka itself recharges for 20 turns.",
+    [PASSIVES.eureka.desc]: "You can nullify the cooldown of any of your abilities: click an ability that is recharging and confirm with the check mark. After use, Eureka itself recharges for 30 turns.",
     " (использована)": " (used)",
     " (перезаряжается)": " (recharging)",
     "💡 Эврика?": "💡 Eureka?",
     "💡 ЭВРИКА": "💡 EUREKA",
     "ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ": "NULLIFY THE COOLDOWN OF",
-    "? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 20 ХОДОВ.": "? AFTER THAT, EUREKA RECHARGES FOR 20 TURNS.",
+    "? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 30 ХОДОВ.": "? AFTER THAT, EUREKA RECHARGES FOR 30 TURNS.",
     "ДА": "YES",
     "НЕТ": "NO",
     "🔋 Робот заряжен: этот ход бесплатный (шаховать им нельзя), потом вы ещё сходите как обычно.": "🔋 The robot is charged: this move is free (it cannot give check), then you still make your normal move.",
@@ -5961,7 +5961,7 @@ Object.assign(EN, {
     "заряжает робота на": "charges the robot on",
     "оглушает": "stuns",
     "турель уничтожена, выстрела не будет": "the turret is destroyed, no shot",
-    "РАДИУС ТУРЕЛИ ЗАНОВО. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.": "TURRET RADIUS FROM SCRATCH. EACH NEW SQUARE +2 CD.",
+    "РАДИУС ТУРЕЛИ ЗАНОВО. НОВАЯ КЛЕТКА +2 КД, УБРАННАЯ −2 КД.": "TURRET RADIUS FROM SCRATCH. NEW SQUARE +2 CD, REMOVED SQUARE −2 CD.",
     "Робот: синие клетки: ходит, красные: ходит и рубит, жёлтые: только рубит.": "Robot: blue squares: moves, red: moves and captures, yellow: captures only.",
     [ABILITIES.assemble.name]: "Robot Assembly",
     [ABILITIES.assemble.desc]: "A tablet opens: you build a robot piece (boot: walks and captures along chosen directions without jumping over pieces, range can be upgraded; wing: jumps to chosen squares of a 5×5 area). The robot appears on a free square of your first two ranks. Cooldown 3 plus extra for every upgrade.",
@@ -5983,6 +5983,8 @@ Object.assign(EN, {
     "КРЫЛО": "WING",
     "+0 КД": "+0 CD",
     "+3 КД": "+3 CD",
+    "+2 КД": "+2 CD",
+    "КАЖДАЯ КЛЕТКА +3 КД. ВЫБРАНО": "EACH SQUARE +3 CD. CHOSEN",
     "САПОГ: ХОДИТ И РУБИТ, НЕ ПРЫГАЯ ЧЕРЕЗ ФИГУРЫ. КРЫЛО: ПРЫГАЕТ ПО КЛЕТКАМ.": "BOOT: WALKS AND CAPTURES WITHOUT JUMPING OVER PIECES. WING: JUMPS ACROSS SQUARES.",
     "НАПРАВЛЕНИЯ ХОДЬБЫ": "WALKING DIRECTIONS",
     "НАПРАВЛЕНИЯ АТАКИ": "ATTACK DIRECTIONS",
@@ -6018,7 +6020,7 @@ Object.assign(EN, {
     [ABILITIES.turret.name]: "Turret Assembly",
     [ABILITIES.turret.desc]: "A tablet opens: you build a stationary turret. Instant fire: you choose squares of a 3×3 radius; an enemy that enters them after the turret appears is destroyed at once (enemies already standing in the radius when it appears are not hit). Long-range artillery: you choose squares of a 5×5 radius; if a new enemy appears in one of them, a shot lands there after a turn. The turret appears on a free square of your first three ranks. Cooldown 5 plus extra for every square of the radius.",
     [ABILITIES.reprogram.name]: "Reprogramming",
-    [ABILITIES.reprogram.desc]: "Uses your move. A robot is rebuilt from scratch on the tablet (as when assembling, the previous choice stays and can be removed or added to), a turret's radius is chosen anew. Cooldown 1, plus extra for every NEW square or direction: for a robot as when assembling, for a turret 2 each.",
+    [ABILITIES.reprogram.desc]: "Uses your move. A robot is rebuilt from scratch on the tablet (as when assembling, the previous choice stays and can be removed or added to), a turret's radius is chosen anew. Cooldown 4, plus extra for every NEW square or direction: for a robot as when assembling, for a turret 2 each. Every REMOVED one lowers the cooldown by the same amount, but it never drops below the base 4.",
     "🗼 Турель готова: выберите свободную клетку на своих первых трёх горизонталях, там она появится.": "🗼 The turret is ready: choose a free square on your first three ranks, it will appear there.",
     "Соберите турель на планшете.": "Build the turret on the tablet.",
     "🛠 Выберите своего робота или свою турель для перепрограммирования (ход не тратится).": "🛠 Choose your robot or your turret to reprogram (does not use your move).",
@@ -6209,6 +6211,18 @@ function syncHeroButtons() {
 // ===== Перемотка ходов: только просмотр, партию не меняет =====
 const REW = { snaps: [], idx: -1, g: null, lastLen: -1, broken: false, fresh: false, undo: false };   // idx -1: показываем текущую позицию
 
+// Запасная глубокая копия: пропускает функции и узлы страницы, понимает Set/Map и циклические ссылки
+function softClone(v, seen = new WeakMap()) {
+    if (v === null || typeof v !== 'object') return typeof v === 'function' ? undefined : v;
+    if (typeof v.nodeType === 'number') return undefined;
+    if (seen.has(v)) return seen.get(v);
+    if (v instanceof Set) { const s = new Set(); seen.set(v, s); v.forEach(x => s.add(softClone(x, seen))); return s; }
+    if (v instanceof Map) { const m = new Map(); seen.set(v, m); v.forEach((x, k) => m.set(k, softClone(x, seen))); return m; }
+    if (Array.isArray(v)) { const a = []; seen.set(v, a); v.forEach(x => a.push(softClone(x, seen))); return a; }
+    const o = {}; seen.set(v, o);
+    Object.keys(v).forEach(k => { const x = softClone(v[k], seen); if (x !== undefined || v[k] === undefined) o[k] = x; });
+    return o;
+}
 function takeSnap() {
     if (!G || REW.broken || !G.log) return;
     if (REW.g !== G || G.log.length < REW.lastLen) {
@@ -6225,7 +6239,8 @@ function takeSnap() {
     if (REPLAY_REC) REPLAY.pfx.push(...(G.fx || []).map(x => ({ ...x })));      // эффекты на клетках (взрыв, воскрешение, дым) для повтора
     try {
         const { log, ...rest } = G;
-        const snap = structuredClone(rest);
+        let snap;
+        try { snap = structuredClone(rest); } catch (e1) { snap = softClone(rest); }      // в онлайн-партии в состоянии может оказаться то, что structuredClone не берёт
         snap.log = log.slice();
         snap.sel = null; snap.moves = []; snap.mode = null; snap.fx = [];
         if (REPLAY_REC) { snap.rfx = REPLAY.pfx; REPLAY.pfx = []; }
@@ -7123,7 +7138,7 @@ const engSame = m => m.walk.length > 0 && m.walk.length === m.atk.length && m.wa
 // Сколько перезарядки добавляет собранное к базовой
 function engCost(m) {
     if (m.type === 'turret') return 2 * m.tc.length;
-    if (m.kind === 'wing') return 3 + 2 * m.ja.length + m.jw.length;
+    if (m.kind === 'wing') return 2 + 3 * m.ja.length + m.jw.length;
     if (m.kind !== 'boot') return 0;
     return m.walk.length + m.atk.length + (m.wr - 1) * (engSame(m) ? 2 : 1);
 }
@@ -7149,15 +7164,22 @@ function engReproState(m) {
     if (!rp) return { cost: 0, changed: false, valid: false };
     const key = d => d[0] + ',' + d[1];
     const diff = (a, b) => a.filter(d => !b.some(x => key(x) === key(d))).length;      // клеток в a, которых нет в b
-    return { cost: 2 * diff(rp.tc, rp.old), changed: diff(rp.tc, rp.old) + diff(rp.old, rp.tc) > 0, valid: rp.tc.length >= 1 };
+    const added = 2 * diff(rp.tc, rp.old), removed = 2 * diff(rp.old, rp.tc);      // новые клетки дороже перезарядку, убранные такой же суммой убавляют её
+    return { added, removed, cost: Math.max(0, added - removed), changed: diff(rp.tc, rp.old) + diff(rp.old, rp.tc) > 0, valid: rp.tc.length >= 1 };
 }
 // Перепрограммирование робота: заново проходится сборка, прежний выбор остаётся. Платятся только новые клетки и направления
 function engReproRobState(m) {
     const o = m.old, key = d => d[0] + ',' + d[1];
     const diff = (a, b) => a.filter(d => !b.some(x => key(x) === key(d))).length;
     const same = (a, b) => diff(a, b) === 0 && diff(b, a) === 0;
-    if (m.kind === 'wing') return { cost: 2 * diff(m.ja, o.ja) + diff(m.jw, o.jw), changed: !(same(m.ja, o.ja) && same(m.jw, o.jw)) };
-    return { cost: diff(m.walk, o.walk) + diff(m.atk, o.atk) + Math.max(0, m.wr - o.wr) * (engSame(m) ? 2 : 1), changed: !(same(m.walk, o.walk) && same(m.atk, o.atk) && m.wr === o.wr) };
+    if (m.kind === 'wing') {
+        const added = 3 * diff(m.ja, o.ja) + diff(m.jw, o.jw), removed = 3 * diff(o.ja, m.ja) + diff(o.jw, m.jw);
+        return { added, removed, cost: Math.max(0, added - removed), changed: !(same(m.ja, o.ja) && same(m.jw, o.jw)) };
+    }
+    const oldSame = o.walk.length > 0 && o.walk.length === o.atk.length && o.walk.every(d => o.atk.some(x => key(x) === key(d)));      // у прежнего робота дальность усиливала и ходьбу, и атаку
+    const added = diff(m.walk, o.walk) + diff(m.atk, o.atk) + Math.max(0, m.wr - o.wr) * (engSame(m) ? 2 : 1);
+    const removed = diff(o.walk, m.walk) + diff(o.atk, m.atk) + Math.max(0, o.wr - m.wr) * (oldSame ? 2 : 1);
+    return { added, removed, cost: Math.max(0, added - removed), changed: !(same(m.walk, o.walk) && same(m.atk, o.atk) && m.wr === o.wr) };
 }
 
 // Выделить (или снять) все клетки радиуса турели: 3×3 или 5×5 без центра
@@ -7407,7 +7429,7 @@ function turretScan() {
 }
 
 /* ---------- Эврика: один раз за бой аннулировать перезарядку способности ---------- */
-const EUREKA_CD = 20;      // перезарядка самой Эврики: 20 своих ходов (тикает вместе с перезарядкой способностей)
+const EUREKA_CD = 30;      // перезарядка самой Эврики: 20 своих ходов (тикает вместе с перезарядкой способностей)
 const eurekaLeft = col => (G && G.eurekaCd && G.eurekaCd[col] > 0) ? G.eurekaCd[col] : 0;
 const eurekaReady = col => !!G && G.hero[col] === 'engineer' && eurekaLeft(col) <= 0;
 function doEureka(k) {
@@ -7441,7 +7463,7 @@ function eurekaAsk(k) {
     dlg.dataset.k = k;
     dlg.innerHTML = `<div class="eng-tab"><div class="eng-screen"><div class="eng-inner">
         <div class="eng-head"><span class="eng-title">💡 ЭВРИКА</span></div>
-        <div class="eng-body"><div class="eng-note ask">ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ «<b class="eu-name">${ABILITIES[k].name}</b>»? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 20 ХОДОВ.</div>
+        <div class="eng-body"><div class="eng-note ask">ОБНУЛИТЬ ПЕРЕЗАРЯДКУ СПОСОБНОСТИ «<b class="eu-name">${ABILITIES[k].name}</b>»? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 30 ХОДОВ.</div>
         <div class="eng-row"><button class="eng-sq big" data-eu="yes">${engPix('check')}<i>ДА</i></button><button class="eng-sq big" data-eu="no">${engPix('cross')}<i>НЕТ</i></button></div></div>
       </div></div></div>`;
     dlg.classList.remove('hidden');
@@ -7604,16 +7626,16 @@ function engTabletHTML(m) {
         title = 'ПЕРЕПРОГРАММИРОВАНИЕ';
         nextLabel = 'ПРИМЕНИТЬ ▶';
         ok = s2.valid && s2.changed;
-        costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: 1 + ${s2.cost} = ${1 + s2.cost}`;
+        costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: ${CONFIG.cooldown.reprogram} + ${s2.added} − ${s2.removed} = ${CONFIG.cooldown.reprogram + s2.cost}`;
         body = cellGrid(rp.tk === 'instant' ? 3 : 5, rp.tc, null, false, 'tower');
         allBtn = selAllBtn(rp.tc, rp.tk === 'instant' ? 1 : 2);
-        note = 'РАДИУС ТУРЕЛИ ЗАНОВО. КАЖДАЯ НОВАЯ КЛЕТКА +2 КД.';
+        note = 'РАДИУС ТУРЕЛИ ЗАНОВО. НОВАЯ КЛЕТКА +2 КД, УБРАННАЯ −2 КД.';
     } else {
-        if (m.rb) { const rs = engReproRobState(m); costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: 1 + ${rs.cost} = ${1 + rs.cost}`; }
+        if (m.rb) { const rs = engReproRobState(m); costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: ${CONFIG.cooldown.reprogram} + ${rs.added} − ${rs.removed} = ${CONFIG.cooldown.reprogram + rs.cost}`; }
         else costLine = `СБОРКА РОБОТА · КД: 3 + ${engCost({ ...m, kind: kindNow })} = ${3 + engCost({ ...m, kind: kindNow })}`;
         if (st === 'kind') {
             title = 'ВЫБОР ФИГУРЫ';
-            body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'САПОГ<br>+0 КД') + sq('pick', 'wing', m.sel === 'wing', engPix('wing'), 'КРЫЛО<br>+3 КД') + '</div>';
+            body = '<div class="eng-row">' + sq('pick', 'boot', m.sel === 'boot', engPix('boot'), 'САПОГ<br>+0 КД') + sq('pick', 'wing', m.sel === 'wing', engPix('wing'), 'КРЫЛО<br>+2 КД') + '</div>';
             note = 'САПОГ: ХОДИТ И РУБИТ, НЕ ПРЫГАЯ ЧЕРЕЗ ФИГУРЫ. КРЫЛО: ПРЫГАЕТ ПО КЛЕТКАМ.';
             ok = m.sel === 'boot' || m.sel === 'wing';
         } else if (st === 'walk') {
@@ -7636,7 +7658,7 @@ function engTabletHTML(m) {
         } else if (st === 'wing') {
             title = 'ПРЫЖКИ: ХОД И АТАКА';
             body = cellGrid(5, m.ja, null, false, 'pawn');
-            note = `КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО ${m.ja.length} ИЗ ${ENG_MAX_JUMP}.`;
+            note = `КАЖДАЯ КЛЕТКА +3 КД. ВЫБРАНО ${m.ja.length} ИЗ ${ENG_MAX_JUMP}.`;
             ok = m.ja.length >= 1;
         } else if (st === 'wingafter') {
             title = 'ЧТО ДАЛЬШЕ?';
@@ -8880,8 +8902,8 @@ const TILE_PALETTE = [
     { id: 'wall', k: 'wall', ico: '🧱', ru: 'Стена', en: 'Wall' },
     { id: 'conv', k: 'conv', ico: '➡', ru: 'Конвейер', en: 'Conveyor', own: true, dir: true },
     { id: 'portal', k: 'portal', ico: '🌀', ru: 'Портал (пара)', en: 'Portal (pair)', own: true, pair: true },
-    { id: 'gen+', k: 'gen', s: '+', ico: '＋', ru: 'Генератор +', en: 'Generator +', own: true },
-    { id: 'gen-', k: 'gen', s: '-', ico: '－', ru: 'Генератор −', en: 'Generator −', own: true },
+    { id: 'gen+', k: 'gen', s: '+', ico: '＋', ru: 'Короткое замыкание +', en: 'Short circuit +', own: true },
+    { id: 'gen-', k: 'gen', s: '-', ico: '－', ru: 'Короткое замыкание −', en: 'Short circuit −', own: true },
     { id: 'virus', k: 'virus', ico: '☣️', ru: 'Заражённая плитка', en: 'Infected tile', own: true },
     { id: 'vine', k: 'vine', ico: '🌿', ru: 'Лоза', en: 'Vine', own: true },
     { id: 'ritual', k: 'ritual', ico: '🕯️', ru: 'Ритуал', en: 'Ritual', own: true, neu: true },
