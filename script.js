@@ -463,14 +463,81 @@ function slideTone(f0, f1, d, type = 'sawtooth', v = 0.04, delay = 0) {
         o.start(t); o.stop(t + d + 0.02);
     } catch (e) { /* звук не критичен */ }
 }
+// Всплеск шума (удар, плюх): полосовой фильтр, при желании с плавным сдвигом частоты
+function noiseBurst(dur, f0, q, v, delay = 0, f1 = null) {
+    if (!CONFIG.sound) return;
+    try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const t = actx.currentTime + delay;
+        const nb = actx.createBuffer(1, Math.ceil(actx.sampleRate * (dur + 0.05)), actx.sampleRate), nd = nb.getChannelData(0);
+        for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+        const ns = actx.createBufferSource(); ns.buffer = nb;
+        const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q;
+        bp.frequency.setValueAtTime(f0, t);
+        if (f1) bp.frequency.exponentialRampToValueAtTime(f1, t + dur);
+        const g = actx.createGain();
+        g.gain.setValueAtTime(v, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        ns.connect(bp); bp.connect(g); g.connect(actx.destination);
+        ns.start(t); ns.stop(t + dur + 0.02);
+    } catch (e) { /* звук не критичен */ }
+}
+// Мягкий голос хора: две слегка расстроенные «треугольные» волны, медленное нарастание, лёгкое дрожание, небольшое эхо
+function choirVoice(bus, f, at, dur, v) {
+    const t = actx.currentTime + at;
+    [-4, 4].forEach(det => {
+        const o = actx.createOscillator(), g = actx.createGain(), lp = actx.createBiquadFilter(), lfo = actx.createOscillator(), lg = actx.createGain();
+        o.type = 'triangle'; o.frequency.value = f; o.detune.value = det;
+        lfo.frequency.value = 5.2; lg.gain.value = f * 0.004;
+        lfo.connect(lg); lg.connect(o.frequency);
+        lp.type = 'lowpass'; lp.frequency.value = 2600;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(v, t + dur * 0.4);
+        g.gain.setValueAtTime(v, t + dur * 0.6);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(lp); lp.connect(g); g.connect(bus);
+        o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+    });
+}
 const SFX = {
+    // воскрешение: небольшой ангельский хор, два светлых аккорда «ааа» с эхом
+    choir: () => {
+        if (!CONFIG.sound) return;
+        try {
+            actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+            const bus = actx.createGain(); bus.gain.value = 1;
+            const dly = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
+            dly.delayTime.value = 0.16; fb.gain.value = 0.35; wet.gain.value = 0.4;
+            bus.connect(actx.destination); bus.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(actx.destination);
+            [523, 659, 784, 1047].forEach(f => choirVoice(bus, f, 0, 1.0, 0.012));
+            [587, 740, 880, 1175].forEach(f => choirVoice(bus, f, 0.75, 1.1, 0.012));
+        } catch (e) { /* звук не критичен */ }
+    },
+    // робот или турель собираются: три удара молотка (последний чуть сильнее)
+    hammer: () => {
+        [0, 0.24, 0.48].forEach((d, i) => {
+            const k = i === 2 ? 1.25 : 1;
+            noiseBurst(0.04, 2200, 1.2, 0.07 * k, d);
+            tone(190, 0.09, 'sine', 0.07 * k, d);
+            tone(95, 0.12, 'sine', 0.05 * k, d + 0.01);
+            tone(1500, 0.07, 'triangle', 0.02 * k, d + 0.005);
+        });
+    },
+    // помидор вляпывается в способность: глухой шлепок и влажное «смяк»
+    splat: () => {
+        tone(210, 0.1, 'sine', 0.08);
+        tone(70, 0.14, 'sine', 0.06, 0.02);
+        noiseBurst(0.2, 700, 2.5, 0.09, 0.01, 220);
+        slideTone(380, 720, 0.07, 'sine', 0.035, 0.07);
+        slideTone(300, 520, 0.08, 'sine', 0.03, 0.13);
+    },
     // зловещий смех «ХА… ХА… ХАааа»: низкий хрипловатый голос, медленно, с небольшим эхом
     cackle: () => {
         if (!CONFIG.sound) return;
         try {
             actx = actx || new (window.AudioContext || window.webkitAudioContext)();
             const t0 = actx.currentTime + 0.02;
-            const out = actx.createGain(); out.gain.value = 1;
+            const out = actx.createGain(); out.gain.value = 0.3;      // общая громкость смеха: на уровне остальных звуков игры
             const dly = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
             dly.delayTime.value = 0.23; fb.gain.value = 0.32; wet.gain.value = 0.38;      // эхо: повтор через 0,23 с, затухает
             out.connect(actx.destination);
@@ -3099,7 +3166,7 @@ function useAbility(key, r, c, ref) {
         G.board[r][c] = { ...mk(d.t, col), x: [...(d.x || [])], rob: d.rob, moved: true, zombie: key === 'raise' };
         text = `${A.icon} ${A.name}: ${pieceSym(d)} ${key === 'raise' ? 'встаёт зомби' : 'возвращается'} на ${sqName(r, c)}`;
         G.fx.push({ r, c, type: key === 'raise' ? 'raise' : 'revive' });
-        sfx(key === 'raise' ? 'raise' : 'revive');
+        sfx(key === 'raise' ? 'raise' : 'choir');      // воскрешение Паладина: ангельский хор
     } else if (key === 'guardian') {
         target.altruist = CONFIG.guardianTurns + 1;
         text = `${A.icon} ${A.name}: ${pieceSym(target)} ${sqName(r, c)} самоотверженна (${CONFIG.guardianTurns} ${plural(CONFIG.guardianTurns)})`;
@@ -7042,7 +7109,7 @@ function doAssemble(r, c) {
     G.engCost[col] = cost;
     G.last = null;
     G.fx.push({ r, c, type: 'revive' });
-    sfx('revive');
+    sfx('hammer');
     finishAbility('assemble', `${A.icon} ${A.name}: робот (${rob.kind === 'wing' ? 'крыло' : 'сапог'}) появляется на ${sqName(r, c)}`);
 }
 
@@ -7057,7 +7124,7 @@ function doTurret(r, c) {
     G.engCost[col + 't'] = engCost(m);
     G.last = null;
     G.fx.push({ r, c, type: 'revive' });
-    sfx('revive');
+    sfx('hammer');
     finishAbility('turret', `${A.icon} ${A.name}: ${tur.kind === 'instant' ? 'мгновенная стрельба' : 'дальняя артиллерия'} на ${sqName(r, c)}`);
 }
 
@@ -7620,6 +7687,7 @@ function tomatoFly(f) {
         ], { duration: 700, fill: 'forwards' });
         const land = () => {
             t.remove();
+            sfx('splat');      // помидор долетел: «смяк»
             if (hold && hold.isConnected) hold.classList.remove('tomato-pending');
             const sp = document.createElement('div');
             sp.className = 'tomato-splat';
