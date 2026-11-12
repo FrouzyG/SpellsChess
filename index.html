@@ -48,7 +48,7 @@
     <!-- Выбор режима: один экран или онлайн -->
     <div id="lobby" class="overlay">
         <div class="setup-card lobby-card">
-            <button id="langLobby" class="small-btn lang-top">🌐 English</button>
+            <button id="settingsBtn" class="small-btn lang-top" title="Настройки">⚙️</button>
             <h1 class="logo"><span class="logo-sp">Spells</span><span class="logo-ch">Chess</span></h1>
             <p class="sub">Как будете играть?</p>
             <div id="accBar" class="acc-bar">
@@ -156,7 +156,7 @@
                     <li>Короли навсегда неуязвимы для магии.</li>
                     <li>Большинство способностей тратят ход. Те, что ход не тратят, отмечены зелёным кружком справа от названия.</li>
                     <li>Все способности стартуют с перезарядкой 3.</li>
-                    <li>Описание способности и пассивки видно во всплывающей подсказке при наведении на кнопку.</li>
+                    <li>Описание способности и особой силы видно во всплывающей подсказке при наведении на кнопку.</li>
                     <li>Если визуально ход сделать невозможно, это не значит, что он невозможен на самом деле: невидимые фигуры, иллюзии, скрытые ловушки и фейки могут менять картину.</li>
                     <li>После мата можно нажать «Посмотреть доску» и рассмотреть финальную позицию.</li>
                     <li>Esc отменяет выбор.</li>
@@ -164,6 +164,26 @@
             </details>
         </aside>
     </main>
+
+    <!-- Настройки -->
+    <div id="settings" class="overlay hidden">
+        <div class="small-card settings-card">
+            <h2>⚙️ Настройки</h2>
+            <div class="set-row">
+                <div class="set-txt"><b>🌐 Язык</b></div>
+                <div class="set-lang">
+                    <button id="setLangRu" class="small-btn" data-notr>Русский</button>
+                    <button id="setLangEn" class="small-btn" data-notr>English</button>
+                </div>
+            </div>
+            <div class="set-row set-vol">
+                <div class="set-txt"><b>🔊 Громкость звуков</b></div>
+                <div class="set-slider"><input id="setVol" type="range" min="0" max="100" step="1" value="100"><span id="setVolNum">100%</span></div>
+            </div>
+            <div id="setSwitches"></div>
+            <button id="setClose" class="big-btn">Закрыть</button>
+        </div>
+    </div>
 
     <!-- Описание способностей героев партии -->
     <div id="abInfo" class="overlay hidden">
@@ -347,6 +367,7 @@
             <p id="goAgain" class="go-again hidden"></p>
             <button id="goView" class="big-btn secondary">Посмотреть доску</button>
             <button id="goNew" class="big-btn">Сыграть ещё</button>
+            <button id="goExit" class="big-btn secondary">Выйти</button>
         </div>
     </div>
 

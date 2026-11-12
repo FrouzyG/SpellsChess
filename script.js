@@ -1,5 +1,25 @@
 ﻿'use strict';
 
+// Общая громкость звуков: все звуки идут через один регулятор (ползунок в настройках)
+let VOLUME = 1;
+try { const v0 = parseFloat(localStorage.getItem('sc_volume')); if (v0 >= 0 && v0 <= 1) VOLUME = v0; } catch (e) { }
+let MASTER_GAIN = null;
+(function () {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    class SpellsAudioContext extends AC {
+        constructor(...a) {
+            super(...a);
+            const real = this.destination, mg = this.createGain();
+            mg.gain.value = VOLUME; mg.connect(real);
+            Object.defineProperty(this, 'destination', { value: mg });
+            MASTER_GAIN = mg;
+        }
+    }
+    window.AudioContext = SpellsAudioContext; window.webkitAudioContext = SpellsAudioContext;
+})();
+const setVolume = v => { VOLUME = Math.max(0, Math.min(1, v)); if (MASTER_GAIN) MASTER_GAIN.gain.value = VOLUME; try { localStorage.setItem('sc_volume', String(VOLUME)); } catch (e) { } };
+
 /* =====================================================================
    НАСТРОЙКИ — можно смело менять числа
    ===================================================================== */
@@ -331,7 +351,7 @@ HEROES.jester = { icon: '🤡', name: 'Шут', tag: 'Трюки и сюрпри
 // Фокусник
 PASSIVES.sawing = {
     icon: '🪚', name: 'Распиливание доски',
-    desc: 'Для ваших фигур левый и правый край доски соединены: слон, ладья и ферзь проходят сквозь край, пешки рубят через него, конь перепрыгивает на другую сторону. Верх и низ не соединены. На короля пассивка не действует. Когда любая ваша фигура прошла через край, пассивка отключается у всех ваших фигур на ' + CONFIG.sawingCooldown + ' ' + plural(CONFIG.sawingCooldown) + '.'
+    desc: 'Для ваших фигур левый и правый край доски соединены: слон, ладья и ферзь проходят сквозь край, пешки рубят через него, конь перепрыгивает на другую сторону. Верх и низ не соединены. На короля особая сила не действует. Когда любая ваша фигура прошла через край, пассивка отключается у всех ваших фигур на ' + CONFIG.sawingCooldown + ' ' + plural(CONFIG.sawingCooldown) + '.'
 };
 Object.assign(ABILITIES, {
     fog: {
@@ -2397,7 +2417,19 @@ function newState(board, hero, win) {
     };
 }
 
+// Кнопка «Назад» телефона не должна выкидывать из партии: держим лишнюю запись в истории и возвращаем её
+let BACK_GUARD = false;
+function backGuardOn() {
+    if (BACK_GUARD || !window.history || !history.pushState) return;
+    BACK_GUARD = true;
+    try { history.pushState({ sc: 1 }, '', location.href); } catch (e) { return; }
+    window.addEventListener('popstate', () => {
+        const app = document.getElementById('app');
+        if (app && !app.classList.contains('hidden')) { try { history.pushState({ sc: 1 }, '', location.href); } catch (e) { /* ничего */ } }
+    });
+}
 function startGame() {
+    backGuardOn();
     NET.againMe = false; NET.againOpp = false;      // новая партия: прежние «готов сыграть ещё» сброшены
     const oldOrb = document.getElementById('goOrb'); if (oldOrb) oldOrb.remove();
     const cfg = CUSTOM;      // своя доска из редактора
@@ -2658,7 +2690,7 @@ function sweepTraps() {
 
 // Зарядка Инженера: фигура, вставшая на плитку, получает разряд.
 // Обычная фигура (не король) оглушается и пропускает свой следующий ход (как в капкане), робот получает 1 заряд
-function sweepChargers() {
+function sweepChargers(mid) {      // mid: ход ещё не закончился (доп. ход ZA WARUDO, Жатвы, Апокалипсиса, бесплатный ход заряженного робота)
     const on = new Set((G.chargers || []).map(x => x.r + ',' + x.c));
     G.board.forEach((row, r) => row.forEach((p, c) => {
         if (!p) return;
@@ -2675,7 +2707,7 @@ function sweepChargers() {
         }
         if (kSafe(p)) return;
         if (p.warded > 0) { addLog('n', p.invis ? '✴ Невидимая фигура под Очищением не боится разряда' : `✴ ${pieceSym(p)} на ${here} под Очищением не боится разряда`); return; }
-        p.snared = 1; p.shock = true;
+        p.snared = mid ? 2 : 1; p.shock = true;      // посреди хода ставим 2: в конце хода одна единица спадёт, и фигура всё равно пропустит следующий ход
         if (!p.invis) G.fx.push({ r, c, type: 'zap' });
         sfx('zap');
         addLog('n', p.invis ? '⚡ Невидимая фигура получает разряд и оглушена' : `⚡ ${pieceSym(p)} на ${here} получает разряд и пропустит следующий ход`);
@@ -3061,6 +3093,7 @@ function executeMove(mv, promo, ctx) {
             G.chargeUsed.push(ctx.cuid);
             if (ctx.cpiece) ctx.cpiece.chg = 0;      // заряд потрачен
             addLog('n', '🔋 Заряд потрачен: бесплатный ход робота сделан, обычный ход ещё впереди');
+            sweepChargers(true);      // фигура, вставшая на плитку-зарядку этим ходом, получает разряд сразу
             continueTurn();
             return;
         }
@@ -3070,6 +3103,7 @@ function executeMove(mv, promo, ctx) {
             G.lastAb[col] = 'apocalypse';
             G.noZForce = true;
             addLog('n', '☠️ Апокалипсис: обязательная рубка зомби отменена до конца хода');
+            sweepChargers(true);
             continueTurn();
             return;
         }
@@ -3078,6 +3112,7 @@ function executeMove(mv, promo, ctx) {
         if (ctx.zw === 1) {
             G.bonus = { kind: 'zw', step: 2 };
             addLog('n', '🕰️ ZA WARUDO: второй ход');
+            sweepChargers(true);
             continueTurn();
             return;
         }
@@ -3092,6 +3127,7 @@ function executeMove(mv, promo, ctx) {
             } else {
                 G.bonus = { kind: 'harvest' };
                 addLog('n', '🌾 Жатва: дополнительный ход');
+                sweepChargers(true);
                 continueTurn();
             }
             return;
@@ -4341,7 +4377,7 @@ function openAbInfo() {
         if (!hero || hero.plain) return;
         const ps = PASSIVES[hero.passive];
         h += `<div class="ai-hero ${col}"><h3>${hero.icon} ${hero.name} <small>· ${colorName(col)}</small></h3>`;
-        h += `<div class="ai-row"><b>${ps.icon} ${ps.name}</b> <i>пассивка</i><p>${ps.desc}</p></div>`;
+        h += `<div class="ai-row"><b>${ps.icon} ${ps.name}</b> <i>особая сила</i><p>${ps.desc}</p></div>`;
         hero.abilities.forEach(k => { const a = ABILITIES[k]; h += `<div class="ai-row"><b>${a.icon} ${a.name}</b>${abFreeDot(k)}<p>${abilityDesc(k)}</p></div>`; });
         h += '</div>';
     });
@@ -4361,7 +4397,7 @@ function panelHTML(col) {
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
     <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div>${panelNick(col)}${rematchBadge(col)}</div>
     ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}${hero.plain ? '' : '<button class="pn-info" data-info title="Описание способностей">i</button>'}</div>`;
-    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Пассивка: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (' + L('КД ', 'CD ') + eurekaLeft(col) + ')' : ''}</div><div class="abilities">`;
+    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Особая сила: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (' + L('КД ', 'CD ') + eurekaLeft(col) + ')' : ''}</div><div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
     const tomMode = !G.over && G.mode && G.mode.type === 'tomato' && col !== G.turn && isActor();
@@ -4451,7 +4487,7 @@ function renderStatus() {
     const st = $('#status'), hi = $('#hint');
     if (G.over) {
         st.textContent = G.over.title; st.className = 'status over';
-        hi.textContent = G.over.text + (NET.on && !NET.oppLeft ? (NET.againOpp ? ' ✅ Соперник готов к новой партии.' : NET.againMe ? ' ⏳ Вы готовы, ждём соперника.' : '') : '');
+        hi.textContent = G.over.text + (NET.on ? (NET.oppLeft ? ' 🚪 Соперник вышел из партии.' : NET.againOpp ? ' ✅ Соперник готов к новой партии.' : NET.againMe ? ' ⏳ Вы готовы, ждём соперника.' : '') : '');
         return;
     }
     let s = `Ход: ${colorName(G.turn)}`;
@@ -4661,7 +4697,7 @@ function renderCollection() {
           <div><div class="hc-name">${h.name}</div><div class="hc-tag">${h.tag}</div></div></div>
         <div class="hc-abs"><span class="chip chip-ps">${ps.icon} ${ps.name}${psFreeDot(h.passive)}</span>${h.abilities.map(k => `<span class="chip">${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</span>`).join('')}</div>
         <button class="hc-more" type="button">${open ? 'Скрыть ▴' : 'Подробнее ▾'}</button>
-        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span>${cdBadgeHTML(CONFIG.cooldown[h.passive])}</div>
+        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Особая сила: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span>${cdBadgeHTML(CONFIG.cooldown[h.passive])}</div>
         <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</b><br><span>${abilityDesc(k)}</span>${cdBadgeHTML(CONFIG.cooldown[k])}</li>`).join('')}</ul></div>` : ''}
         ${locked ? `<button class="hc-unlock" type="button">🔓 ${L('Открыть за 1 шар', 'Unlock for 1 orb')}</button>` : ''}
       </div>`;
@@ -4691,7 +4727,7 @@ function buildSetup() {
           <div><div class="hc-name">${h.name}</div><div class="hc-tag">${h.tag}</div></div></div>
         <div class="hc-abs"><span class="chip chip-ps">${ps.icon} ${ps.name}${psFreeDot(h.passive)}</span>${h.abilities.map(k => `<span class="chip">${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</span>`).join('')}</div>
         <button class="hc-more" type="button">${open ? 'Скрыть ▴' : 'Подробнее ▾'}</button>
-        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Пассивка: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span>${cdBadgeHTML(CONFIG.cooldown[h.passive])}</div>
+        ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Особая сила: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span>${cdBadgeHTML(CONFIG.cooldown[h.passive])}</div>
         <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</b><br><span>${abilityDesc(k)}</span>${cdBadgeHTML(CONFIG.cooldown[k])}</li>`).join('')}</ul></div>` : ''}
       </div>`;
         }).join('');
@@ -4879,12 +4915,13 @@ function rematchGo() {
 function updateRematchUI() {
     const go = $('#goNew'), ag = $('#goAgain'), bn = $('#btnNew');
     if (!go || !ag || !bn) return;
-    const on = !!(NET.on && G && G.over && !NET.oppLeft);
-    const label = !on ? 'Сыграть ещё' : NET.againMe ? '⏳ Ждём соперника (отменить)' : NET.againOpp ? '✅ Сыграть ещё' : 'Сыграть ещё';
+    const over = !!(NET.on && G && G.over), gone = over && !!NET.oppLeft, on = over && !gone;
+    const label = gone ? 'В меню' : !on ? 'Сыграть ещё' : NET.againMe ? '⏳ Ждём соперника (отменить)' : NET.againOpp ? '✅ Сыграть ещё' : 'Сыграть ещё';
     if (go.textContent !== label) go.textContent = label;
-    const note = !on ? '' : NET.againOpp ? '✅ Соперник готов к новой партии' : NET.againMe ? '⏳ Вы готовы. Ждём соперника...' : '';
+    const note = gone ? '🚪 Соперник вышел из партии' : !on ? '' : NET.againOpp ? '✅ Соперник готов к новой партии' : NET.againMe ? '⏳ Вы готовы. Ждём соперника...' : '';
     if (ag.textContent !== note) ag.textContent = note;
     ag.classList.toggle('hidden', !note);
+    ag.classList.toggle('gone', gone);
     const bl = on ? label : 'Новая игра';
     if (bn.textContent !== bl) bn.textContent = bl;
 }
@@ -4897,6 +4934,7 @@ function rematchBadge(col) {
 setInterval(() => { if (NET.on && !NET.lost && NET.againMe && G && G.over) netSend({ t: 'again', on: true }); }, 3000);
 $('#goNew').addEventListener('click', () => { if (NET.on) { rematchPress(); return; } openSetup(); });
 $('#goView').addEventListener('click', () => $('#gameover').classList.add('hidden'));
+$('#goExit').addEventListener('click', () => { if (NET.on && !NET.oppLeft) netSend({ t: 'leave' }); leaveToMenu(); });      // выйти на начальный экран; сопернику придёт «вышел»
 $('#btnEnd').addEventListener('click', () => {
     if (G && !G.over && G.archUsed && !G.check && !G.pendingPromo) netDo({ t: 'end' });
 });
@@ -5058,6 +5096,7 @@ function opponentGone(text) {
         setTimeout(() => { uiAlert(text); leaveToMenu(); }, 300);
         return;
     }
+    if (G && G.over && !G.leftLogged) { G.leftLogged = true; addLog('n', '🚪 Соперник вышел из партии'); }
     if (G) render();
 }
 function leaveToMenu() {
@@ -5134,7 +5173,7 @@ const EN = {
     "🎴 Коллекция": "🎴 Collection",
     "🎴 Коллекция героев": "🎴 Hero collection",
     "⟵ Назад": "⟵ Back",
-    "Пассивка:": "Passive:",
+    "Особая сила:": "Special power:",
     "Воскрешение": "Resurrection",
     "Возвращает вашу фигуру из сброса на свободную клетку первой горизонтали (пешку на любую из первых четырёх).": "Returns your piece from the graveyard to a free square on your first rank (a pawn to any of the first four ranks).",
     "Око за око": "Eye for an Eye",
@@ -5399,7 +5438,7 @@ const EN = {
     "Рокировка (ОК) или обычный ход короля без ладьи (Отмена)?": "Castle (OK) or a normal king move without the rook (Cancel)?",
     "Сдача": "Resignation",
     "Ничья по согласию.": "Draw by agreement.",
-    "</span> Пассивка: <b>": "</span> Passive: <b>",
+    "</span> Особая сила: <b>": "</span> Special power: <b>",
     "готово": "ready",
     "перезарядка: ": "cooldown: ",
     "доп. ход": "extra move",
@@ -5493,7 +5532,7 @@ const EN = {
     "Отменить готовность": "Cancel ready",
     "Готов": "Ready",
     "Начать партию": "Start game",
-    " Пассивка: ": " Passive: ",
+    " Особая сила: ": " Special power: ",
     "Розовая": "Pink",
     "Зелёная": "Green",
     "Голубая": "Light blue",
@@ -5649,7 +5688,7 @@ const EN = {
     "Короли навсегда неуязвимы для магии.": "Kings are permanently immune to magic.",
     "Большинство способностей тратят ход. Те, что ход не тратят, отмечены зелёным кружком справа от названия.": "Most abilities cost a turn. Those that do not are marked with a green dot to the right of the name.",
     "Все способности стартуют с перезарядкой 3.": "All abilities start with a cooldown of 3.",
-    "Описание способности и пассивки видно во всплывающей подсказке при наведении на кнопку.": "The description of an ability or passive is shown in a tooltip when you hover over the button.",
+    "Описание способности и особой силы видно во всплывающей подсказке при наведении на кнопку.": "The description of an ability or special power is shown in a tooltip when you hover over the button.",
     "Если визуально ход сделать невозможно, это не значит, что он невозможен на самом деле: невидимые фигуры, иллюзии, скрытые ловушки и фейки могут менять картину.": "If a move looks impossible, that does not mean it really is: invisible pieces, illusions, hidden traps and fakes can change the picture.",
     "После мата можно нажать «Посмотреть доску» и рассмотреть финальную позицию.": "After checkmate you can press “View board” to study the final position.",
     "Esc отменяет выбор.": "Esc cancels the selection.",
@@ -6068,7 +6107,7 @@ function setLang(l) {
     LANG = l;
     try { localStorage.setItem('spellschess-lang', l); } catch (e) { /* без сохранения */ }
     if (document.documentElement) document.documentElement.lang = l;
-    ['langLobby', 'langSetup', 'btnLang'].forEach(id => { $('#' + id).textContent = l === 'ru' ? '🌐 English' : '🌐 Русский'; });
+    ['langSetup', 'btnLang'].forEach(id => { $('#' + id).textContent = l === 'ru' ? '🌐 English' : '🌐 Русский'; });
     buildSetup();
     renderThemePicker();
     renderChat();
@@ -6086,7 +6125,7 @@ if (typeof MutationObserver !== 'undefined' && document.body) {
         });
     }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: TR_ATTRS });
 }
-['langLobby', 'langSetup', 'btnLang'].forEach(id => $('#' + id).addEventListener('click', () => setLang(LANG === 'ru' ? 'en' : 'ru')));
+['langSetup', 'btnLang'].forEach(id => $('#' + id).addEventListener('click', () => setLang(LANG === 'ru' ? 'en' : 'ru')));
 
 /* ---------- Свои модельки фигур: положите картинки в папку pieces (wK.png, bQ.png и т. д.) ---------- */
 (function detectPieceImages() {
@@ -9668,7 +9707,7 @@ Object.assign(EN, {
     "СНЯТЬ ВСЕ": "CLEAR ALL",
     "Описание способностей": "Abilities guide",
     "ⓘ Способности героев": "ⓘ Hero abilities",
-    "пассивка": "passive",
+    "особая сила": "special power",
     "В этой партии нет героев.": "There are no heroes in this game.",
     "✏️ Сменить ник (🔮 1)": "✏️ Change nickname (🔮 1)",
     "🔑 Сменить пароль": "🔑 Change password",
@@ -9682,5 +9721,67 @@ Object.assign(EN, {
     "Для смены пароля нужно войти заново. Выйдите и войдите снова или нажмите «Забыли пароль?».": "To change your password, sign in again: sign out and in, or press “Forgot password?”.",
     "Плитка-зарядка": "Charger tile",
     "РЕДАКТОР ДОСКИ": "BOARD EDITOR"
+});
+/* ---------- Настройки: шестерёнка на начальном экране ---------- */
+const SET_ITEMS = [
+    { id: 'btnConfirm', ico: '✅', name: 'Подтверждение хода', desc: 'Перед ходом фигуры появляется кнопка подтверждения: защита от случайных нажатий.' },
+    { id: 'btnBanner', ico: '📢', name: 'Объявления способностей', desc: 'Крупная надпись на экране, когда кто-то применяет способность.' },
+    { id: 'btnAnim', ico: '🎬', name: 'Анимации на доске', desc: 'Полёты, вспышки и другие эффекты на доске. Выключите, если игра тормозит.' },
+    { id: 'btnSound', ico: '🔊', name: 'Звуки', desc: 'Включает и выключает все звуки игры. Громкость настраивается ползунком выше.', sound: true },
+    { id: 'btnGhost', ico: '👁', name: 'Иллюзии Экстрасенса', desc: 'Подсвечивать иллюзии Экстрасенса на доске.' },
+    { id: 'btnTraps', ico: '🪤', name: 'Капканы Охотника', desc: 'Показывать капканы Охотника на доске.' },
+    { id: 'btnInvis', ico: '🥷', name: 'Невидимые фигуры Самурая', desc: 'Показывать невидимые фигуры Самурая на доске.' }
+];
+function buildSettings() {
+    $('#setVol').value = Math.round(VOLUME * 100);
+    $('#setVolNum').textContent = Math.round(VOLUME * 100) + '%';
+    $('#setLangRu').classList.toggle('active', LANG === 'ru');
+    $('#setLangEn').classList.toggle('active', LANG === 'en');
+    const th = THEMES.find(t => t.id === themeId);
+    $('#setSwitches').innerHTML = SET_ITEMS.map(it => {
+        const b = document.getElementById(it.id);
+        const on = it.sound ? CONFIG.sound : !(b && b.classList.contains('off'));
+        return `<div class="set-row"><div class="set-txt"><b>${it.ico} ${it.name}</b><span>${it.desc}</span></div><button class="set-toggle${on ? ' on' : ''}" data-set="${it.id}" aria-pressed="${on}"><i></i></button></div>`;
+    }).join('') + `<div class="set-row"><div class="set-txt"><b>🎨 Доска</b><span>Цвета доски: ${th ? th.name : ''}. Нажмите, чтобы сменить.</span></div><button class="small-btn" data-set="btnTheme">Сменить</button></div>`;
+    translateNode($('#settings'));
+}
+$('#settingsBtn').addEventListener('click', () => { buildSettings(); $('#settings').classList.remove('hidden'); });
+$('#setClose').addEventListener('click', () => $('#settings').classList.add('hidden'));
+$('#settings').addEventListener('click', e => {
+    if (e.target.id === 'settings') { $('#settings').classList.add('hidden'); return; }
+    const b = e.target.closest('[data-set]');
+    if (!b) return;
+    const src = document.getElementById(b.dataset.set);
+    if (src) src.click();
+    buildSettings();
+});
+$('#setVol').addEventListener('input', e => { setVolume(e.target.value / 100); $('#setVolNum').textContent = e.target.value + '%'; });
+$('#setVol').addEventListener('change', () => { if (CONFIG.sound && SFX.move) SFX.move(); });      // короткий пробный звук
+$('#setLangRu').addEventListener('click', () => { if (LANG !== 'ru') setLang('ru'); buildSettings(); });
+$('#setLangEn').addEventListener('click', () => { if (LANG !== 'en') setLang('en'); buildSettings(); });
+Object.assign(EN, {
+    "⚙️ Настройки": "⚙️ Settings",
+    "🌐 Язык": "🌐 Language",
+    "🔊 Громкость звуков": "🔊 Sound volume",
+    "Подтверждение хода": "Move confirmation",
+    "Перед ходом фигуры появляется кнопка подтверждения: защита от случайных нажатий.": "A confirm button appears before a move: protection from accidental taps.",
+    "Объявления способностей": "Ability announcements",
+    "Крупная надпись на экране, когда кто-то применяет способность.": "A big banner on screen when someone uses an ability.",
+    "Анимации на доске": "Board animations",
+    "Полёты, вспышки и другие эффекты на доске. Выключите, если игра тормозит.": "Flights, flashes and other effects on the board. Turn off if the game lags.",
+    "Звуки": "Sounds",
+    "Включает и выключает все звуки игры. Громкость настраивается ползунком выше.": "Turns all game sounds on or off. Volume is set with the slider above.",
+    "Иллюзии Экстрасенса": "Psychic illusions",
+    "Подсвечивать иллюзии Экстрасенса на доске.": "Highlight the Psychic's illusions on the board.",
+    "Капканы Охотника": "Hunter traps",
+    "Показывать капканы Охотника на доске.": "Show the Hunter's traps on the board.",
+    "Невидимые фигуры Самурая": "Samurai invisible pieces",
+    "Показывать невидимые фигуры Самурая на доске.": "Show the Samurai's invisible pieces on the board.",
+    "🎨 Доска": "🎨 Board",
+    "Сменить": "Change",
+    "Закрыть": "Close",
+    "Выйти": "Exit",
+    "В меню": "To menu",
+    "🚪 Соперник вышел из партии": "🚪 The opponent left the game"
 });
 tryResume();
