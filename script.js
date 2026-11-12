@@ -507,9 +507,9 @@ const SFX = {
                 g.connect(out);
                 o.start(t); o.stop(t + dur + 0.8);
             };
-            ha(0.00, 330, 235, 0.5, 0.34);
-            ha(0.72, 350, 245, 0.5, 0.36);
-            ha(1.44, 370, 160, 1.2, 0.4, 9);
+            ha(0.00, 350, 215, 0.75, 0.36, 8);
+            ha(0.90, 365, 225, 0.75, 0.38, 8.5);
+            ha(1.80, 370, 160, 1.2, 0.4, 9);
         } catch (e) { /* звук не критичен */ }
     },
     move: () => tone(300, 0.08, 'triangle'),
@@ -6357,7 +6357,7 @@ render = function () {
     const chat = g('chat'), app = g('app'), log = g('log');
     if (!chat || !app || !log) return;
     const side = app.querySelector('.side-col'), logTitle = log.previousElementSibling;
-    const mq = window.matchMedia('(max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px)');
+    const mq = window.matchMedia('(max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px)');
     const place = () => {
         if (mq.matches) { if (chat.parentElement !== side) side.insertBefore(chat, logTitle); }
         else if (chat.parentElement !== app) app.insertBefore(chat, side);

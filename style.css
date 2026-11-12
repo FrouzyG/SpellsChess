@@ -870,7 +870,7 @@ button {
         border-color: var(--gold);
     }
 
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     .side-col {
         width: 100%;
         max-width: 480px;
@@ -2598,7 +2598,7 @@ button {
     grid-template-columns: minmax(0, 1fr);
 }
 
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     /* ---------- Экраны выбора режима и героев ---------- */
     .overlay {
         padding: 8px;
@@ -3025,7 +3025,7 @@ button {
     pointer-events: none;
 }
 
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     .rewind {
         margin-top: 2px;
         gap: 4px;
@@ -3055,7 +3055,7 @@ button {
 }
 
 /* ===== Телефон: правки по скриншотам ===== */
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     /* выбор героев: колонки не шире экрана */
     .pick-row {
         display: flex;
@@ -3132,7 +3132,7 @@ button {
     z-index: 3;
 }
 
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     .confirm-bar {
         margin-top: 2px;
         gap: 6px;
@@ -3272,7 +3272,7 @@ button {
     }
 }
 
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     .panel .clock {
         font-size: 14px;
         padding: 0 6px;
@@ -3366,7 +3366,7 @@ button {
     }
 
 /* ===== Телефон: журнал в стабильном окошке, как чат ===== */
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     .game .side-col #log {
         height: 220px !important;
         max-height: 220px !important;
@@ -3484,7 +3484,7 @@ button {
     filter: drop-shadow(0 0 3px #000);
 }
 
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     .panel .tm-badge {
         top: 1px;
         left: 1px;
@@ -3829,7 +3829,7 @@ button {
         opacity: 0.7;
     }
 
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     .prof-stats {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -5683,7 +5683,7 @@ button {
 
 /* ===== Планшет в альбомной ориентации: доска посередине, карточки героев слева и справа,
    меню слева под карточкой, «Завершить ход» справа под карточкой, всё на одном экране ===== */
-@media (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) and (orientation: landscape) {
+@media (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) and (orientation: landscape), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px), (max-width: 760px) and (orientation: landscape) and (max-height: 479px) {
     :root {
         --cell: min((100dvh - 30px) / var(--n), (100vw - 500px) / var(--n));
     }
@@ -6144,7 +6144,7 @@ body.piece-drag {
     display: none;
 }
 
-@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px) {
+@media (max-width: 760px), (any-pointer: coarse) and (min-width: 761px) and (max-width: 1400px) and (min-height: 480px), (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px) {
     .info-fab {
         display: none;
     }
@@ -6300,5 +6300,56 @@ body.piece-drag {
 
     100% {
         transform: scale(1.06) rotate(1.5deg);
+    }
+}
+
+
+/* ===== Телефон в горизонтальном положении (низкий экран): та же раскладка в три колонки, только компактнее ===== */
+@media (any-pointer: coarse) and (orientation: landscape) and (max-height: 479px), (max-width: 760px) and (orientation: landscape) and (max-height: 479px) {
+    :root {
+        --cell: min((100dvh - 46px) / var(--n), (100vw - 340px) / var(--n));
+    }
+
+    .game {
+        grid-template-columns: minmax(150px, 1fr) calc(var(--cell) * var(--n) + 16px) minmax(150px, 1fr);
+        column-gap: 6px;
+        row-gap: 4px;
+        padding: 3px 4px;
+    }
+
+    .panel .abilities {
+        grid-auto-flow: row;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .panel .ab {
+        height: 38px;
+    }
+
+    .panel .panel-head > div {
+        flex-wrap: wrap;
+        row-gap: 0;
+    }
+
+    .panel .grave {
+        max-width: 100%;
+    }
+
+    .m-strip {
+        min-height: 0;
+        padding: 0 4px;
+    }
+
+    .m-status {
+        font-size: 13px;
+    }
+
+    .m-hint {
+        font-size: 10.5px;
+    }
+
+    .m-bar .small-btn, .m-bar #mMenu, .m-bar #mEnd {
+        height: 32px;
+        font-size: 13px;
     }
 }
