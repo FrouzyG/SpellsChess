@@ -510,7 +510,7 @@ const SFX = {
             bus.connect(actx.destination); bus.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(actx.destination);
             const env = [[0.14, 0.4], [0.3, 0.22], [0.5, 0.95], [0.64, 0.5], [0.8, 1], [0.9, 0.7]];
             noiseBurst(0.2, 1500, 0.7, 0.012, 0);      // лёгкий выдох «х» в начале
-            [262, 523, 659, 784, 1047].forEach(f => choirVoice(bus, f, 0.04, 2.5, f < 300 ? 0.016 : 0.012, env));
+            [262, 523, 659, 784, 1047].forEach(f => choirVoice(bus, f, 0.04, 1.5, f < 300 ? 0.016 : 0.012, env));
         } catch (e) { /* звук не критичен */ }
     },
     // Фукаши: короткая флейта «ту-ду-дуууу»
@@ -523,8 +523,8 @@ const SFX = {
                 const o = actx.createOscillator(), o2 = actx.createOscillator(), g = actx.createGain(), g2 = actx.createGain();
                 o.type = 'sine'; o2.type = 'sine'; o.frequency.value = f; o2.frequency.value = f * 2; g2.gain.value = 0.1;
                 if (vib) {
-                    o.frequency.setValueAtTime(f, t + 0.25);
-                    o.frequency.linearRampToValueAtTime(f * 0.985, t + dur);
+                    o.frequency.setValueAtTime(f, t + 0.2);
+                    o.frequency.linearRampToValueAtTime(f * 0.99, t + dur);
                     const lfo = actx.createOscillator(), lg = actx.createGain();
                     lfo.frequency.value = 5.5; lg.gain.setValueAtTime(0.1, t); lg.gain.linearRampToValueAtTime(f * 0.008, t + dur * 0.6);
                     lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.05);
@@ -537,9 +537,9 @@ const SFX = {
                 o.start(t); o2.start(t); o.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
                 noiseBurst(0.07, f * 2, 1.2, v * 0.35, at);      // дыхание в начале ноты
             };
-            note(880, 0, 0.17, 0.07);
-            note(784, 0.21, 0.17, 0.07);
-            note(659, 0.42, 1.0, 0.075, true);
+            note(659, 0, 0.15, 0.07);      // ноты идут вверх, переходы быстрые
+            note(784, 0.12, 0.15, 0.07);
+            note(988, 0.24, 1.0, 0.075, true);
         } catch (e) { /* звук не критичен */ }
     },
     // Скример: протяжное, резкое «ааааа» с дрожью голоса
