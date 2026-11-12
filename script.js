@@ -482,35 +482,98 @@ function noiseBurst(dur, f0, q, v, delay = 0, f1 = null) {
         ns.start(t); ns.stop(t + dur + 0.02);
     } catch (e) { /* звук не критичен */ }
 }
-// Мягкий голос хора: две слегка расстроенные «треугольные» волны, медленное нарастание, лёгкое дрожание, небольшое эхо
-function choirVoice(bus, f, at, dur, v) {
+// Мягкий голос хора: две слегка расстроенные «треугольные» волны, лёгкое дрожание; env: [доля времени, уровень], громкость «дышит»
+function choirVoice(bus, f, at, dur, v, env) {
     const t = actx.currentTime + at;
     [-4, 4].forEach(det => {
         const o = actx.createOscillator(), g = actx.createGain(), lp = actx.createBiquadFilter(), lfo = actx.createOscillator(), lg = actx.createGain();
         o.type = 'triangle'; o.frequency.value = f; o.detune.value = det;
         lfo.frequency.value = 5.2; lg.gain.value = f * 0.004;
         lfo.connect(lg); lg.connect(o.frequency);
-        lp.type = 'lowpass'; lp.frequency.value = 2600;
+        lp.type = 'lowpass'; lp.frequency.value = 2000;      // «о» мягче и темнее, чем «а»
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(v, t + dur * 0.4);
-        g.gain.setValueAtTime(v, t + dur * 0.6);
+        env.forEach(([fr, lv]) => g.gain.linearRampToValueAtTime(v * lv, t + dur * fr));
         g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
         o.connect(lp); lp.connect(g); g.connect(bus);
         o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
     });
 }
 const SFX = {
-    // воскрешение: небольшой ангельский хор, два светлых аккорда «ааа» с эхом
+    // воскрешение: один ангельский хор «ХоооООооОООо»: аккорд, громкость мягко накатывает волнами, с эхом
     choir: () => {
         if (!CONFIG.sound) return;
         try {
             actx = actx || new (window.AudioContext || window.webkitAudioContext)();
             const bus = actx.createGain(); bus.gain.value = 1;
             const dly = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
-            dly.delayTime.value = 0.16; fb.gain.value = 0.35; wet.gain.value = 0.4;
+            dly.delayTime.value = 0.18; fb.gain.value = 0.35; wet.gain.value = 0.4;
             bus.connect(actx.destination); bus.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(actx.destination);
-            [523, 659, 784, 1047].forEach(f => choirVoice(bus, f, 0, 1.0, 0.012));
-            [587, 740, 880, 1175].forEach(f => choirVoice(bus, f, 0.75, 1.1, 0.012));
+            const env = [[0.14, 0.4], [0.3, 0.22], [0.5, 0.95], [0.64, 0.5], [0.8, 1], [0.9, 0.7]];
+            noiseBurst(0.2, 1500, 0.7, 0.012, 0);      // лёгкий выдох «х» в начале
+            [262, 523, 659, 784, 1047].forEach(f => choirVoice(bus, f, 0.04, 2.5, f < 300 ? 0.016 : 0.012, env));
+        } catch (e) { /* звук не критичен */ }
+    },
+    // Фукаши: короткая флейта «ту-ду-дуууу»
+    flute: () => {
+        if (!CONFIG.sound) return;
+        try {
+            actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+            const note = (f, at, dur, v, vib) => {
+                const t = actx.currentTime + at;
+                const o = actx.createOscillator(), o2 = actx.createOscillator(), g = actx.createGain(), g2 = actx.createGain();
+                o.type = 'sine'; o2.type = 'sine'; o.frequency.value = f; o2.frequency.value = f * 2; g2.gain.value = 0.1;
+                if (vib) {
+                    o.frequency.setValueAtTime(f, t + 0.25);
+                    o.frequency.linearRampToValueAtTime(f * 0.985, t + dur);
+                    const lfo = actx.createOscillator(), lg = actx.createGain();
+                    lfo.frequency.value = 5.5; lg.gain.setValueAtTime(0.1, t); lg.gain.linearRampToValueAtTime(f * 0.008, t + dur * 0.6);
+                    lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.05);
+                }
+                g.gain.setValueAtTime(0.0001, t);
+                g.gain.linearRampToValueAtTime(v, t + 0.04);
+                g.gain.setValueAtTime(v, t + dur * 0.55);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+                o.connect(g); o2.connect(g2); g2.connect(g); g.connect(actx.destination);
+                o.start(t); o2.start(t); o.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
+                noiseBurst(0.07, f * 2, 1.2, v * 0.35, at);      // дыхание в начале ноты
+            };
+            note(880, 0, 0.17, 0.07);
+            note(784, 0.21, 0.17, 0.07);
+            note(659, 0.42, 1.0, 0.075, true);
+        } catch (e) { /* звук не критичен */ }
+    },
+    // Скример: протяжное, резкое «ааааа» с дрожью голоса
+    scream: () => {
+        if (!CONFIG.sound) return;
+        try {
+            actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+            const t = actx.currentTime + 0.02, dur = 1.05;
+            const out = actx.createGain(); out.gain.value = 0.3;
+            out.connect(actx.destination);
+            const o = actx.createOscillator(); o.type = 'sawtooth';
+            o.frequency.setValueAtTime(480, t);
+            o.frequency.exponentialRampToValueAtTime(760, t + 0.18);
+            o.frequency.linearRampToValueAtTime(690, t + 0.75);
+            o.frequency.exponentialRampToValueAtTime(430, t + dur);
+            const lfo = actx.createOscillator(), lg = actx.createGain();      // дрожание голоса
+            lfo.frequency.value = 7; lg.gain.value = 22;
+            lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.1);
+            const am = actx.createOscillator(), ag = actx.createGain(), amg = actx.createGain();      // лёгкая хрипота
+            am.frequency.value = 38; ag.gain.value = 0.18; amg.gain.value = 0.82;
+            am.connect(ag); const voice = actx.createGain(); voice.gain.value = 0; ag.connect(voice.gain); am.start(t); am.stop(t + dur + 0.1);
+            voice.gain.value = 0.82;
+            const g = actx.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.5, t + 0.06);
+            g.gain.setValueAtTime(0.5, t + dur * 0.7);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            [[800, 4], [1250, 5], [2700, 6]].forEach(([fq, q], i) => {      // форманты звука «а»
+                const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fq; bp.Q.value = q;
+                const bg = actx.createGain(); bg.gain.value = i === 2 ? 0.5 : 1;
+                o.connect(voice); voice.connect(bp); bp.connect(bg); bg.connect(g);
+            });
+            g.connect(out);
+            o.start(t); o.stop(t + dur + 0.05);
         } catch (e) { /* звук не критичен */ }
     },
     // робот или турель собираются: три удара молотка (последний чуть сильнее)
@@ -3166,6 +3229,7 @@ function useAbility(key, r, c, ref) {
         G.board[r][c] = { ...mk(d.t, col), x: [...(d.x || [])], rob: d.rob, moved: true, zombie: key === 'raise' };
         text = `${A.icon} ${A.name}: ${pieceSym(d)} ${key === 'raise' ? 'встаёт зомби' : 'возвращается'} на ${sqName(r, c)}`;
         G.fx.push({ r, c, type: key === 'raise' ? 'raise' : 'revive' });
+        if (key !== 'raise') G.fx.push({ r, c, type: 'heaven' });      // воскрешение Паладина: фигура спускается с небес
         sfx(key === 'raise' ? 'raise' : 'choir');      // воскрешение Паладина: ангельский хор
     } else if (key === 'guardian') {
         target.altruist = CONFIG.guardianTurns + 1;
@@ -3268,13 +3332,13 @@ function useAbility(key, r, c, ref) {
             if (target.t === 'p') target.scaredT = CONFIG.scaredPawnTurns;
             text = `${A.icon} ${A.name}: ${pieceSym(target)} ${sqName(r, c)} напугана (дальность хода 1${target.t === 'p' ? ', ' + CONFIG.scaredPawnTurns + ' хода' : ''})`;
             G.fx.push({ r, c, type: 'hypno' });
-            sfx('hypno');
+            sfx('scream');      // «ааааа»
         }
     } else if (key === 'fukashi') {
         target.invis = true;
         text = `${A.icon} ${A.name}: ${pieceSym(target)} на ${sqName(r, c)} стала невидимой`;
         if (ANIM.board) G.fx.push({ r, c, type: 'smoke', only: col }); else G.fx.push({ r, c, type: 'ghost' });
-        sfx('illusion');
+        sfx('flute');      // «ту-ду-дуууу»
     } else if (key === 'freeze' || key === 'hypnosis') {
         if (target.ghost) {
             vanishGhost(r, c, 'это была иллюзия', true);
@@ -4203,6 +4267,7 @@ function renderBoard() {
                 if (auraProtected(G.board, r, c)) pc += ' aura';
                 if (must.has(r + ',' + c)) pc += ' must';
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'land')) pc += ' pop';
+                if (G.fx.some(x => x.r === r && x.c === c && x.type === 'heaven')) pc += ' from-sky';      // фигура спускается с небес
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'raise')) pc += ' crawl';      // зомби выкарабкивается из-под земли
                 if (ANIM_HIDE.some(h => h.r === r && h.c === c && h.until > Date.now())) pc += ' anim-hide';
                 html += `<div class="${pc}">${GLYPH[p.t]}`;
