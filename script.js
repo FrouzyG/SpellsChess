@@ -329,7 +329,75 @@ PASSIVES.pretense = {
     desc: 'В начале партии тайно выберите вражеского слона или коня. После ' + CONFIG.betrayAfter + '-го хода врага можно потратить ход и дважды нажать на неё: она навсегда перейдёт к вам.'
 };
 
-const UNL = { orbs: 0, heroes: [], busy: false };   // магические шары и открытые герои (из Supabase, таблица user_unlocks)
+const UNL = { orbs: 0, heroes: [], items: [], busy: false };   // магические шары и открытые герои (из Supabase, таблица user_unlocks)
+
+/* ---------- Кастомизация: рамки и фоны карточки героя, аватарки, цвет ника ----------
+   orb: true означает, что предмет стоит 1 магический шар. Списки бесплатных и платных id продублированы в SQL для Supabase (файл customization.sql). */
+const COS = {
+    frames: [
+        { id: 'gold', ru: 'Золотая', en: 'Gold' }, { id: 'silver', ru: 'Серебряная', en: 'Silver' },
+        { id: 'neon', ru: 'Неон', en: 'Neon' }, { id: 'emerald', ru: 'Изумрудная', en: 'Emerald' },
+        { id: 'flame', ru: 'Пламя', en: 'Flame', orb: true }, { id: 'frost', ru: 'Мороз', en: 'Frost', orb: true },
+        { id: 'rainbow', ru: 'Радуга', en: 'Rainbow', orb: true }, { id: 'royal', ru: 'Королевская', en: 'Royal', orb: true }
+    ],
+    backs: [
+        { id: 'dusk', ru: 'Закат', en: 'Sunset' }, { id: 'forest', ru: 'Лес', en: 'Forest' },
+        { id: 'ocean', ru: 'Океан', en: 'Ocean' }, { id: 'graphite', ru: 'Графит', en: 'Graphite' },
+        { id: 'stars', ru: 'Звёздное небо', en: 'Starry sky', orb: true }, { id: 'lava', ru: 'Лава', en: 'Lava', orb: true },
+        { id: 'aurora', ru: 'Северное сияние', en: 'Aurora', orb: true }
+    ],
+    ncfx: [
+        { id: 'rainbow', ru: 'Радужный', en: 'Rainbow', orb: true }, { id: 'fire', ru: 'Огненный', en: 'Fire', orb: true },
+        { id: 'gold', ru: 'Золотой', en: 'Golden', orb: true }
+    ],
+    colors: ['#ff6ec7', '#f0c75e', '#ff7a59', '#ff4d6d', '#b04dff', '#6aa9ff', '#4dd0e1', '#3ddc97', '#a3e635', '#ffffff', '#cfd6e0', '#f4a261'],
+    avas: [
+        { id: 'dino', e: '🦖', ru: 'Динозавр', en: 'Dino' }, { id: 'shark', e: '🦈', ru: 'Акула', en: 'Shark' },
+        { id: 'turtle', e: '🐢', ru: 'Черепаха', en: 'Turtle' }, { id: 'scorpion', e: '🦂', ru: 'Скорпион', en: 'Scorpion' },
+        { id: 'bee', e: '🐝', ru: 'Пчела', en: 'Bee' }, { id: 'mushroom', e: '🍄', ru: 'Гриб', en: 'Mushroom' },
+        { id: 'cactus', e: '🌵', ru: 'Кактус', en: 'Cactus' }, { id: 'volcano', e: '🌋', ru: 'Вулкан', en: 'Volcano' },
+        { id: 'ice', e: '🧊', ru: 'Лёд', en: 'Ice' }, { id: 'freeze', e: '🥶', ru: 'Мороз', en: 'Freeze' },
+        { id: 'cowboy', e: '🤠', ru: 'Ковбой', en: 'Cowboy' }, { id: 'party', e: '🥳', ru: 'Праздник', en: 'Party' },
+        { id: 'brain', e: '🧠', ru: 'Мозг', en: 'Brain' }, { id: 'alien', e: '👾', ru: 'Пришелец', en: 'Invader' },
+        { id: 'pumpkin', e: '🎃', ru: 'Тыква', en: 'Pumpkin' }, { id: 'cat', e: '🐱', ru: 'Кот', en: 'Cat' },
+        { id: 'dog', e: '🐶', ru: 'Пёс', en: 'Dog' }, { id: 'rabbit', e: '🐰', ru: 'Кролик', en: 'Rabbit' },
+        { id: 'raccoon', e: '🦝', ru: 'Енот', en: 'Raccoon' }, { id: 'hedgehog', e: '🦔', ru: 'Ёж', en: 'Hedgehog' },
+        { id: 'galaxy', e: '🌌', ru: 'Галактика', en: 'Galaxy', orb: true }, { id: 'comet', e: '☄️', ru: 'Комета', en: 'Comet', orb: true },
+        { id: 'saturn', e: '🪐', ru: 'Сатурн', en: 'Saturn', orb: true }, { id: 'butterfly', e: '🦋', ru: 'Дух-мотылёк', en: 'Spirit moth', orb: true },
+        { id: 'vortex', e: '🌀', ru: 'Вихрь', en: 'Vortex', orb: true }, { id: 'spark', e: '💫', ru: 'Искра', en: 'Spark', orb: true },
+        { id: 'eye', e: '👁️', ru: 'Всевидящий', en: 'All-seeing', orb: true }, { id: 'crystal', e: '💠', ru: 'Кристалл', en: 'Crystal', orb: true }
+    ]
+};
+const AVA_BY = {}; COS.avas.forEach(a => { AVA_BY[a.id] = a; });
+const cosNm = o => (LANG === 'en' ? o.en : o.ru);
+const cosKey = (kind, id) => kind + ':' + id;
+const cosOwned = (kind, it) => !it.orb || UNL.items.includes(cosKey(kind, it.id));
+// Всё, что пришло от соперника, чистим: берём только известные id и цвет вида #rrggbb
+function cosClean(c) {
+    c = c && typeof c === 'object' ? c : {};
+    const ok = (arr, id) => (typeof id === 'string' && arr.some(x => x.id === id)) ? id : '';
+    let nc = '';
+    if (typeof c.nc === 'string') nc = /^#[0-9a-f]{6}$/i.test(c.nc) ? c.nc.toLowerCase() : ok(COS.ncfx, c.nc);
+    return { frame: ok(COS.frames, c.frame), bg: ok(COS.backs, c.bg), nc };
+}
+// Слишком тёмный цвет ника осветляем, чтобы он читался на тёмной карточке
+function ncSafe(hex) {
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    if (lum >= 0.5) return hex;
+    const t = Math.min(1, (0.5 - lum) / (1 - lum));
+    const m = v => Math.round(v + (255 - v) * t).toString(16).padStart(2, '0');
+    return '#' + m(r) + m(g) + m(b);
+}
+const nickCls = nc => (nc && !nc.startsWith('#') ? ' nc-' + nc : '');
+const nickStyle = nc => (nc && nc.startsWith('#') ? ` style="color:${ncSafe(nc)}"` : '');
+function applyNickEl(el, cos) {
+    const nc = cosClean(cos).nc;
+    el.className = el.className.replace(/\bnc-\S+/g, '').trim();
+    el.style.color = '';
+    if (!nc) return;
+    if (nc.startsWith('#')) el.style.color = ncSafe(nc); else el.classList.add('nc-' + nc);
+}
 
 const HEROES = {
     paladin: { icon: '⚜️', name: 'Паладин', tag: 'Защита и святость', passive: 'brotherhood', abilities: ['resurrect', 'shield', 'rescue', 'guardian'] },
@@ -4374,16 +4442,22 @@ function renderBoard() {
 const escH = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function avaHTML(a) {
     if (typeof a === 'string' && a.startsWith('ach:')) { const d = ACH[a.slice(4)]; if (d && d.img) return `<img class="ava-img" src="${escH(d.img)}" alt="">`; }
-    return escH(a && !String(a).startsWith('ach:') ? a : '👤');
+    if (typeof a === 'string' && a.startsWith('ava:')) { const d = AVA_BY[a.slice(4)]; if (d) return `<span class="ava-new${d.orb ? ' ava-orb a-' + d.id : ''}">${d.e}</span>`; }
+    return escH(a && !/^(ach|ava):/.test(String(a)) ? a : '👤');
 }
 // Ник и маленькая аватарка игрока на карточке (в онлайн-партии, если игрок вошёл в аккаунт)
+function panelCos(col) {      // оформление игрока на этой стороне (только в онлайн-партии)
+    if (!NET.on) return cosClean(null);
+    return cosClean(col === NET.me ? (ACC.profile && ACC.profile.cosmetics) : NET.oppCos);
+}
 function panelNick(col) {
     if (!NET.on) return '';
     let nick = '', ava = '';
     if (col === NET.me) { if (ACC.profile) { nick = ACC.profile.nick; ava = ACC.profile.avatar; } }
     else if (NET.oppNick) { nick = NET.oppNick; ava = NET.oppAvatar; }
     if (!nick) return '';
-    return `<div class="pnick" data-notr><span class="pn-ava">${avaHTML(ava)}</span><span class="pn-name">${escH(nick)}</span></div>`;
+    const nc = panelCos(col).nc;
+    return `<div class="pnick" data-notr><span class="pn-ava">${avaHTML(ava)}</span><span class="pn-name${nickCls(nc)}"${nickStyle(nc)}>${escH(nick)}</span></div>`;
 }
 // Окно «Описание способностей»: пассивки и способности героев обеих сторон
 function openAbInfo() {
@@ -4495,7 +4569,8 @@ function panelHTML(col) {
 function renderPanels() {
     ['w', 'b'].forEach(col => {
         const el = $('#panel-' + col);
-        el.className = 'panel h-' + G.hero[col] + (G.turn === col && !G.over ? ' active' : '');
+        const pc = panelCos(col);
+        el.className = 'panel h-' + G.hero[col] + (pc.frame ? ' fr-' + pc.frame : '') + (pc.bg ? ' bg-' + pc.bg : '') + (G.turn === col && !G.over ? ' active' : '');
         el.innerHTML = panelHTML(col);
     });
 }
@@ -4634,12 +4709,14 @@ const lockActive = () => !!(NET.on && NET.rated);
 const heroOpen = id => !(HEROES[id] && HEROES[id].dev) && (CONFIG.freeHeroes.includes(id) || UNL.heroes.includes(id));      // герои с пометкой dev в рейтинге закрыты (сервер их пока не знает)
 
 async function loadUnlocks() {
-    if (!SB || !ACC.user) { UNL.orbs = 0; UNL.heroes = []; return; }
+    if (!SB || !ACC.user) { UNL.orbs = 0; UNL.heroes = []; UNL.items = []; return; }
     try {
-        const { data, error } = await SB.from('user_unlocks').select('orbs,heroes').eq('user_id', ACC.user.id).maybeSingle();
+        let { data, error } = await SB.from('user_unlocks').select('orbs,heroes,items').eq('user_id', ACC.user.id).maybeSingle();
+        if (error) ({ data, error } = await SB.from('user_unlocks').select('orbs,heroes').eq('user_id', ACC.user.id).maybeSingle());
         if (error) return;
         UNL.orbs = data ? (data.orbs | 0) : 0;
         UNL.heroes = data && Array.isArray(data.heroes) ? data.heroes : [];
+        UNL.items = data && Array.isArray(data.items) ? data.items : [];
     } catch (e) { /* без сети оставляем как было */ }
 }
 
@@ -4699,7 +4776,8 @@ function refreshHeroViews() {
 
 /* ---------- Коллекция героев: читать про героев и открывать закрытых за шар ---------- */
 const collOpen = new Set();   // у каких героев в коллекции раскрыто «Подробнее»
-function renderCollection() {
+const COLL = { tab: 'heroes', busy: false };      // вкладка коллекции и защита от двойного нажатия
+function heroesCollHTML() {
     const ids = Object.keys(HEROES);
     const have = ids.filter(heroOpen).length;
     let html = ACC.user
@@ -4719,6 +4797,82 @@ function renderCollection() {
         ${locked ? `<button class="hc-unlock" type="button">🔓 ${L('Открыть за 1 шар', 'Unlock for 1 orb')}</button>` : ''}
       </div>`;
     }).join('');
+    return html;
+}
+
+// Вкладка «Кастомизация»: доски, рамки и фоны карточки героя, аватарки, цвет ника
+function cusItems(kind, list, cur, mini) {
+    return list.map(it => {
+        const lock = it.orb && !cosOwned(kind, it);
+        return `<button class="cus-item${cur === it.id ? ' chosen' : ''}${lock ? ' locked' : ''}" data-cus="${kind}:${it.id}" type="button">${mini(it)}<span class="cus-nm">${cosNm(it)}</span>${it.orb ? `<span class="cus-orb">${lock ? '🔮 1' : '🔮 ✓'}</span>` : ''}</button>`;
+    }).join('');
+}
+const cusNone = (kind, cur) => `<button class="cus-item${!cur ? ' chosen' : ''}" data-cus="${kind}:none" type="button"><span class="cus-mini"></span><span class="cus-nm">${L('Без', 'None')}</span></button>`;
+const cusSec = (title, sub, body) => `<h3 class="cus-h">${title}</h3>${sub ? `<div class="cus-sub">${sub}</div>` : ''}${body}`;
+function cusHTML() {
+    const logged = !!(SB && ACC.user && ACC.profile);
+    const cos = cosClean(logged ? ACC.profile.cosmetics : null);
+    let h = logged
+        ? `<div class="orb-bar"><div class="orb-line"><span class="orb-ball ${UNL.orbs ? 'full' : ''}">🔮</span> ${L('Магические шары', 'Magic orbs')}: <b>${UNL.orbs ? 1 : 0}/1</b></div><div class="orb-sub">${L('Предметы со значком 🔮 открываются за 1 шар и остаются у вас навсегда. Шар дают после каждой рейтинговой партии (победа, поражение или ничья).', 'Items marked 🔮 cost 1 orb and stay yours for good. You get one orb after every rated game (win, loss or draw).')}</div></div>`
+        : `<div class="orb-bar"><div class="orb-sub">${L('Войдите в аккаунт, чтобы менять рамку, фон карточки, аватарку и цвет ника. Доску можно менять и без входа.', 'Sign in to change your card frame, background, avatar and nickname colour. The board can be changed without signing in.')}</div></div>`;
+    const hero = HEROES.paladin || Object.values(HEROES)[0];
+    const nick = logged ? ACC.profile.nick : L('Ваш ник', 'Your nick');
+    h += `<div class="cus-prevwrap"><div class="panel h-paladin${cos.frame ? ' fr-' + cos.frame : ''}${cos.bg ? ' bg-' + cos.bg : ''} cus-prev"><div class="panel-head"><span class="hero-icon">${hero.icon}</span><div><div class="pname">${L('Белые', 'White')}</div><div class="hname">${hero.name}</div><div class="pnick" data-notr><span class="pn-ava">${avaHTML(logged ? ACC.profile.avatar : '')}</span><span class="pn-name${nickCls(cos.nc)}"${nickStyle(cos.nc)}>${escH(nick)}</span></div></div></div></div><div class="cus-sub">${L('Так вашу карточку видит соперник в онлайн-партии.', 'This is how your opponent sees your card in an online game.')}</div></div>`;
+    h += cusSec(L('🎨 Доска', '🎨 Board'), L('Доску видите только вы: у соперника онлайн своя.', 'Only you see your board: your opponent has their own.'),
+        `<div class="cus-boards">${THEMES.map(t => `<button class="theme-btn ${t.id === themeId ? 'chosen' : ''}" data-theme="${t.id}" type="button"><span class="tp"><i style="background:${t.light}"></i><i style="background:${t.dark}"></i><i style="background:${t.dark}"></i><i style="background:${t.light}"></i></span><span>${t.name}</span></button>`).join('')}</div>`);
+    h += cusSec(L('🖼 Рамка карточки героя', '🖼 Hero card frame'), '',
+        `<div class="cus-grid">${cusNone('frame', cos.frame)}${cusItems('frame', COS.frames, cos.frame, it => `<span class="cus-mini fr-${it.id}"></span>`)}</div>`);
+    h += cusSec(L('🌄 Фон карточки героя', '🌄 Hero card background'), '',
+        `<div class="cus-grid">${cusNone('bg', cos.bg)}${cusItems('bg', COS.backs, cos.bg, it => `<span class="cus-mini bg-${it.id}"></span>`)}</div>`);
+    h += cusSec(L('👤 Аватарки', '👤 Avatars'), L('Обычные аватарки выбираются в профиле (кнопка «Сменить аватар»), там же появляются и эти.', 'Regular avatars are picked in your profile ("Change avatar"); these show up there too.'),
+        `<div class="cus-grid cus-avagrid">${cusItems('ava', COS.avas, logged ? String(ACC.profile.avatar || '').replace(/^ava:/, '') : '', it => `<span class="cus-ava">${avaHTML('ava:' + it.id)}</span>`)}</div>`);
+    const cur = cos.nc;
+    h += cusSec(L('✏️ Цвет ника', '✏️ Nickname colour'), L('Цвет виден на карточке в онлайн-партии и в профиле. Слишком тёмные цвета автоматически осветляются.', 'The colour shows on your card in online games and in your profile. Very dark colours are lightened automatically.'),
+        `<div class="cus-colors"><button class="cus-color none${!cur ? ' chosen' : ''}" data-cus="nc:none" type="button" title="${L('Без цвета', 'No colour')}">✕</button>${COS.colors.map(c => `<button class="cus-color${cur === c ? ' chosen' : ''}" data-cus="nc:${c}" type="button" style="background:${c}"></button>`).join('')}<label class="cus-color pick" title="${L('Свой цвет', 'Custom colour')}">🎨<input type="color" id="cusColor" value="${/^#/.test(cur) ? cur : '#ff6ec7'}"></label></div>
+        <div class="cus-grid">${cusItems('nc', COS.ncfx, cur, it => `<span class="cus-nick${nickCls(it.id)}">${L('Ник', 'Nick')}</span>`)}</div>`);
+    return h;
+}
+
+async function cosBuy(kind, it) {      // открыть предмет за шар (всё проверяет и списывает сервер Supabase)
+    await loadUnlocks();
+    if (cosOwned(kind, it)) return true;
+    if (UNL.orbs < 1) { uiAlert(L('Нужен магический шар. Его дают после рейтинговой партии: за победу, поражение или ничью.', 'You need a magic orb. You get one after a rated game: win, loss or draw.')); return false; }
+    if (!uiConfirm(L(`Открыть «${cosNm(it)}» за 1 магический шар?`, `Unlock "${cosNm(it)}" for 1 magic orb?`))) return false;
+    const { error } = await SB.rpc('unlock_item', { p_item: cosKey(kind, it.id) });
+    await loadUnlocks();
+    if (error) { uiAlert(L('Не получилось открыть предмет. Если ошибка повторяется, проверьте, что в Supabase выполнен SQL для кастомизации.', 'Could not unlock the item. If this keeps happening, make sure the customization SQL has been run in Supabase.')); return false; }
+    return true;
+}
+async function cosSave(kind, val) {
+    let r;
+    if (kind === 'ava') r = await SB.rpc('set_avatar_item', { p_ava: 'ava:' + val });
+    else { const c = cosClean(ACC.profile.cosmetics); c[kind] = val; r = await SB.rpc('set_cosmetics', { p_frame: c.frame, p_bg: c.bg, p_nc: c.nc }); }
+    if (r.error) { uiAlert(L('Не удалось сохранить. Если ошибка повторяется, проверьте, что в Supabase выполнен SQL для кастомизации.', 'Could not save. If this keeps happening, make sure the customization SQL has been run in Supabase.')); return; }
+    ACC.loading = false; await loadProfile();
+    if (!$('#coll').classList.contains('hidden')) renderCollection();
+}
+async function cusPick(key) {
+    if (!SB || !ACC.user || !ACC.profile) { uiAlert(L('Войдите в аккаунт, чтобы менять оформление.', 'Sign in to change your look.')); return; }
+    if (COLL.busy) return;
+    const k = key.indexOf(':'), kind = key.slice(0, k), id = key.slice(k + 1);
+    const list = { frame: COS.frames, bg: COS.backs, ava: COS.avas, nc: COS.ncfx }[kind];
+    if (!list) return;
+    let it = null;
+    if (id !== 'none') {
+        it = list.find(x => x.id === id) || null;
+        if (!it && !(kind === 'nc' && /^#[0-9a-f]{6}$/i.test(id))) return;
+    }
+    COLL.busy = true;
+    try {
+        if (it && it.orb && !cosOwned(kind, it) && !(await cosBuy(kind, it))) return;
+        await cosSave(kind, id === 'none' ? '' : id);
+    } finally { COLL.busy = false; }
+}
+
+function renderCollection() {
+    const tab = COLL.tab;
+    let html = `<div class="coll-tabs"><button type="button" data-ctab="heroes" class="${tab === 'heroes' ? 'on' : ''}">${L('Герои', 'Heroes')}</button><button type="button" data-ctab="cus" class="${tab === 'cus' ? 'on' : ''}">${L('Кастомизация', 'Customization')}</button></div>`;
+    html += tab === 'cus' ? cusHTML() : heroesCollHTML();
     const ov = $('#coll'), top = ov.scrollTop;
     $('#collBody').innerHTML = html;
     ov.scrollTop = top;
@@ -4773,7 +4927,11 @@ const THEMES = [
     { id: 'ocean', name: 'Океан', light: '#d8f1ff', dark: '#3d8fd1', frame: '#1d4f7e' },
     { id: 'ice', name: 'Ледяная', light: '#f0fbff', dark: '#8fd3e8', frame: '#3f8fa8' },
     { id: 'graphite', name: 'Графит', light: '#cfd2d8', dark: '#5a5f69', frame: '#2a2d33' },
-    { id: 'candy', name: 'Конфетная', light: '#fff0fa', dark: '#7fd6ff', frame: '#ff8cc6' }
+    { id: 'candy', name: 'Конфетная', light: '#fff0fa', dark: '#7fd6ff', frame: '#ff8cc6' },
+    { id: 'obsidian', name: 'Обсидиан', light: '#9aa0b4', dark: '#14161f', frame: '#07080c' },
+    { id: 'emeraldb', name: 'Изумрудная', light: '#d9fbe8', dark: '#1f9d6b', frame: '#0e5a3c' },
+    { id: 'amethyst', name: 'Аметист', light: '#f1e4ff', dark: '#7a3fc4', frame: '#46207a' },
+    { id: 'peach', name: 'Персиковая', light: '#fff0e3', dark: '#f2a07b', frame: '#a85a34' }
 ];
 let themeId = 'pink';
 try { const saved = localStorage.getItem('spellschess-theme'); if (THEMES.some(t => t.id === saved)) themeId = saved; } catch (e) { /* без сохранения */ }
@@ -5125,6 +5283,15 @@ function leaveToMenu() {
     setTimeout(() => location.reload(), 600);
 }
 
+// Аватар и оформление карточки соперника берём из его профиля (если в Supabase ещё нет колонки cosmetics, берём только аватар)
+async function loadOppLook(id) {
+    try {
+        let r = await SB.from('profiles').select('avatar,cosmetics').eq('id', id).maybeSingle();
+        if (r.error) r = await SB.from('profiles').select('avatar').eq('id', id).maybeSingle();
+        if (r && r.data && NET.oppId === id) { NET.oppAvatar = r.data.avatar; NET.oppCos = r.data.cosmetics || null; if (G) render(); }
+    } catch (e) { /* без оформления соперника */ }
+}
+
 function netRecv(m) {
     switch (m.t) {
         case 'leave':
@@ -5132,8 +5299,8 @@ function netRecv(m) {
             break;
         case 'peer':
             NET.peerKnown = true; NET.oppNick = String(m.nick || '').slice(0, 16); NET.oppRating = m.rating | 0; NET.oppId = /^[0-9a-f-]{36}$/i.test(m.id || '') ? m.id : null; if (isBlocked(NET.oppId)) NET.muted = true;
-            NET.oppAvatar = null;
-            if (NET.oppId && SB) SB.from('profiles').select('avatar').eq('id', NET.oppId).maybeSingle().then(rs => { if (rs && rs.data) { NET.oppAvatar = rs.data.avatar; if (G) render(); } }).catch(() => { });
+            NET.oppAvatar = null; NET.oppCos = null;
+            if (NET.oppId && SB) loadOppLook(NET.oppId);
             updatePeerLabel(); if (G) render();
             break;
         case 'again':      // соперник нажал (или отменил) «Сыграть ещё»
@@ -5758,7 +5925,7 @@ const EN = {
     "Океан": "Ocean",
     "Ледяная": "Ice",
     "Графит": "Graphite",
-    "Конфетная": "Candy",
+    "Конфетная": "Candy", "Обсидиан": "Obsidian", "Изумрудная": "Emerald", "Аметист": "Amethyst", "Персиковая": "Peach",
     "⚡ Быстрый поиск: рейтинговая партия": "⚡ Quick search: rated game",
     "🚪 Комнаты: дружеская партия": "🚪 Rooms: friendly game",
     "на одном экране": "on one screen",
@@ -8314,7 +8481,7 @@ function accRefresh() {
     const u = ACC.user, p = ACC.profile;
     const nm = $('#accName');
     nm.textContent = '';
-    if (u) nm.append(avaNode(p && p.avatar), ' ' + (p ? p.nick : (u.email || '').split('@')[0]));
+    if (u) { const nk = document.createElement('span'); nk.textContent = ' ' + (p ? p.nick : (u.email || '').split('@')[0]); applyNickEl(nk, p && p.cosmetics); nm.append(avaNode(p && p.avatar), nk); }
     nm.classList.toggle('hidden', !u);
     $('#accBtn').classList.toggle('hidden', !!u);
     $('#accOut').classList.toggle('hidden', !u);
@@ -8325,7 +8492,7 @@ async function loadProfile() {
     if (!SB || !ACC.user || ACC.loading) return;
     ACC.loading = true;
     const uid = ACC.user.id;
-    const get = () => SB.from('profiles').select('nick,avatar').eq('id', uid).maybeSingle();
+    const get = async () => { let r = await SB.from('profiles').select('nick,avatar,cosmetics').eq('id', uid).maybeSingle(); if (r.error) r = await SB.from('profiles').select('nick,avatar').eq('id', uid).maybeSingle(); return r; };
     try {
         let { data, error } = await get();
         if (error) throw error;
@@ -8481,7 +8648,11 @@ function avaNode(avatar) {
         const d = ACH[avatar.slice(4)];
         if (d && d.img) { const im = document.createElement('img'); im.src = d.img; im.alt = d.name; im.className = 'ava-img'; return im; }
     }
-    return document.createTextNode(avatar && !String(avatar).startsWith('ach:') ? avatar : '👤');
+    if (typeof avatar === 'string' && avatar.startsWith('ava:')) {
+        const d = AVA_BY[avatar.slice(4)];
+        if (d) { const sp = document.createElement('span'); sp.className = 'ava-new' + (d.orb ? ' ava-orb a-' + d.id : ''); sp.textContent = d.e; return sp; }
+    }
+    return document.createTextNode(avatar && !/^(ach|ava):/.test(String(avatar)) ? avatar : '👤');
 }
 const ACH = { beta: { name: 'Бета-тестер', desc: 'Участвовал в бета-тестировании SpellsChess', img: 'achievements/beta.png' } };
 const heroLabel = id => (HEROES[id] ? HEROES[id].icon + ' ' + HEROES[id].name : '—');
@@ -8509,7 +8680,7 @@ async function openProfile(uid, selMode) {
         const names = {};
         if (oppIds.length) { const o = await SB.from('profiles').select('id,nick,avatar').in('id', oppIds); (o.data || []).forEach(x => { names[x.id] = x; }); }
 
-        $('#profNick').textContent = p.nick;
+        $('#profNick').textContent = p.nick; applyNickEl($('#profNick'), null); loadProfNickColor(uid);
         $('#profAva').textContent = '';
         $('#profAva').appendChild(avaNode(p.avatar));
         $('#profSub').textContent = p.created_at ? (LANG === 'en' ? 'Joined ' : 'На сайте с ') + new Date(p.created_at).toLocaleDateString() : '';
@@ -8600,6 +8771,13 @@ async function openProfile(uid, selMode) {
     } catch (e) { gl.textContent = 'Не удалось загрузить профиль.'; }
 }
 
+async function loadProfNickColor(uid) {      // цвет ника в профиле (отдельным запросом, чтобы профиль открывался и без колонки cosmetics)
+    try {
+        const r = await SB.from('profiles').select('cosmetics').eq('id', uid).maybeSingle();
+        if (!r.error && r.data && $('#profNick').textContent) applyNickEl($('#profNick'), r.data.cosmetics);
+    } catch (e) { /* без цвета */ }
+}
+
 async function openAvatarPick() {
     const box = $('#profAvaPick');
     if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
@@ -8623,7 +8801,21 @@ async function openAvatarPick() {
         });
         box.appendChild(b);
     });
+    await loadUnlocks();      // новые аватарки из коллекции: бесплатные и уже открытые за шар
+    COS.avas.filter(it => !it.orb || cosOwned('ava', it)).forEach(it => {
+        const b = document.createElement('button');
+        b.setAttribute('data-notr', ''); b.title = cosNm(it);
+        b.appendChild(avaNode('ava:' + it.id));
+        b.addEventListener('click', async () => {
+            const { error } = await SB.rpc('set_avatar_item', { p_ava: 'ava:' + it.id });
+            if (error) { uiAlert(authError(error)); return; }
+            ACC.loading = false; await loadProfile();
+            if (ACC.user) openProfile(ACC.user.id);
+        });
+        box.appendChild(b);
+    });
     box.classList.remove('hidden');
+
 }
 
 $('#accBtn').addEventListener('click', () => {
@@ -8661,12 +8853,19 @@ $('#accColl').addEventListener('click', () => {
 });
 $('#collClose').addEventListener('click', () => $('#coll').classList.add('hidden'));
 $('#collBody').addEventListener('click', e => {
+    const tb = e.target.closest('[data-ctab]');
+    if (tb) { COLL.tab = tb.dataset.ctab; renderCollection(); return; }
+    const cb = e.target.closest('[data-cus]');
+    if (cb) { cusPick(cb.dataset.cus); return; }
+    const th = e.target.closest('[data-theme]');
+    if (th) { applyTheme(th.dataset.theme); renderCollection(); return; }
     const card = e.target.closest('.hero-card');
     if (!card) return;
     const id = card.dataset.hero;
     if (e.target.closest('.hc-more')) { if (collOpen.has(id)) collOpen.delete(id); else collOpen.add(id); renderCollection(); return; }
     if (e.target.closest('.hc-unlock')) tryUnlock(id, card);
 });
+$('#collBody').addEventListener('change', e => { if (e.target.id === 'cusColor') cusPick('nc:' + e.target.value); });
 $('#authSubmit').addEventListener('click', authSubmit);
 $('#authSwitch').addEventListener('click', () => openAuth(authMode === 'login' ? 'signup' : 'login'));
 $('#authForgot').addEventListener('click', () => openAuth('reset'));
@@ -8683,7 +8882,7 @@ if (SB) {
         if (ev === 'PASSWORD_RECOVERY') setTimeout(() => openAuth('newpass'), 0);      // человек пришёл по ссылке из письма
         const prev = ACC.user && ACC.user.id;
         ACC.user = session ? session.user : null;
-        if (!ACC.user) { ACC.profile = null; ACC.needNick = false; UNL.orbs = 0; UNL.heroes = []; accRefresh(); return; }
+        if (!ACC.user) { ACC.profile = null; ACC.needNick = false; UNL.orbs = 0; UNL.heroes = []; UNL.items = []; accRefresh(); return; }
         if (ACC.user.id !== prev) ACC.profile = null;
         accRefresh();
         if (!ACC.profile) setTimeout(loadProfile, 0);
