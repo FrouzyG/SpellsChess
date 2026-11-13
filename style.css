@@ -6650,3 +6650,44 @@ body.piece-drag {
         --cell: min((100dvh - 78px) / var(--n), (100vw - 340px) / var(--n));
     }
 }
+
+
+/* ---- планшет Инженера в режиме просмотра (двойное нажатие на робота или турель) ---- */
+.eng-view .eng-sq {
+    cursor: default;
+}
+
+.eng-view .eng-grid.g3 {
+    grid-template-columns: repeat(3, 44px);
+    gap: 5px;
+}
+
+.eng-view .eng-grid.g5 {
+    grid-template-columns: repeat(5, 40px);
+    gap: 5px;
+}
+
+.eng-view .eng-sq.big {
+    width: 96px;
+    height: 96px;
+}
+
+.ev-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.ev-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.ev-lab {
+    font-size: 11px;
+    letter-spacing: 1px;
+}

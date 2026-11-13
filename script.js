@@ -394,7 +394,7 @@ Object.assign(ABILITIES, {
     },
     reprogram: {
         icon: '🛠', name: 'Перепрограммирование',
-        desc: 'Тратит ход. Робот перестраивается заново на планшете (как при сборке, прежний выбор остаётся, его можно убрать и добавить новое), у турели радиус выбирается заново. Перезарядка 4, плюс за каждую НОВУЮ клетку или направление: у робота как при сборке, у турели по 2. Каждая УБРАННАЯ убавляет перезарядку на столько же, но ниже базовых 4 она не опускается.'
+        desc: 'Тратит ход. Робот перестраивается заново на планшете (как при сборке, прежний выбор остаётся, его можно убрать и добавить новое), у турели радиус выбирается заново. Перезарядка 4, плюс за каждую НОВУЮ клетку или направление: у робота как при сборке, у турели по 2 (у дальней артиллерии по 1). Каждая УБРАННАЯ убавляет перезарядку на столько же, но ниже базовых 4 она не опускается.'
     }
 });
 HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника', passive: 'eureka', abilities: ['assemble', 'charger', 'turret', 'reprogram'], dev: true };
@@ -1559,12 +1559,29 @@ function pawnFrontThreat(b, r, c, enemy) {
 
 /* ---------- Невидимые фигуры Самурая (Фукаши) ---------- */
 // Почему фигура на клетке должна стать видимой (или null)
+// Клетки, куда сапог может пойти только рубкой (направление есть в атаке, но нет в ходьбе): как диагональ у пешки
+function robCaptureOnlyCells(b, r, c, p) {
+    const rb = robNow(p), out = [];
+    if (!rb || rb.kind === 'wing') return out;
+    const hasWalk = d => (rb.walk || []).some(w => w[0] === d[0] && w[1] === d[1]);
+    (rb.atk || []).forEach(d => {
+        if (hasWalk(d)) return;
+        rayWalk(b, r, c, d[0], d[1], (rr, cc, t, path) => {
+            if (path.length >= rb.ar) return true;
+            out.push([rr, cc]);
+            return !!(t && !t.ghost && !passThru(t, p.c, rr, cc) && !supOpen(b, t));
+        });
+    });
+    return out;
+}
 function invisReason(b, r, c) {
     const p = b[r][c], enemy = other(p.c);
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
         const q = b[i][j];
         if (q && q.c === enemy && q.t === 'p' && !q.ghost && !(q.frozen > 0) && !(q.snared > 0) &&
             attackSquares(b, i, j).some(([x, y]) => x === r && y === c)) return 'ей угрожает пешка';
+        if (q && q.c === enemy && q.t === 'x' && q.rob && !q.ghost && !(q.frozen > 0) && !(q.snared > 0) &&
+            robCaptureOnlyCells(b, i, j, q).some(([x, y]) => x === r && y === c)) return 'ей угрожает рубка робота';      // робот может встать на её клетку только рубкой
     }
     if (G.ep && p.t === 'p' && G.ep.pr === r && G.ep.pc === c) {      // пешку можно взять на проходе: невидимость рассеивается
         for (const dc of [-1, 1]) {
@@ -5961,6 +5978,8 @@ Object.assign(EN, {
     "заряжает робота на": "charges the robot on",
     "оглушает": "stuns",
     "турель уничтожена, выстрела не будет": "the turret is destroyed, no shot",
+    "РАДИУС ТУРЕЛИ ЗАНОВО. НОВАЯ КЛЕТКА +1 КД, УБРАННАЯ −1 КД.": "TURRET RADIUS FROM SCRATCH. NEW SQUARE +1 CD, REMOVED SQUARE −1 CD.",
+    "КАЖДАЯ КЛЕТКА +1 КД. ВЫБРАНО": "EACH SQUARE +1 CD. CHOSEN",
     "РАДИУС ТУРЕЛИ ЗАНОВО. НОВАЯ КЛЕТКА +2 КД, УБРАННАЯ −2 КД.": "TURRET RADIUS FROM SCRATCH. NEW SQUARE +2 CD, REMOVED SQUARE −2 CD.",
     "Робот: синие клетки: ходит, красные: ходит и рубит, жёлтые: только рубит.": "Robot: blue squares: moves, red: moves and captures, yellow: captures only.",
     [ABILITIES.assemble.name]: "Robot Assembly",
@@ -6020,7 +6039,7 @@ Object.assign(EN, {
     [ABILITIES.turret.name]: "Turret Assembly",
     [ABILITIES.turret.desc]: "A tablet opens: you build a stationary turret. Instant fire: you choose squares of a 3×3 radius; an enemy that enters them after the turret appears is destroyed at once (enemies already standing in the radius when it appears are not hit). Long-range artillery: you choose squares of a 5×5 radius; if a new enemy appears in one of them, a shot lands there after a turn. The turret appears on a free square of your first three ranks. Cooldown 5 plus extra for every square of the radius.",
     [ABILITIES.reprogram.name]: "Reprogramming",
-    [ABILITIES.reprogram.desc]: "Uses your move. A robot is rebuilt from scratch on the tablet (as when assembling, the previous choice stays and can be removed or added to), a turret's radius is chosen anew. Cooldown 4, plus extra for every NEW square or direction: for a robot as when assembling, for a turret 2 each. Every REMOVED one lowers the cooldown by the same amount, but it never drops below the base 4.",
+    [ABILITIES.reprogram.desc]: "Uses your move. A robot is rebuilt from scratch on the tablet (as when assembling, the previous choice stays and can be removed or added to), a turret's radius is chosen anew. Cooldown 4, plus extra for every NEW square or direction: for a robot as when assembling, for a turret 2 each (long-range artillery 1 each). Every REMOVED one lowers the cooldown by the same amount, but it never drops below the base 4.",
     "🗼 Турель готова: выберите свободную клетку на своих первых трёх горизонталях, там она появится.": "🗼 The turret is ready: choose a free square on your first three ranks, it will appear there.",
     "Соберите турель на планшете.": "Build the turret on the tablet.",
     "🛠 Выберите своего робота или свою турель для перепрограммирования (ход не тратится).": "🛠 Choose your robot or your turret to reprogram (does not use your move).",
@@ -7137,7 +7156,7 @@ function engCells(key, col) {
 const engSame = m => m.walk.length > 0 && m.walk.length === m.atk.length && m.walk.every(d => engHas(m.atk, d));
 // Сколько перезарядки добавляет собранное к базовой
 function engCost(m) {
-    if (m.type === 'turret') return 2 * m.tc.length;
+    if (m.type === 'turret') return (m.tk === 'artillery' ? 1 : 2) * m.tc.length;      // мгновенная стрельба: +2 КД за клетку, дальняя артиллерия: +1
     if (m.kind === 'wing') return 2 + 3 * m.ja.length + m.jw.length;
     if (m.kind !== 'boot') return 0;
     return m.walk.length + m.atk.length + (m.wr - 1) * (engSame(m) ? 2 : 1);
@@ -7164,7 +7183,8 @@ function engReproState(m) {
     if (!rp) return { cost: 0, changed: false, valid: false };
     const key = d => d[0] + ',' + d[1];
     const diff = (a, b) => a.filter(d => !b.some(x => key(x) === key(d))).length;      // клеток в a, которых нет в b
-    const added = 2 * diff(rp.tc, rp.old), removed = 2 * diff(rp.old, rp.tc);      // новые клетки дороже перезарядку, убранные такой же суммой убавляют её
+    const w = rp.tk === 'artillery' ? 1 : 2;
+    const added = w * diff(rp.tc, rp.old), removed = w * diff(rp.old, rp.tc);      // новые клетки дороже перезарядку, убранные такой же суммой убавляют её
     return { added, removed, cost: Math.max(0, added - removed), changed: diff(rp.tc, rp.old) + diff(rp.old, rp.tc) > 0, valid: rp.tc.length >= 1 };
 }
 // Перепрограммирование робота: заново проходится сборка, прежний выбор остаётся. Платятся только новые клетки и направления
@@ -7471,6 +7491,7 @@ function eurekaAsk(k) {
 }
 
 /* ---------- Подсветка клеток робота и турели при нажатии ---------- */
+let ENG_TAP = null;      // последнее нажатие на доску: для двойного нажатия
 let ENG_INFO = null;      // { r, c, stamp }: осмотр чужой (или любой, когда не ваш ход) фигуры-робота или турели
 const engSpecial = p => !!p && !p.ghost && ((p.t === 'x' && p.rob) || (p.t === 'u' && p.tur));
 // Клетки робота: m: ходит, c: рубит (ходьба и рубка по направлениям считаются с учётом стоящих на пути фигур)
@@ -7501,14 +7522,14 @@ function engPaintInfo() {
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll('.cell.rbi-m,.cell.rbi-b,.cell.rbi-c,.cell.rbi-t,.cell.rbi-a').forEach(el => el.classList.remove('rbi-m', 'rbi-b', 'rbi-c', 'rbi-t', 'rbi-a'));
     root.querySelectorAll('.piece.charged').forEach(el => el.classList.remove('charged'));
-    if (!G || G.over) return;
+    if (!G || (G.over && !REPLAY.on)) return;
     // осматриваемая фигура: чужая (по нажатию) или выбранная своя
     let tgt = null;
     if (ENG_INFO) {
         const q = G.board[ENG_INFO.r][ENG_INFO.c];
         if (engSpecial(q) && ENG_INFO.stamp === G.log.length) tgt = [ENG_INFO.r, ENG_INFO.c]; else ENG_INFO = null;
     }
-    if (!tgt && G.sel && !G.mode && engSpecial(G.board[G.sel.r][G.sel.c])) tgt = [G.sel.r, G.sel.c];
+    if (!tgt && G.sel && !G.mode && isActor() && engSpecial(G.board[G.sel.r][G.sel.c])) tgt = [G.sel.r, G.sel.c];      // только у самого игрока: сопернику не видно, на что он смотрит
     const cellEl = (r, c) => root.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
     if (tgt) {
         const [r, c] = tgt, p = G.board[r][c];
@@ -7534,11 +7555,27 @@ function engPaintInfo() {
 // Нажатие на чужого (или, когда не ваш ход, любого) робота или турель: показать, куда они дотягиваются, ничего не отправляя сопернику
 document.getElementById('board').addEventListener('click', e => {
     const cell = e.target.closest('.cell');
-    if (!cell || !G || G.over || G.pendingPromo || REPLAY.on) return;
+    if (!cell || !G || (G.over && !REPLAY.on) || G.pendingPromo) return;
     const r = +cell.dataset.r, c = +cell.dataset.c, p = G.board[r][c];
     const me = NET.on ? NET.me : G.turn;
     const actor = isActor();
-    const special = engSpecial(p) && !(p.invis && p.c !== me);
+    const special = engSpecial(p) && (REPLAY.on || !(p.invis && p.c !== me));
+    const now = Date.now();
+    if (special && ENG_TAP && ENG_TAP.r === r && ENG_TAP.c === c && now - ENG_TAP.t < 380) {      // двойное нажатие: планшет Инженера с настройками этого робота или турели
+        ENG_TAP = null;
+        e.stopImmediatePropagation(); e.preventDefault();
+        ENG_INFO = null;
+        engViewOpen(p);
+        render();
+        return;
+    }
+    ENG_TAP = { r, c, t: now };
+    if (REPLAY.on) {      // в повторе нажатие на робота или турель показывает, куда они дотягиваются
+        e.stopImmediatePropagation();
+        ENG_INFO = (special && !(ENG_INFO && ENG_INFO.r === r && ENG_INFO.c === c)) ? { r, c, stamp: G.log.length } : null;
+        render();
+        return;
+    }
     if (ENG_MIN && G.mode && ENG_TAB_MODES.includes(G.mode.type) && G.mode.stage !== 'spawn' && G.mode.stage !== 'piece') {      // планшет свёрнут: доска только для осмотра, сборка не сбрасывается
         e.stopImmediatePropagation();
         if (special) ENG_INFO = (ENG_INFO && ENG_INFO.r === r && ENG_INFO.c === c) ? null : { r, c, stamp: G.log.length };
@@ -7555,6 +7592,76 @@ document.getElementById('board').addEventListener('click', e => {
     }
     ENG_INFO = null;
 }, true);
+
+/* ---------- Двойное нажатие на робота или турель: планшет Инженера только для просмотра ---------- */
+function engViewHTML(p) {
+    const d3 = [-1, 0, 1], d5 = [-2, -1, 0, 1, 2];
+    const view = d => engAbs(p.c, d);      // как эти настройки выглядели на планшете у владельца
+    const has = (list, v) => list.some(x => x[0] === v[0] && x[1] === v[1]);
+    const dir = (list, sprite) => '<div class="eng-grid g3">' + d3.map(i => d3.map(j => {
+        if (!i && !j) return `<div class="eng-sq static">${engPix(sprite)}</div>`;
+        const deg = Math.round(Math.atan2(j, -i) * 180 / Math.PI);
+        return `<div class="eng-sq${has(list, [i, j]) ? ' on' : ''}"><span class="eng-rot" style="transform:rotate(${deg}deg)">${engPix('arrow')}</span></div>`;
+    }).join('')).join('') + '</div>';
+    const cells = (n, atk, walk, sprite) => {
+        const rng = n === 3 ? d3 : d5;
+        return `<div class="eng-grid g${n}">` + rng.map(i => rng.map(j => {
+            if (!i && !j) return `<div class="eng-sq static">${engPix(sprite)}</div>`;
+            const a = has(atk, [i, j]), w = has(walk, [i, j]);
+            return `<div class="eng-sq${a || w ? ' on' : ''}${w && !a ? ' walk' : ''}"></div>`;
+        }).join('')).join('') + '</div>';
+    };
+    const owner = p.c === 'w' ? 'БЕЛЫЕ' : 'ЧЁРНЫЕ';
+    let title = '', body = '', note = '';
+    if (p.t === 'u') {
+        const inst = p.tur.kind === 'instant';
+        title = (inst ? 'ТУРЕЛЬ: МГНОВЕННАЯ СТРЕЛЬБА' : 'ТУРЕЛЬ: ДАЛЬНЯЯ АРТИЛЛЕРИЯ') + ' · ' + owner;
+        body = cells(inst ? 3 : 5, p.tur.cells.map(view), [], 'tower');
+        note = inst ? 'КРАСНЫЕ КЛЕТКИ РАДИУСА: ВРАГ, ВОШЕДШИЙ В НИХ, УНИЧТОЖАЕТСЯ СРАЗУ.' : 'ВЫБРАННЫЕ КЛЕТКИ РАДИУСА: ЕСЛИ В НИХ ПОЯВИТСЯ ВРАГ, ЧЕРЕЗ ХОД ТУДА ПРИЛЕТИТ ВЫСТРЕЛ.';
+    } else if (p.rob.kind === 'wing') {
+        title = 'РОБОТ: КРЫЛО · ' + owner;
+        body = cells(5, p.rob.ja.map(view), p.rob.jw.map(view), 'pawn');
+        note = 'СВЕТЛЫЕ КЛЕТКИ: ХОДЬБА И АТАКА. ТЁМНЫЕ КЛЕТКИ: ТОЛЬКО ХОДЬБА.';
+    } else {
+        title = 'РОБОТ: САПОГ · ' + owner;
+        body = `<div class="ev-row">
+            <div class="ev-col"><div class="ev-lab">ХОДЬБА</div>${dir(p.rob.walk.map(view), 'pawn')}</div>
+            <div class="ev-col"><div class="ev-lab">АТАКА</div>${dir(p.rob.atk.map(view), 'sword')}</div>
+            <div class="ev-col"><div class="ev-lab">ДАЛЬНОСТЬ</div><div class="eng-sq big static">${engPix('boot')}<b class="eng-num">${p.rob.wr}</b></div></div></div>`;
+        note = `ДАЛЬНОСТЬ ХОДЬБЫ: ${p.rob.wr}. ДАЛЬНОСТЬ АТАКИ: ${p.rob.ar}.`;
+    }
+    return `<div class="eng-tab eng-view"><button class="eng-close" data-evclose="1" title="Закрыть">✕</button>
+      <div class="eng-screen"><div class="eng-inner">
+        <div class="eng-head"><span class="eng-title">${title}</span></div>
+        <div class="eng-body">${body}</div>
+        <div class="eng-note">${note}</div>
+        <div class="eng-foot"><button class="eng-btn" data-evclose="1">ЗАКРЫТЬ</button></div>
+      </div></div></div>`;
+}
+function engViewOpen(p) {
+    if (!engSpecial(p)) return;
+    let ov = document.getElementById('engView');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'engView';
+        ov.className = 'eng-ov hidden';
+        ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-evclose]')) { ov.classList.add('hidden'); SFX.engBack(); } });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') ov.classList.add('hidden'); });
+        document.body.appendChild(ov);
+    }
+    ov.innerHTML = engViewHTML(p);
+    ov.classList.remove('hidden');
+    SFX.engSwitch();
+    translateNode(ov);
+}
+Object.assign(EN, {
+    "РОБОТ: САПОГ": "ROBOT: BOOT", "РОБОТ: КРЫЛО": "ROBOT: WING", "БЕЛЫЕ": "WHITE", "ЧЁРНЫЕ": "BLACK",
+    "ТУРЕЛЬ: МГНОВЕННАЯ СТРЕЛЬБА": "TURRET: INSTANT FIRE", "ТУРЕЛЬ: ДАЛЬНЯЯ АРТИЛЛЕРИЯ": "TURRET: LONG-RANGE ARTILLERY",
+    "ХОДЬБА": "WALK", "АТАКА": "ATTACK", "ДАЛЬНОСТЬ": "RANGE", "ЗАКРЫТЬ": "CLOSE",
+    "СВЕТЛЫЕ КЛЕТКИ: ХОДЬБА И АТАКА. ТЁМНЫЕ КЛЕТКИ: ТОЛЬКО ХОДЬБА.": "LIGHT SQUARES: WALK AND ATTACK. DARK SQUARES: WALK ONLY.",
+    "КРАСНЫЕ КЛЕТКИ РАДИУСА: ВРАГ, ВОШЕДШИЙ В НИХ, УНИЧТОЖАЕТСЯ СРАЗУ.": "RADIUS SQUARES: AN ENEMY THAT ENTERS THEM IS DESTROYED AT ONCE.",
+    "ВЫБРАННЫЕ КЛЕТКИ РАДИУСА: ЕСЛИ В НИХ ПОЯВИТСЯ ВРАГ, ЧЕРЕЗ ХОД ТУДА ПРИЛЕТИТ ВЫСТРЕЛ.": "RADIUS SQUARES: IF AN ENEMY APPEARS IN THEM, A SHOT LANDS ON IT AFTER A TURN."
+});
 
 /* ---------- Пиксельные картинки и экран планшета ---------- */
 const ENG_SPR = {
@@ -7618,7 +7725,7 @@ function engTabletHTML(m) {
             title = m.tk === 'instant' ? 'РАДИУС: МГНОВЕННАЯ СТРЕЛЬБА' : 'РАДИУС: АРТИЛЛЕРИЯ';
             body = cellGrid(m.tk === 'instant' ? 3 : 5, m.tc, null, false, 'tower');
             allBtn = selAllBtn(m.tc, m.tk === 'instant' ? 1 : 2);
-            note = `КАЖДАЯ КЛЕТКА +2 КД. ВЫБРАНО ${m.tc.length}. НУЖНА ХОТЯ БЫ ОДНА.`;
+            note = `КАЖДАЯ КЛЕТКА +${m.tk === 'artillery' ? 1 : 2} КД. ВЫБРАНО ${m.tc.length}. НУЖНА ХОТЯ БЫ ОДНА.`;
             ok = m.tc.length >= 1;
         }
     } else if (m.type === 'reprogram' && !m.rb) {
@@ -7629,7 +7736,7 @@ function engTabletHTML(m) {
         costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: ${CONFIG.cooldown.reprogram} + ${s2.added} − ${s2.removed} = ${CONFIG.cooldown.reprogram + s2.cost}`;
         body = cellGrid(rp.tk === 'instant' ? 3 : 5, rp.tc, null, false, 'tower');
         allBtn = selAllBtn(rp.tc, rp.tk === 'instant' ? 1 : 2);
-        note = 'РАДИУС ТУРЕЛИ ЗАНОВО. НОВАЯ КЛЕТКА +2 КД, УБРАННАЯ −2 КД.';
+        note = rp.tk === 'artillery' ? 'РАДИУС ТУРЕЛИ ЗАНОВО. НОВАЯ КЛЕТКА +1 КД, УБРАННАЯ −1 КД.' : 'РАДИУС ТУРЕЛИ ЗАНОВО. НОВАЯ КЛЕТКА +2 КД, УБРАННАЯ −2 КД.';
     } else {
         if (m.rb) { const rs = engReproRobState(m); costLine = `ПЕРЕПРОГРАММИРОВАНИЕ · КД: ${CONFIG.cooldown.reprogram} + ${rs.added} − ${rs.removed} = ${CONFIG.cooldown.reprogram + rs.cost}`; }
         else costLine = `СБОРКА РОБОТА · КД: 3 + ${engCost({ ...m, kind: kindNow })} = ${3 + engCost({ ...m, kind: kindNow })}`;
