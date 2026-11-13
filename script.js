@@ -7594,9 +7594,11 @@ document.getElementById('board').addEventListener('click', e => {
 }, true);
 
 /* ---------- Двойное нажатие на робота или турель: планшет Инженера только для просмотра ---------- */
+let ENG_VIEW_FLIP = false;      // окно просмотра перевёрнуто на 180° (вид со стороны соперника)
+let ENG_VIEW_P = null;          // какой робот или турель сейчас показаны
 function engViewHTML(p) {
     const d3 = [-1, 0, 1], d5 = [-2, -1, 0, 1, 2];
-    const view = d => engAbs(p.c, d);      // как эти настройки выглядели на планшете у владельца
+    const view = d => { const a = engAbs(p.c, d); return ENG_VIEW_FLIP ? [-a[0], -a[1]] : a; };      // как эти настройки выглядели на планшете у владельца (или перевёрнуто)
     const has = (list, v) => list.some(x => x[0] === v[0] && x[1] === v[1]);
     const dir = (list, sprite) => '<div class="eng-grid g3">' + d3.map(i => d3.map(j => {
         if (!i && !j) return `<div class="eng-sq static">${engPix(sprite)}</div>`;
@@ -7635,7 +7637,7 @@ function engViewHTML(p) {
         <div class="eng-head"><span class="eng-title">${title}</span></div>
         <div class="eng-body">${body}</div>
         <div class="eng-note">${note}</div>
-        <div class="eng-foot"><button class="eng-btn" data-evclose="1">ЗАКРЫТЬ</button></div>
+        <div class="eng-foot"><button class="eng-btn${ENG_VIEW_FLIP ? ' flip-on' : ''}" data-evflip="1">⇅ ПЕРЕВЕРНУТЬ</button><button class="eng-btn" data-evclose="1">ЗАКРЫТЬ</button></div>
       </div></div></div>`;
 }
 function engViewOpen(p) {
@@ -7645,10 +7647,20 @@ function engViewOpen(p) {
         ov = document.createElement('div');
         ov.id = 'engView';
         ov.className = 'eng-ov hidden';
-        ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-evclose]')) { ov.classList.add('hidden'); SFX.engBack(); } });
+        ov.addEventListener('click', e => {
+            if (e.target.closest('[data-evflip]')) {      // кнопка переворота: перерисовать то же окно в другом виде
+                ENG_VIEW_FLIP = !ENG_VIEW_FLIP;
+                if (ENG_VIEW_P) { ov.innerHTML = engViewHTML(ENG_VIEW_P); translateNode(ov); }
+                SFX.engSwitch();
+                return;
+            }
+            if (e.target === ov || e.target.closest('[data-evclose]')) { ov.classList.add('hidden'); SFX.engBack(); }
+        });
         document.addEventListener('keydown', e => { if (e.key === 'Escape') ov.classList.add('hidden'); });
         document.body.appendChild(ov);
     }
+    ENG_VIEW_P = p;
+    ENG_VIEW_FLIP = false;      // каждый раз открывается как у владельца, переворот включается кнопкой
     ov.innerHTML = engViewHTML(p);
     ov.classList.remove('hidden');
     SFX.engSwitch();
@@ -7657,7 +7669,7 @@ function engViewOpen(p) {
 Object.assign(EN, {
     "РОБОТ: САПОГ": "ROBOT: BOOT", "РОБОТ: КРЫЛО": "ROBOT: WING", "БЕЛЫЕ": "WHITE", "ЧЁРНЫЕ": "BLACK",
     "ТУРЕЛЬ: МГНОВЕННАЯ СТРЕЛЬБА": "TURRET: INSTANT FIRE", "ТУРЕЛЬ: ДАЛЬНЯЯ АРТИЛЛЕРИЯ": "TURRET: LONG-RANGE ARTILLERY",
-    "ХОДЬБА": "WALK", "АТАКА": "ATTACK", "ДАЛЬНОСТЬ": "RANGE", "ЗАКРЫТЬ": "CLOSE",
+    "ХОДЬБА": "WALK", "АТАКА": "ATTACK", "ДАЛЬНОСТЬ": "RANGE", "ЗАКРЫТЬ": "CLOSE", "⇅ ПЕРЕВЕРНУТЬ": "⇅ FLIP",
     "СВЕТЛЫЕ КЛЕТКИ: ХОДЬБА И АТАКА. ТЁМНЫЕ КЛЕТКИ: ТОЛЬКО ХОДЬБА.": "LIGHT SQUARES: WALK AND ATTACK. DARK SQUARES: WALK ONLY.",
     "КРАСНЫЕ КЛЕТКИ РАДИУСА: ВРАГ, ВОШЕДШИЙ В НИХ, УНИЧТОЖАЕТСЯ СРАЗУ.": "RADIUS SQUARES: AN ENEMY THAT ENTERS THEM IS DESTROYED AT ONCE.",
     "ВЫБРАННЫЕ КЛЕТКИ РАДИУСА: ЕСЛИ В НИХ ПОЯВИТСЯ ВРАГ, ЧЕРЕЗ ХОД ТУДА ПРИЛЕТИТ ВЫСТРЕЛ.": "RADIUS SQUARES: IF AN ENEMY APPEARS IN THEM, A SHOT LANDS ON IT AFTER A TURN."

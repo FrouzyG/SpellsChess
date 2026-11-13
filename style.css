@@ -6691,3 +6691,15 @@ body.piece-drag {
     font-size: 11px;
     letter-spacing: 1px;
 }
+
+/* кнопка переворота в окне просмотра робота или турели */
+.eng-view .eng-foot {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.eng-view .eng-btn.flip-on {
+    box-shadow: 0 0 0 2px #7dff9a inset;
+}
