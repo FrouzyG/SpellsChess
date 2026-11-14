@@ -4365,7 +4365,7 @@ function renderBoard() {
             if (cvm) html += `<div class="conv-mark">${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[cvm.dir.map(x => (flip ? -x : x)).join(',')]}</div>`;
             const ptm = G.portals.find(x => x.r === r && x.c === c);
             if (ptm) html += ptm.owner === 'n'
-                ? `<div class="portal-mark pm9"><span>⇄</span><i class="pn">${[...new Set(G.portals.filter(x => x.owner === 'n').map(x => x.id))].sort((a, b) => a - b).indexOf(ptm.id) + 1}</i></div>`
+                ? portalMarkHtml(ptm.id, [...new Set(G.portals.filter(x => x.owner === 'n').map(x => x.id))].sort((a, b) => a - b).indexOf(ptm.id) + 1)
                 : `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me || x.owner === 'n'))) html += '<div class="trap-mark">🪤</div>';
@@ -9268,6 +9268,13 @@ try { const sc = localStorage.getItem('sc_roomcolor'); if (sc === 'w' || sc === 
 
 const TILE_KINDS = ['wall', 'conv', 'portal', 'gen', 'virus', 'vine', 'ritual', 'hatch', 'trap', 'lure', 'banana', 'burn', 'hog', 'fog', 'charger'];
 const TILE_DIRS = { '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' };
+// 20 цветов для пар порталов: пара получает цвет по своему номеру, дальше цвета идут по кругу
+const PORTAL_COLS = ['#ff4646', '#3d8bff', '#39e08b', '#ffd24a', '#c04dff', '#ff8a3d', '#2fd6e6', '#ff5fb8', '#a6e22e', '#6c5ce7',
+    '#14b8a6', '#ff7a7a', '#b5651d', '#f1f1f1', '#7ec8ff', '#e040fb', '#98f5c9', '#fa8072', '#8a9a2b', '#4f6bff'];
+function portalMarkHtml(id, rank) {
+    const col = PORTAL_COLS[(id - 1) % PORTAL_COLS.length];
+    return `<div class="portal-mark" style="background:radial-gradient(circle, rgba(0,0,0,.65), ${col});color:${col}"><span>⇄</span><i class="pn">${rank}</i></div>`;
+}
 // Что показывается в панели плиток. own: у плитки есть владелец; dir: нужно направление; pair: пара портала
 const TILE_PALETTE = [
     { id: 'wall', k: 'wall', ico: '🧱', ru: 'Стена', en: 'Wall' },
@@ -9469,7 +9476,7 @@ function edTileHtml(t) {
     switch (t.k) {
         case 'wall': return '<div class="wall-mark"></div>';
         case 'conv': return `<div class="conv-mark">${TILE_DIRS[t.d.join(',')]}</div><span class="ed-own ${t.o}"></span>`;
-        case 'portal': return `<div class="portal-mark pm9"><span>⇄</span><i class="pn">${[...new Set(ED.tiles.filter(x => x.k === 'portal').map(x => x.id))].sort((a, b) => a - b).indexOf(t.id) + 1}</i></div>`;
+        case 'portal': return portalMarkHtml(t.id, [...new Set(ED.tiles.filter(x => x.k === 'portal').map(x => x.id))].sort((a, b) => a - b).indexOf(t.id) + 1);
         case 'gen': return `<div class="tile-mark gen-mark ${t.s === '+' ? 'plus' : 'minus'}">${t.s === '+' ? '＋' : '－'}</div><span class="ed-own ${t.o}"></span>`;
         case 'virus': return `<div class="tile-mark virus-mark">☣️</div><span class="ed-own ${t.o}"></span>`;
         case 'vine': return `<div class="tile-mark vine-mark">🌿<i class="vine-t">∞</i></div><span class="ed-own ${t.o}"></span>`;
@@ -9544,7 +9551,7 @@ function edRender() {
     let op = '';
     if (cur.own && !cur.pair) op += `<div class="ed-optrow"><span>${L('Владелец:', 'Owner:')}</span>` + (cur.neu ? ['w', 'b', 'n'] : ['w', 'b']).map(o => `<button class="${(ED.opt.o === 'n' && !cur.neu ? 'w' : ED.opt.o) === o ? 'on' : ''}" data-o="${o}">${o === 'w' ? L('⬜ Белые', '⬜ White') : o === 'b' ? L('⬛ Чёрные', '⬛ Black') : L('⚪ Нейтральная', '⚪ Neutral')}</button>`).join('') + '</div>';
     if (cur.dir) op += `<div class="ed-optrow"><span>${L('Направление:', 'Direction:')}</span>` + Object.entries(TILE_DIRS).map(([k, a]) => `<button class="${ED.opt.d.join(',') === k ? 'on' : ''}" data-d="${k}">${a}</button>`).join('') + '</div>';
-    if (cur.pair) op += `<div class="ed-hint">${L('Нажмите на клетку: первый портал ждёт пару, следующий сам с ним свяжется. Пар можно ставить сколько угодно, номер на портале показывает, какие связаны. Убрать портал: нажмите на него ещё раз или ластиком, вторая половина пары уйдёт вместе с ним. На порталы зеркало не действует.', 'Click a square: the first portal waits for its pair and the next one links to it. Place as many pairs as you like; the number on a portal shows which ones are linked. To remove one, click it again or use the eraser: its partner goes with it. Mirror does not affect portals.')}</div>`;
+    if (cur.pair) op += `<div class="ed-hint">${L('Нажмите на клетку: первый портал ждёт пару, следующий сам с ним свяжется. Пар можно ставить сколько угодно: у каждой пары свой цвет и номер. Убрать портал: нажмите на него ещё раз или ластиком, вторая половина пары уйдёт вместе с ним. На порталы зеркало не действует.', 'Click a square: the first portal waits for its pair and the next one links to it. Place as many pairs as you like: each pair has its own colour and number. To remove one, click it again or use the eraser: its partner goes with it. Mirror does not affect portals.')}</div>`;
     $('#edTileOpts').innerHTML = op;
     $('#edMirror').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === ED.mirror));
     // слоты
@@ -9697,7 +9704,106 @@ function edValidate() {
 }
 
 // ---------- события ----------
+// ---------- перетаскивание фигур и плиток по доске редактора ----------
+// Потяните фигуру на другую клетку: она переедет, а если там стоит другая фигура, они поменяются местами.
+// Если на клетке нет фигуры, тянется плитка. Чтобы потянуть плитку из-под фигуры, держите Shift или Alt.
+let edNoClick = false, edDrag = null;
+const edCellEl = (r, c) => $('#edBoard').querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+function edDragKind(r, c, alt) {
+    const piece = ED.rows[r][c] !== '.', base = edBaseAt(r, c), fog = edFogAt(r, c);
+    if (alt) return base ? 'tile' : fog ? 'fog' : null;
+    return piece ? 'piece' : base ? 'tile' : fog ? 'fog' : null;
+}
+function edDragApply(a, b, kind) {
+    const [ar, ac] = a, [br, bc] = b;
+    const fail = m => { ED.msg = m; edRender(); };
+    if (kind === 'piece') {
+        const chA = ED.rows[ar][ac], chB = ED.rows[br][bc];
+        const badPawn = (ch, r) => (ch === 'P' || ch === 'p') && (r === 0 || r === ED.n - 1);
+        if (badPawn(chA, br) || (chB !== '.' && badPawn(chB, ar))) return fail(L('Пешка не может стоять на первой и последней горизонтали.', 'A pawn cannot stand on the first or last rank.'));
+        const wall = edBaseAt(br, bc);
+        if (wall && wall.k === 'wall') return fail(L('На клетке стена: фигуру сюда не поставить.', 'There is a wall on that square: a piece cannot go there.'));
+        ED.rows[ar][ac] = chB; ED.rows[br][bc] = chA;
+        const oA = ED.robs.find(o => o.r === ar && o.c === ac), oB = ED.robs.find(o => o.r === br && o.c === bc);
+        if (oA) { oA.r = br; oA.c = bc; }
+        if (oB) { oB.r = ar; oB.c = ac; }
+    } else if (kind === 'tile') {
+        const tA = edBaseAt(ar, ac), tB = edBaseAt(br, bc);
+        if (!tA) return edRender();
+        if (tA.k === 'wall' && ED.rows[br][bc] !== '.') return fail(L('На клетке стоит фигура: стену сюда не поставить.', 'There is a piece on that square: a wall cannot go there.'));
+        if (tB && tB.k === 'wall' && ED.rows[ar][ac] !== '.') return fail(L('На клетке стоит фигура: стену сюда не поставить.', 'There is a piece on that square: a wall cannot go there.'));
+        tA.r = br; tA.c = bc;
+        if (tB) { tB.r = ar; tB.c = ac; }
+    } else {
+        const fA = edFogAt(ar, ac), fB = edFogAt(br, bc);
+        if (!fA) return edRender();
+        fA.r = br; fA.c = bc;
+        if (fB) { fB.r = ar; fB.c = ac; }
+    }
+    ED.msg = '';
+    edFixWin();
+    edRender();
+}
+function edDragStop() {
+    document.removeEventListener('pointermove', edDragMove);
+    document.removeEventListener('pointerup', edDragUp);
+    document.removeEventListener('pointercancel', edDragCancel);
+    if (edDrag && edDrag.ghost) edDrag.ghost.remove();
+}
+function edDragMove(e) {
+    const d = edDrag;
+    if (!d) return;
+    if (!d.on) {
+        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
+        const src = edCellEl(d.r, d.c);
+        if (!src) { edDragStop(); edDrag = null; return; }
+        d.on = true;
+        const rect = src.getBoundingClientRect(), g = src.cloneNode(true);
+        g.querySelectorAll('.coord').forEach(x => x.remove());
+        if (d.kind === 'piece') [...g.children].forEach(ch => { if (!ch.classList.contains('piece')) ch.remove(); });
+        else g.querySelectorAll('.piece').forEach(x => x.remove());
+        g.classList.add('ed-ghost');
+        g.style.width = rect.width + 'px'; g.style.height = rect.height + 'px';
+        g.style.setProperty('--cell', rect.width + 'px');
+        $('#edBoard').parentElement.appendChild(g);
+        d.ghost = g;
+        src.classList.add('ed-drag-src');
+    }
+    d.ghost.style.left = e.clientX + 'px'; d.ghost.style.top = e.clientY + 'px';
+    const el = document.elementFromPoint(e.clientX, e.clientY), cc = el && el.closest('#edBoard .cell');
+    if (d.over && d.over !== cc) d.over.classList.remove('ed-drop');
+    if (cc && (cc.dataset.r !== String(d.r) || cc.dataset.c !== String(d.c))) { cc.classList.add('ed-drop'); d.over = cc; } else d.over = null;
+}
+function edDragUp(e) {
+    const d = edDrag;
+    edDragStop();
+    edDrag = null;
+    if (!d || !d.on) return;
+    edNoClick = true; setTimeout(() => { edNoClick = false; }, 80);
+    const el = document.elementFromPoint(e.clientX, e.clientY), cc = el && el.closest('#edBoard .cell');
+    if (cc && (+cc.dataset.r !== d.r || +cc.dataset.c !== d.c)) edDragApply([d.r, d.c], [+cc.dataset.r, +cc.dataset.c], d.kind);
+    else edRender();
+}
+function edDragCancel() {
+    const d = edDrag;
+    edDragStop();
+    edDrag = null;
+    if (d && d.on) edRender();
+}
+$('#edBoard').addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    const r = +cell.dataset.r, c = +cell.dataset.c, kind = edDragKind(r, c, e.shiftKey || e.altKey);
+    if (!kind) return;
+    edDrag = { r, c, kind, x: e.clientX, y: e.clientY, on: false, ghost: null, over: null };
+    document.addEventListener('pointermove', edDragMove);
+    document.addEventListener('pointerup', edDragUp);
+    document.addEventListener('pointercancel', edDragCancel);
+});
+
 $('#edBoard').addEventListener('click', e => {
+    if (edNoClick) return;
     const cell = e.target.closest('.cell');
     if (!cell) return;
     const r = +cell.dataset.r, c = +cell.dataset.c;

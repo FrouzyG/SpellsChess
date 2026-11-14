@@ -7849,3 +7849,30 @@ body.piece-drag {
     background: rgba(0, 0, 0, 0.78);
     border-radius: 999px;
 }
+
+/* редактор доски: перетаскивание фигур и плиток */
+#edBoard {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+    #edBoard .cell.ed-drag-src {
+        opacity: 0.35;
+    }
+
+    #edBoard .cell.ed-drop {
+        outline: 3px solid var(--gold);
+        outline-offset: -3px;
+    }
+
+.ed-ghost {
+    position: fixed !important;
+    z-index: 99999;
+    margin: 0 !important;
+    pointer-events: none;
+    opacity: 0.9;
+    transform: translate(-50%, -50%);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+}
