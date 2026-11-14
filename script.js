@@ -344,7 +344,10 @@ const COS = {
         { id: 'bronze', ru: 'Бронзовая', en: 'Bronze' }, { id: 'violet', ru: 'Фиолетовая', en: 'Violet' },
         { id: 'toxic', ru: 'Токсичная', en: 'Toxic', orb: true }, { id: 'shadow', ru: 'Тень', en: 'Shadow', orb: true },
         { id: 'sakura', ru: 'Сакура', en: 'Sakura', orb: true }, { id: 'storm', ru: 'Гроза', en: 'Storm', orb: true },
-        { id: 'sunrise', ru: 'Рассвет', en: 'Sunrise', orb: true }, { id: 'plasma', ru: 'Плазма', en: 'Plasma', orb: true }
+        { id: 'sunrise', ru: 'Рассвет', en: 'Sunrise', orb: true }, { id: 'plasma', ru: 'Плазма', en: 'Plasma', orb: true },
+        { id: 'vines', ru: 'Лозы', en: 'Vines' }, { id: 'roots', ru: 'Корни', en: 'Roots' },
+        { id: 'filigree', ru: 'Золотая вязь', en: 'Gold filigree', orb: true }, { id: 'thorns', ru: 'Шипы', en: 'Thorns', orb: true },
+        { id: 'crystals', ru: 'Кристаллы', en: 'Crystals', orb: true }
     ],
     backs: [
         { id: 'dusk', ru: 'Закат', en: 'Sunset' }, { id: 'forest', ru: 'Лес', en: 'Forest' },
@@ -356,7 +359,9 @@ const COS = {
         { id: 'steel', ru: 'Сталь', en: 'Steel' }, { id: 'plum', ru: 'Слива', en: 'Plum' },
         { id: 'nebula', ru: 'Туманность', en: 'Nebula', orb: true }, { id: 'glacier', ru: 'Ледник', en: 'Glacier', orb: true },
         { id: 'matrix', ru: 'Матрица', en: 'Matrix', orb: true }, { id: 'candy', ru: 'Леденец', en: 'Candy', orb: true },
-        { id: 'ember', ru: 'Угли', en: 'Embers', orb: true }
+        { id: 'ember', ru: 'Угли', en: 'Embers', orb: true },
+        { id: 'portal', ru: 'Портал', en: 'Portal', orb: true }, { id: 'portalfire', ru: 'Огненный портал', en: 'Fire portal', orb: true },
+        { id: 'portaltwin', ru: 'Два портала', en: 'Twin portals', orb: true }
     ],
     ncfx: [
         { id: 'rainbow', ru: 'Радужный', en: 'Rainbow', orb: true }, { id: 'fire', ru: 'Огненный', en: 'Fire', orb: true },
