@@ -338,17 +338,34 @@ const COS = {
         { id: 'gold', ru: 'Золотая', en: 'Gold' }, { id: 'silver', ru: 'Серебряная', en: 'Silver' },
         { id: 'neon', ru: 'Неон', en: 'Neon' }, { id: 'emerald', ru: 'Изумрудная', en: 'Emerald' },
         { id: 'flame', ru: 'Пламя', en: 'Flame', orb: true }, { id: 'frost', ru: 'Мороз', en: 'Frost', orb: true },
-        { id: 'rainbow', ru: 'Радуга', en: 'Rainbow', orb: true }, { id: 'royal', ru: 'Королевская', en: 'Royal', orb: true }
+        { id: 'rainbow', ru: 'Радуга', en: 'Rainbow', orb: true }, { id: 'royal', ru: 'Королевская', en: 'Royal', orb: true },
+        { id: 'copper', ru: 'Медная', en: 'Copper' }, { id: 'sky', ru: 'Небесная', en: 'Sky' },
+        { id: 'rose', ru: 'Розовая', en: 'Rose' }, { id: 'lime', ru: 'Лаймовая', en: 'Lime' },
+        { id: 'bronze', ru: 'Бронзовая', en: 'Bronze' }, { id: 'violet', ru: 'Фиолетовая', en: 'Violet' },
+        { id: 'toxic', ru: 'Токсичная', en: 'Toxic', orb: true }, { id: 'shadow', ru: 'Тень', en: 'Shadow', orb: true },
+        { id: 'sakura', ru: 'Сакура', en: 'Sakura', orb: true }, { id: 'storm', ru: 'Гроза', en: 'Storm', orb: true },
+        { id: 'sunrise', ru: 'Рассвет', en: 'Sunrise', orb: true }, { id: 'plasma', ru: 'Плазма', en: 'Plasma', orb: true }
     ],
     backs: [
         { id: 'dusk', ru: 'Закат', en: 'Sunset' }, { id: 'forest', ru: 'Лес', en: 'Forest' },
         { id: 'ocean', ru: 'Океан', en: 'Ocean' }, { id: 'graphite', ru: 'Графит', en: 'Graphite' },
         { id: 'stars', ru: 'Звёздное небо', en: 'Starry sky', orb: true }, { id: 'lava', ru: 'Лава', en: 'Lava', orb: true },
-        { id: 'aurora', ru: 'Северное сияние', en: 'Aurora', orb: true }
+        { id: 'aurora', ru: 'Северное сияние', en: 'Aurora', orb: true },
+        { id: 'sand', ru: 'Пустыня', en: 'Desert' }, { id: 'midnight', ru: 'Полночь', en: 'Midnight' },
+        { id: 'wine', ru: 'Бордо', en: 'Burgundy' }, { id: 'mint', ru: 'Мята', en: 'Mint' },
+        { id: 'steel', ru: 'Сталь', en: 'Steel' }, { id: 'plum', ru: 'Слива', en: 'Plum' },
+        { id: 'nebula', ru: 'Туманность', en: 'Nebula', orb: true }, { id: 'glacier', ru: 'Ледник', en: 'Glacier', orb: true },
+        { id: 'matrix', ru: 'Матрица', en: 'Matrix', orb: true }, { id: 'candy', ru: 'Леденец', en: 'Candy', orb: true },
+        { id: 'ember', ru: 'Угли', en: 'Embers', orb: true }
     ],
     ncfx: [
         { id: 'rainbow', ru: 'Радужный', en: 'Rainbow', orb: true }, { id: 'fire', ru: 'Огненный', en: 'Fire', orb: true },
-        { id: 'gold', ru: 'Золотой', en: 'Golden', orb: true }
+        { id: 'gold', ru: 'Золотой', en: 'Golden', orb: true },
+        { id: 'ocean', ru: 'Морской', en: 'Ocean', orb: true }, { id: 'neon', ru: 'Неоновый', en: 'Neon', orb: true },
+        { id: 'sunset', ru: 'Закатный', en: 'Sunset', orb: true }, { id: 'acid', ru: 'Кислотный', en: 'Acid', orb: true },
+        { id: 'ice', ru: 'Ледяной', en: 'Icy', orb: true }, { id: 'candy', ru: 'Леденцовый', en: 'Candy', orb: true },
+        { id: 'silver', ru: 'Серебряный', en: 'Silver', orb: true }, { id: 'cosmic', ru: 'Космический', en: 'Cosmic', orb: true },
+        { id: 'emerald', ru: 'Изумрудный', en: 'Emerald', orb: true }
     ],
     colors: ['#ff6ec7', '#f0c75e', '#ff7a59', '#ff4d6d', '#b04dff', '#6aa9ff', '#4dd0e1', '#3ddc97', '#a3e635', '#ffffff', '#cfd6e0', '#f4a261'],
     avas: [
@@ -4721,16 +4738,16 @@ async function loadUnlocks() {
 }
 
 function orbBarHTML() {
-    return `<div class="orb-bar"><div class="orb-line"><span class="orb-ball ${UNL.orbs ? 'full' : ''}">🔮</span> ${L('Магические шары', 'Magic orbs')}: <b>${UNL.orbs ? 1 : 0}/1</b></div>` +
-        `<div class="orb-sub">${L('Заблокированный герой стоит 1 шар. Шар дают после каждой рейтинговой партии (победа, поражение или ничья). В банке максимум один шар.', 'A locked hero costs 1 orb. You get one orb after every rated game (win, loss or draw). The bank holds at most one orb.')}</div></div>`;
+    return `<div class="orb-bar"><div class="orb-line"><span class="orb-ball ${UNL.orbs ? 'full' : ''}">🔮</span> ${L('Магические шары', 'Magic orbs')}: <b>${UNL.orbs}/100</b></div>` +
+        `<div class="orb-sub">${L('Заблокированный герой стоит 1 шар. Шар дают после каждой рейтинговой партии (победа, поражение или ничья). В банке помещается до 100 шаров.', 'A locked hero costs 1 orb. You get one orb after every rated game (win, loss or draw). The bank holds up to 100 orbs.')}</div></div>`;
 }
 
 function showOrbNote(gained) {
     let el = document.getElementById('goOrb');
     if (!el) { el = document.createElement('div'); el.id = 'goOrb'; el.className = 'go-orb'; $('#goText').insertAdjacentElement('afterend', el); }
     el.textContent = gained
-        ? L('🔮 Вы получили магический шар! Потратьте его на героя при выборе в следующей рейтинговой партии.', '🔮 You got a magic orb! Spend it on a hero on the pick screen of your next rated game.')
-        : L('🔮 Шар не выдан: в банке уже лежит один. Потратьте его на героя.', '🔮 No orb this time: your bank already holds one. Spend it on a hero.');
+        ? L('🔮 Вы получили магический шар! Потратьте его в коллекции: на героя или на кастомизацию.', '🔮 You got a magic orb! Spend it in the collection: on a hero or on customization.')
+        : L('🔮 Шар не выдан: банк полон (100 шаров). Потратьте шары в коллекции.', '🔮 No orb this time: your bank is full (100 orbs). Spend some in the collection.');
 }
 
 // Открыть героя за шар: подтверждение, запрос в Supabase, анимация замка
@@ -4776,7 +4793,7 @@ function refreshHeroViews() {
 
 /* ---------- Коллекция героев: читать про героев и открывать закрытых за шар ---------- */
 const collOpen = new Set();   // у каких героев в коллекции раскрыто «Подробнее»
-const COLL = { tab: 'heroes', busy: false };      // вкладка коллекции и защита от двойного нажатия
+const COLL = { tab: 'heroes', busy: false, achs: [], achLoaded: false, open: new Set() };      // вкладка коллекции и защита от двойного нажатия
 function heroesCollHTML() {
     const ids = Object.keys(HEROES);
     const have = ids.filter(heroOpen).length;
@@ -4808,26 +4825,34 @@ function cusItems(kind, list, cur, mini) {
     }).join('');
 }
 const cusNone = (kind, cur) => `<button class="cus-item${!cur ? ' chosen' : ''}" data-cus="${kind}:none" type="button"><span class="cus-mini"></span><span class="cus-nm">${L('Без', 'None')}</span></button>`;
-const cusSec = (title, sub, body) => `<h3 class="cus-h">${title}</h3>${sub ? `<div class="cus-sub">${sub}</div>` : ''}${body}`;
+const cusSec = (key, title, sub, body) => { const o = COLL.open.has(key); return `<button class="cus-h cus-fold${o ? ' open' : ''}" data-fold="${key}" type="button"><span>${title}</span><span class="cus-arr">${o ? '▴' : '▾'}</span></button>${o ? `${sub ? `<div class="cus-sub">${sub}</div>` : ''}${body}` : ''}`; };
 function cusHTML() {
     const logged = !!(SB && ACC.user && ACC.profile);
     const cos = cosClean(logged ? ACC.profile.cosmetics : null);
     let h = logged
-        ? `<div class="orb-bar"><div class="orb-line"><span class="orb-ball ${UNL.orbs ? 'full' : ''}">🔮</span> ${L('Магические шары', 'Magic orbs')}: <b>${UNL.orbs ? 1 : 0}/1</b></div><div class="orb-sub">${L('Предметы со значком 🔮 открываются за 1 шар и остаются у вас навсегда. Шар дают после каждой рейтинговой партии (победа, поражение или ничья).', 'Items marked 🔮 cost 1 orb and stay yours for good. You get one orb after every rated game (win, loss or draw).')}</div></div>`
+        ? `<div class="orb-bar"><div class="orb-line"><span class="orb-ball ${UNL.orbs ? 'full' : ''}">🔮</span> ${L('Магические шары', 'Magic orbs')}: <b>${UNL.orbs}/100</b></div><div class="orb-sub">${L('Предметы со значком 🔮 открываются за 1 шар и остаются у вас навсегда. Шар дают после каждой рейтинговой партии (победа, поражение или ничья).', 'Items marked 🔮 cost 1 orb and stay yours for good. You get one orb after every rated game (win, loss or draw).')}</div></div>`
         : `<div class="orb-bar"><div class="orb-sub">${L('Войдите в аккаунт, чтобы менять рамку, фон карточки, аватарку и цвет ника. Доску можно менять и без входа.', 'Sign in to change your card frame, background, avatar and nickname colour. The board can be changed without signing in.')}</div></div>`;
     const hero = HEROES.paladin || Object.values(HEROES)[0];
     const nick = logged ? ACC.profile.nick : L('Ваш ник', 'Your nick');
     h += `<div class="cus-prevwrap"><div class="panel h-paladin${cos.frame ? ' fr-' + cos.frame : ''}${cos.bg ? ' bg-' + cos.bg : ''} cus-prev"><div class="panel-head"><span class="hero-icon">${hero.icon}</span><div><div class="pname">${L('Белые', 'White')}</div><div class="hname">${hero.name}</div><div class="pnick" data-notr><span class="pn-ava">${avaHTML(logged ? ACC.profile.avatar : '')}</span><span class="pn-name${nickCls(cos.nc)}"${nickStyle(cos.nc)}>${escH(nick)}</span></div></div></div></div><div class="cus-sub">${L('Так вашу карточку видит соперник в онлайн-партии.', 'This is how your opponent sees your card in an online game.')}</div></div>`;
-    h += cusSec(L('🎨 Доска', '🎨 Board'), L('Доску видите только вы: у соперника онлайн своя.', 'Only you see your board: your opponent has their own.'),
+    h += cusSec('board', L('🎨 Доска', '🎨 Board'), L('Доску видите только вы: у соперника онлайн своя.', 'Only you see your board: your opponent has their own.'),
         `<div class="cus-boards">${THEMES.map(t => `<button class="theme-btn ${t.id === themeId ? 'chosen' : ''}" data-theme="${t.id}" type="button"><span class="tp"><i style="background:${t.light}"></i><i style="background:${t.dark}"></i><i style="background:${t.dark}"></i><i style="background:${t.light}"></i></span><span>${t.name}</span></button>`).join('')}</div>`);
-    h += cusSec(L('🖼 Рамка карточки героя', '🖼 Hero card frame'), '',
+    h += cusSec('frame', L('🖼 Рамка карточки героя', '🖼 Hero card frame'), '',
         `<div class="cus-grid">${cusNone('frame', cos.frame)}${cusItems('frame', COS.frames, cos.frame, it => `<span class="cus-mini fr-${it.id}"></span>`)}</div>`);
-    h += cusSec(L('🌄 Фон карточки героя', '🌄 Hero card background'), '',
+    h += cusSec('bg', L('🌄 Фон карточки героя', '🌄 Hero card background'), '',
         `<div class="cus-grid">${cusNone('bg', cos.bg)}${cusItems('bg', COS.backs, cos.bg, it => `<span class="cus-mini bg-${it.id}"></span>`)}</div>`);
-    h += cusSec(L('👤 Аватарки', '👤 Avatars'), L('Обычные аватарки выбираются в профиле (кнопка «Сменить аватар»), там же появляются и эти.', 'Regular avatars are picked in your profile ("Change avatar"); these show up there too.'),
-        `<div class="cus-grid cus-avagrid">${cusItems('ava', COS.avas, logged ? String(ACC.profile.avatar || '').replace(/^ava:/, '') : '', it => `<span class="cus-ava">${avaHTML('ava:' + it.id)}</span>`)}</div>`);
+    const curAva = logged ? String(ACC.profile.avatar || '') : '';
+    const avBtn = (val, lock, orb) => `<button class="cus-av${curAva === val ? ' chosen' : ''}${lock ? ' locked' : ''}" data-cav="${escH(val)}" type="button"><span class="cus-ava">${avaHTML(val)}</span>${orb ? `<span class="cus-orb">${lock ? '🔮 1' : '🔮'}</span>` : ''}</button>`;
+    const avList = [
+        ...COLL.achs.map(v => avBtn(v, false, false)),
+        ...COS.avas.filter(a => a.orb).map(a => avBtn('ava:' + a.id, !cosOwned('ava', a), true)),
+        ...COS.avas.filter(a => !a.orb).map(a => avBtn('ava:' + a.id, false, false)),
+        ...AVATARS.map(v => avBtn(v, false, false))
+    ];
+    h += cusSec('ava', L('👤 Аватарки', '👤 Avatars'), L('Нажмите на аватарку, чтобы выбрать её. Аватарки со значком 🔮 стоят 1 шар и остаются у вас навсегда.', 'Tap an avatar to pick it. Avatars marked 🔮 cost 1 orb and stay yours for good.'),
+        `<div class="cus-grid cus-avagrid">${avList.join('')}</div>`);
     const cur = cos.nc;
-    h += cusSec(L('✏️ Цвет ника', '✏️ Nickname colour'), L('Цвет виден на карточке в онлайн-партии и в профиле. Слишком тёмные цвета автоматически осветляются.', 'The colour shows on your card in online games and in your profile. Very dark colours are lightened automatically.'),
+    h += cusSec('nick', L('✏️ Цвет ника', '✏️ Nickname colour'), L('Цвет виден на карточке в онлайн-партии и в профиле. Слишком тёмные цвета автоматически осветляются.', 'The colour shows on your card in online games and in your profile. Very dark colours are lightened automatically.'),
         `<div class="cus-colors"><button class="cus-color none${!cur ? ' chosen' : ''}" data-cus="nc:none" type="button" title="${L('Без цвета', 'No colour')}">✕</button>${COS.colors.map(c => `<button class="cus-color${cur === c ? ' chosen' : ''}" data-cus="nc:${c}" type="button" style="background:${c}"></button>`).join('')}<label class="cus-color pick" title="${L('Свой цвет', 'Custom colour')}">🎨<input type="color" id="cusColor" value="${/^#/.test(cur) ? cur : '#ff6ec7'}"></label></div>
         <div class="cus-grid">${cusItems('nc', COS.ncfx, cur, it => `<span class="cus-nick${nickCls(it.id)}">${L('Ник', 'Nick')}</span>`)}</div>`);
     return h;
@@ -4869,9 +4894,31 @@ async function cusPick(key) {
     } finally { COLL.busy = false; }
 }
 
+async function loadCollAchs() {      // картинки-достижения, которые есть у игрока
+    try {
+        const r = await SB.from('user_achievements').select('ach').eq('user_id', ACC.user.id);
+        COLL.achs = (r.data || []).map(x => x.ach).filter(a => ACH[a] && ACH[a].img).map(a => 'ach:' + a);
+    } catch (e) { /* останутся обычные аватарки */ }
+    if (!$('#coll').classList.contains('hidden') && COLL.tab === 'cus') renderCollection();
+}
+async function cavPick(v) {      // выбор аватарки из коллекции: обычная, достижение или новая
+    if (!SB || !ACC.user || !ACC.profile) { uiAlert(L('Войдите в аккаунт, чтобы менять аватарку.', 'Sign in to change your avatar.')); return; }
+    if (v.startsWith('ava:')) { cusPick('ava:' + v.slice(4)); return; }
+    if (!AVATARS.includes(v) && !COLL.achs.includes(v)) return;
+    if (COLL.busy) return;
+    COLL.busy = true;
+    try {
+        const { error } = await SB.rpc('set_avatar', { p_avatar: v });
+        if (error) { uiAlert(authError(error)); return; }
+        ACC.loading = false; await loadProfile();
+        if (!$('#coll').classList.contains('hidden')) renderCollection();
+    } finally { COLL.busy = false; }
+}
+
 function renderCollection() {
     const tab = COLL.tab;
     let html = `<div class="coll-tabs"><button type="button" data-ctab="heroes" class="${tab === 'heroes' ? 'on' : ''}">${L('Герои', 'Heroes')}</button><button type="button" data-ctab="cus" class="${tab === 'cus' ? 'on' : ''}">${L('Кастомизация', 'Customization')}</button></div>`;
+    if (tab === 'cus' && SB && ACC.user && !COLL.achLoaded) { COLL.achLoaded = true; loadCollAchs(); }
     html += tab === 'cus' ? cusHTML() : heroesCollHTML();
     const ov = $('#coll'), top = ov.scrollTop;
     $('#collBody').innerHTML = html;
@@ -8804,7 +8851,7 @@ async function openAvatarPick() {
     await loadUnlocks();      // новые аватарки из коллекции: бесплатные и уже открытые за шар
     COS.avas.filter(it => !it.orb || cosOwned('ava', it)).forEach(it => {
         const b = document.createElement('button');
-        b.setAttribute('data-notr', ''); b.title = cosNm(it);
+        b.setAttribute('data-notr', '');
         b.appendChild(avaNode('ava:' + it.id));
         b.addEventListener('click', async () => {
             const { error } = await SB.rpc('set_avatar_item', { p_ava: 'ava:' + it.id });
@@ -8855,6 +8902,10 @@ $('#collClose').addEventListener('click', () => $('#coll').classList.add('hidden
 $('#collBody').addEventListener('click', e => {
     const tb = e.target.closest('[data-ctab]');
     if (tb) { COLL.tab = tb.dataset.ctab; renderCollection(); return; }
+    const fb = e.target.closest('[data-fold]');
+    if (fb) { const k = fb.dataset.fold; if (COLL.open.has(k)) COLL.open.delete(k); else COLL.open.add(k); renderCollection(); return; }
+    const cv = e.target.closest('[data-cav]');
+    if (cv) { cavPick(cv.dataset.cav); return; }
     const cb = e.target.closest('[data-cus]');
     if (cb) { cusPick(cb.dataset.cus); return; }
     const th = e.target.closest('[data-theme]');

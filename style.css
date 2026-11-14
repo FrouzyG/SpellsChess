@@ -7186,3 +7186,638 @@ body.piece-drag {
 .panel[class*="h-"].fr-royal.bg-aurora, .cus-mini.fr-royal.bg-aurora {
     animation: frRoyal 2.4s ease-in-out infinite alternate, bgFlow 12s ease-in-out infinite;
 }
+
+/* ===================== Ещё рамки ===================== */
+.cus-av {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 4px;
+    color: inherit;
+    background: rgba(255,255,255,.05);
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+    .cus-av.chosen {
+        border-color: var(--gold);
+        box-shadow: 0 0 12px rgba(240,199,94,.4);
+    }
+
+    .cus-av.locked {
+        opacity: .8;
+    }
+
+.cus-avagrid {
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+}
+
+@keyframes frToxic {
+    from {
+        border-color: #7dff3a;
+        box-shadow: 0 0 8px #3ddc1a;
+    }
+
+    to {
+        border-color: #2bbd1a;
+        box-shadow: 0 0 26px #7dff3a;
+    }
+}
+
+@keyframes frShadow {
+    from {
+        border-color: #3a1c5a;
+        box-shadow: 0 0 8px #1a0a2e;
+    }
+
+    to {
+        border-color: #9b4dff;
+        box-shadow: 0 0 26px #6b2fb0;
+    }
+}
+
+@keyframes frSakura {
+    from {
+        border-color: #ffc1d9;
+        box-shadow: 0 0 8px #ff9fc4;
+    }
+
+    to {
+        border-color: #ff7fb0;
+        box-shadow: 0 0 26px #ffc1d9;
+    }
+}
+
+@keyframes frStorm {
+    from {
+        border-color: #6ab7ff;
+        box-shadow: 0 0 10px #6ab7ff;
+    }
+
+    to {
+        border-color: #ffffff;
+        box-shadow: 0 0 30px #d6ecff;
+    }
+}
+
+@keyframes frSunrise {
+    0% {
+        border-color: #ff9a3c;
+        box-shadow: 0 0 14px #ff9a3c;
+    }
+
+    33% {
+        border-color: #ff5f8a;
+        box-shadow: 0 0 14px #ff5f8a;
+    }
+
+    66% {
+        border-color: #ffd54a;
+        box-shadow: 0 0 14px #ffd54a;
+    }
+
+    100% {
+        border-color: #ff9a3c;
+        box-shadow: 0 0 14px #ff9a3c;
+    }
+}
+
+@keyframes frPlasma {
+    0% {
+        border-color: #ff3fd8;
+        box-shadow: 0 0 14px #ff3fd8;
+    }
+
+    33% {
+        border-color: #7a5cff;
+        box-shadow: 0 0 14px #7a5cff;
+    }
+
+    66% {
+        border-color: #3fe0ff;
+        box-shadow: 0 0 14px #3fe0ff;
+    }
+
+    100% {
+        border-color: #ff3fd8;
+        box-shadow: 0 0 14px #ff3fd8;
+    }
+}
+
+.panel[class*="h-"].fr-copper, .cus-mini.fr-copper {
+    border: 4px ridge #c77d4a !important;
+    box-shadow: 0 0 10px rgba(199,125,74,.55) !important;
+}
+
+    .panel[class*="h-"].fr-copper.active {
+        box-shadow: 0 0 20px rgba(230,150,90,.9) !important;
+    }
+
+.panel[class*="h-"].fr-sky, .cus-mini.fr-sky {
+    border: 3px solid #6aa9ff !important;
+    box-shadow: 0 0 12px rgba(106,169,255,.6) !important;
+}
+
+    .panel[class*="h-"].fr-sky.active {
+        box-shadow: 0 0 22px rgba(150,200,255,.95) !important;
+    }
+
+.panel[class*="h-"].fr-rose, .cus-mini.fr-rose {
+    border: 4px dotted #ff8fb5 !important;
+    box-shadow: 0 0 10px rgba(255,143,181,.55) !important;
+}
+
+    .panel[class*="h-"].fr-rose.active {
+        box-shadow: 0 0 20px rgba(255,170,200,.95) !important;
+    }
+
+.panel[class*="h-"].fr-lime, .cus-mini.fr-lime {
+    border: 3px solid #a3e635 !important;
+    box-shadow: 0 0 10px rgba(163,230,53,.55) !important;
+}
+
+    .panel[class*="h-"].fr-lime.active {
+        box-shadow: 0 0 20px rgba(190,250,90,.95) !important;
+    }
+
+.panel[class*="h-"].fr-bronze, .cus-mini.fr-bronze {
+    border: 5px groove #b08d57 !important;
+    box-shadow: 0 0 10px rgba(176,141,87,.55) !important;
+}
+
+    .panel[class*="h-"].fr-bronze.active {
+        box-shadow: 0 0 20px rgba(210,170,110,.9) !important;
+    }
+
+.panel[class*="h-"].fr-violet, .cus-mini.fr-violet {
+    border: 4px double #a370ff !important;
+    box-shadow: 0 0 12px rgba(163,112,255,.6) !important;
+}
+
+    .panel[class*="h-"].fr-violet.active {
+        box-shadow: 0 0 22px rgba(190,150,255,.95) !important;
+    }
+
+.panel[class*="h-"].fr-toxic, .cus-mini.fr-toxic {
+    border: 3px solid #7dff3a;
+    box-shadow: 0 0 12px #3ddc1a;
+    animation: frToxic 1.6s ease-in-out infinite alternate;
+}
+
+    .panel[class*="h-"].fr-toxic.bg-stars, .cus-mini.fr-toxic.bg-stars {
+        animation: frToxic 1.6s ease-in-out infinite alternate, bgDrift 30s linear infinite;
+    }
+
+    .panel[class*="h-"].fr-toxic.bg-lava, .cus-mini.fr-toxic.bg-lava {
+        animation: frToxic 1.6s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+    }
+
+    .panel[class*="h-"].fr-toxic.bg-aurora, .cus-mini.fr-toxic.bg-aurora {
+        animation: frToxic 1.6s ease-in-out infinite alternate, bgFlow 12s ease-in-out infinite;
+    }
+
+.panel[class*="h-"].fr-shadow, .cus-mini.fr-shadow {
+    border: 4px double #6b2fb0;
+    box-shadow: 0 0 12px #3a1c5a;
+    animation: frShadow 2.6s ease-in-out infinite alternate;
+}
+
+    .panel[class*="h-"].fr-shadow.bg-stars, .cus-mini.fr-shadow.bg-stars {
+        animation: frShadow 2.6s ease-in-out infinite alternate, bgDrift 30s linear infinite;
+    }
+
+    .panel[class*="h-"].fr-shadow.bg-lava, .cus-mini.fr-shadow.bg-lava {
+        animation: frShadow 2.6s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+    }
+
+    .panel[class*="h-"].fr-shadow.bg-aurora, .cus-mini.fr-shadow.bg-aurora {
+        animation: frShadow 2.6s ease-in-out infinite alternate, bgFlow 12s ease-in-out infinite;
+    }
+
+.panel[class*="h-"].fr-sakura, .cus-mini.fr-sakura {
+    border: 3px solid #ffc1d9;
+    box-shadow: 0 0 12px #ff9fc4;
+    animation: frSakura 2.4s ease-in-out infinite alternate;
+}
+
+    .panel[class*="h-"].fr-sakura.bg-stars, .cus-mini.fr-sakura.bg-stars {
+        animation: frSakura 2.4s ease-in-out infinite alternate, bgDrift 30s linear infinite;
+    }
+
+    .panel[class*="h-"].fr-sakura.bg-lava, .cus-mini.fr-sakura.bg-lava {
+        animation: frSakura 2.4s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+    }
+
+    .panel[class*="h-"].fr-sakura.bg-aurora, .cus-mini.fr-sakura.bg-aurora {
+        animation: frSakura 2.4s ease-in-out infinite alternate, bgFlow 12s ease-in-out infinite;
+    }
+
+.panel[class*="h-"].fr-storm, .cus-mini.fr-storm {
+    border: 3px solid #6ab7ff;
+    box-shadow: 0 0 12px #6ab7ff;
+    animation: frStorm 1.1s steps(2, end) infinite alternate;
+}
+
+    .panel[class*="h-"].fr-storm.bg-stars, .cus-mini.fr-storm.bg-stars {
+        animation: frStorm 1.1s steps(2, end) infinite alternate, bgDrift 30s linear infinite;
+    }
+
+    .panel[class*="h-"].fr-storm.bg-lava, .cus-mini.fr-storm.bg-lava {
+        animation: frStorm 1.1s steps(2, end) infinite alternate, bgFlow 8s ease-in-out infinite;
+    }
+
+    .panel[class*="h-"].fr-storm.bg-aurora, .cus-mini.fr-storm.bg-aurora {
+        animation: frStorm 1.1s steps(2, end) infinite alternate, bgFlow 12s ease-in-out infinite;
+    }
+
+.panel[class*="h-"].fr-sunrise, .cus-mini.fr-sunrise {
+    border: 3px solid #ff9a3c;
+    box-shadow: 0 0 12px #ff9a3c;
+    animation: frSunrise 5s linear infinite;
+}
+
+    .panel[class*="h-"].fr-sunrise.bg-stars, .cus-mini.fr-sunrise.bg-stars {
+        animation: frSunrise 5s linear infinite, bgDrift 30s linear infinite;
+    }
+
+    .panel[class*="h-"].fr-sunrise.bg-lava, .cus-mini.fr-sunrise.bg-lava {
+        animation: frSunrise 5s linear infinite, bgFlow 8s ease-in-out infinite;
+    }
+
+    .panel[class*="h-"].fr-sunrise.bg-aurora, .cus-mini.fr-sunrise.bg-aurora {
+        animation: frSunrise 5s linear infinite, bgFlow 12s ease-in-out infinite;
+    }
+
+.panel[class*="h-"].fr-plasma, .cus-mini.fr-plasma {
+    border: 4px double #ff3fd8;
+    box-shadow: 0 0 12px #ff3fd8;
+    animation: frPlasma 3s linear infinite;
+}
+
+    .panel[class*="h-"].fr-plasma.bg-stars, .cus-mini.fr-plasma.bg-stars {
+        animation: frPlasma 3s linear infinite, bgDrift 30s linear infinite;
+    }
+
+    .panel[class*="h-"].fr-plasma.bg-lava, .cus-mini.fr-plasma.bg-lava {
+        animation: frPlasma 3s linear infinite, bgFlow 8s ease-in-out infinite;
+    }
+
+    .panel[class*="h-"].fr-plasma.bg-aurora, .cus-mini.fr-plasma.bg-aurora {
+        animation: frPlasma 3s linear infinite, bgFlow 12s ease-in-out infinite;
+    }
+
+/* ===================== Сворачиваемые категории, ещё фоны и ники ===================== */
+.cus-fold {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin: 10px 0 6px;
+    padding: 10px 12px;
+    color: inherit;
+    background: rgba(255,255,255,.07);
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+    .cus-fold.open {
+        border-color: var(--gold);
+    }
+
+.cus-arr {
+    opacity: .8;
+}
+
+@keyframes bgScrollY {
+    from {
+        background-position: 0 0, 0 0;
+    }
+
+    to {
+        background-position: 0 80px, 0 0;
+    }
+}
+
+@keyframes bgFlowY {
+    0%, 100% {
+        background-position: 50% 0%;
+    }
+
+    50% {
+        background-position: 50% 100%;
+    }
+}
+
+.nc-ocean,
+.nc-neon,
+.nc-sunset,
+.nc-acid,
+.nc-ice,
+.nc-candy,
+.nc-silver,
+.nc-cosmic,
+.nc-emerald {
+    color: transparent !important;
+    -webkit-background-clip: text;
+    background-clip: text;
+    background-size: 200% 100%;
+    animation: ncFlow 3s linear infinite;
+    font-weight: 700;
+}
+
+.nc-ocean {
+    background-image: linear-gradient(90deg, #0a7fff, #00e5d0, #7df9ff, #00e5d0, #0a7fff);
+}
+
+.nc-neon {
+    background-image: linear-gradient(90deg, #ff2bd6, #7a5cff, #2bf0ff, #7a5cff, #ff2bd6);
+}
+
+.nc-sunset {
+    background-image: linear-gradient(90deg, #ff512f, #f09819, #ff5f8a, #f09819, #ff512f);
+}
+
+.nc-acid {
+    background-image: linear-gradient(90deg, #b6ff00, #00ff9d, #f4ff52, #00ff9d, #b6ff00);
+}
+
+.nc-ice {
+    background-image: linear-gradient(90deg, #7fdcff, #ffffff, #b6e8ff, #ffffff, #7fdcff);
+}
+
+.nc-candy {
+    background-image: linear-gradient(90deg, #ff8fd1, #ffd27f, #8ff0e1, #c9a8ff, #ff8fd1);
+}
+
+.nc-silver {
+    background-image: linear-gradient(90deg, #9aa4b2, #ffffff, #cfd6e0, #ffffff, #9aa4b2);
+}
+
+.nc-cosmic {
+    background-image: linear-gradient(90deg, #6a3df0, #e04bd6, #3fa9ff, #e04bd6, #6a3df0);
+}
+
+.nc-emerald {
+    background-image: linear-gradient(90deg, #0f9d58, #7dffb5, #34e39a, #7dffb5, #0f9d58);
+}
+
+.panel[class*="h-"].bg-sand, .cus-mini.bg-sand {
+    background: linear-gradient(160deg, #4a3a22, #8a6d3b 60%, #c9a35d);
+}
+
+.panel[class*="h-"].bg-midnight, .cus-mini.bg-midnight {
+    background: linear-gradient(160deg, #05060f, #10163a);
+}
+
+.panel[class*="h-"].bg-wine, .cus-mini.bg-wine {
+    background: linear-gradient(150deg, #2a0612, #6d1630 65%, #9a2447);
+}
+
+.panel[class*="h-"].bg-mint, .cus-mini.bg-mint {
+    background: linear-gradient(160deg, #0c2b2a, #1b6b62 60%, #47b8a0);
+}
+
+.panel[class*="h-"].bg-steel, .cus-mini.bg-steel {
+    background: linear-gradient(145deg, #23303d, #4a5f73 60%, #7c93a8);
+}
+
+.panel[class*="h-"].bg-plum, .cus-mini.bg-plum {
+    background: linear-gradient(150deg, #2a1033, #5d2a73 60%, #8f4aa8);
+}
+
+.panel[class*="h-"].bg-nebula, .cus-mini.bg-nebula {
+    background: linear-gradient(125deg, #0b0420, #4a1d8f, #c13a9a, #2b5cff, #0b0420);
+    background-size: 300% 300%;
+    animation: bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-flame.bg-nebula, .cus-mini.fr-flame.bg-nebula {
+    animation: frFlame 1.3s ease-in-out infinite alternate, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-frost.bg-nebula, .cus-mini.fr-frost.bg-nebula {
+    animation: frFrost 2.2s ease-in-out infinite alternate, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-rainbow.bg-nebula, .cus-mini.fr-rainbow.bg-nebula {
+    animation: frRainbow 4s linear infinite, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-royal.bg-nebula, .cus-mini.fr-royal.bg-nebula {
+    animation: frRoyal 2.4s ease-in-out infinite alternate, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-toxic.bg-nebula, .cus-mini.fr-toxic.bg-nebula {
+    animation: frToxic 1.6s ease-in-out infinite alternate, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-shadow.bg-nebula, .cus-mini.fr-shadow.bg-nebula {
+    animation: frShadow 2.6s ease-in-out infinite alternate, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-sakura.bg-nebula, .cus-mini.fr-sakura.bg-nebula {
+    animation: frSakura 2.4s ease-in-out infinite alternate, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-storm.bg-nebula, .cus-mini.fr-storm.bg-nebula {
+    animation: frStorm 1.1s steps(2, end) infinite alternate, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-sunrise.bg-nebula, .cus-mini.fr-sunrise.bg-nebula {
+    animation: frSunrise 5s linear infinite, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-plasma.bg-nebula, .cus-mini.fr-plasma.bg-nebula {
+    animation: frPlasma 3s linear infinite, bgFlow 10s ease-in-out infinite;
+}
+
+.panel[class*="h-"].bg-glacier, .cus-mini.bg-glacier {
+    background: linear-gradient(rgba(5,20,35,.45), rgba(5,20,35,.45)), linear-gradient(125deg, #06243a, #1a7fb5, #bff2ff, #1a7fb5, #06243a);
+    background-size: 100% 100%, 300% 300%;
+    animation: bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-flame.bg-glacier, .cus-mini.fr-flame.bg-glacier {
+    animation: frFlame 1.3s ease-in-out infinite alternate, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-frost.bg-glacier, .cus-mini.fr-frost.bg-glacier {
+    animation: frFrost 2.2s ease-in-out infinite alternate, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-rainbow.bg-glacier, .cus-mini.fr-rainbow.bg-glacier {
+    animation: frRainbow 4s linear infinite, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-royal.bg-glacier, .cus-mini.fr-royal.bg-glacier {
+    animation: frRoyal 2.4s ease-in-out infinite alternate, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-toxic.bg-glacier, .cus-mini.fr-toxic.bg-glacier {
+    animation: frToxic 1.6s ease-in-out infinite alternate, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-shadow.bg-glacier, .cus-mini.fr-shadow.bg-glacier {
+    animation: frShadow 2.6s ease-in-out infinite alternate, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-sakura.bg-glacier, .cus-mini.fr-sakura.bg-glacier {
+    animation: frSakura 2.4s ease-in-out infinite alternate, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-storm.bg-glacier, .cus-mini.fr-storm.bg-glacier {
+    animation: frStorm 1.1s steps(2, end) infinite alternate, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-sunrise.bg-glacier, .cus-mini.fr-sunrise.bg-glacier {
+    animation: frSunrise 5s linear infinite, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-plasma.bg-glacier, .cus-mini.fr-plasma.bg-glacier {
+    animation: frPlasma 3s linear infinite, bgFlow 9s ease-in-out infinite;
+}
+
+.panel[class*="h-"].bg-matrix, .cus-mini.bg-matrix {
+    background-color: #020a04;
+    background-image: repeating-linear-gradient(0deg, rgba(40,255,100,0) 0 6px, rgba(40,255,100,.18) 6px 8px), linear-gradient(180deg, #02110a, #04301a);
+    background-size: 100% 80px, 100% 100%;
+    background-repeat: repeat, no-repeat;
+    animation: bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-flame.bg-matrix, .cus-mini.fr-flame.bg-matrix {
+    animation: frFlame 1.3s ease-in-out infinite alternate, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-frost.bg-matrix, .cus-mini.fr-frost.bg-matrix {
+    animation: frFrost 2.2s ease-in-out infinite alternate, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-rainbow.bg-matrix, .cus-mini.fr-rainbow.bg-matrix {
+    animation: frRainbow 4s linear infinite, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-royal.bg-matrix, .cus-mini.fr-royal.bg-matrix {
+    animation: frRoyal 2.4s ease-in-out infinite alternate, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-toxic.bg-matrix, .cus-mini.fr-toxic.bg-matrix {
+    animation: frToxic 1.6s ease-in-out infinite alternate, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-shadow.bg-matrix, .cus-mini.fr-shadow.bg-matrix {
+    animation: frShadow 2.6s ease-in-out infinite alternate, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-sakura.bg-matrix, .cus-mini.fr-sakura.bg-matrix {
+    animation: frSakura 2.4s ease-in-out infinite alternate, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-storm.bg-matrix, .cus-mini.fr-storm.bg-matrix {
+    animation: frStorm 1.1s steps(2, end) infinite alternate, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-sunrise.bg-matrix, .cus-mini.fr-sunrise.bg-matrix {
+    animation: frSunrise 5s linear infinite, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].fr-plasma.bg-matrix, .cus-mini.fr-plasma.bg-matrix {
+    animation: frPlasma 3s linear infinite, bgScrollY 4s linear infinite;
+}
+
+.panel[class*="h-"].bg-candy, .cus-mini.bg-candy {
+    background: linear-gradient(rgba(25,10,35,.6), rgba(25,10,35,.6)), linear-gradient(125deg, #ff9acb, #ffd6a5, #b5f2ea, #c6b5ff, #ff9acb);
+    background-size: 100% 100%, 300% 300%;
+    animation: bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-flame.bg-candy, .cus-mini.fr-flame.bg-candy {
+    animation: frFlame 1.3s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-frost.bg-candy, .cus-mini.fr-frost.bg-candy {
+    animation: frFrost 2.2s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-rainbow.bg-candy, .cus-mini.fr-rainbow.bg-candy {
+    animation: frRainbow 4s linear infinite, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-royal.bg-candy, .cus-mini.fr-royal.bg-candy {
+    animation: frRoyal 2.4s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-toxic.bg-candy, .cus-mini.fr-toxic.bg-candy {
+    animation: frToxic 1.6s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-shadow.bg-candy, .cus-mini.fr-shadow.bg-candy {
+    animation: frShadow 2.6s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-sakura.bg-candy, .cus-mini.fr-sakura.bg-candy {
+    animation: frSakura 2.4s ease-in-out infinite alternate, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-storm.bg-candy, .cus-mini.fr-storm.bg-candy {
+    animation: frStorm 1.1s steps(2, end) infinite alternate, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-sunrise.bg-candy, .cus-mini.fr-sunrise.bg-candy {
+    animation: frSunrise 5s linear infinite, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-plasma.bg-candy, .cus-mini.fr-plasma.bg-candy {
+    animation: frPlasma 3s linear infinite, bgFlow 8s ease-in-out infinite;
+}
+
+.panel[class*="h-"].bg-ember, .cus-mini.bg-ember {
+    background: linear-gradient(180deg, #1a0500, #4a0d00, #ff5a00, #4a0d00, #1a0500);
+    background-size: 100% 300%;
+    animation: bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-flame.bg-ember, .cus-mini.fr-flame.bg-ember {
+    animation: frFlame 1.3s ease-in-out infinite alternate, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-frost.bg-ember, .cus-mini.fr-frost.bg-ember {
+    animation: frFrost 2.2s ease-in-out infinite alternate, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-rainbow.bg-ember, .cus-mini.fr-rainbow.bg-ember {
+    animation: frRainbow 4s linear infinite, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-royal.bg-ember, .cus-mini.fr-royal.bg-ember {
+    animation: frRoyal 2.4s ease-in-out infinite alternate, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-toxic.bg-ember, .cus-mini.fr-toxic.bg-ember {
+    animation: frToxic 1.6s ease-in-out infinite alternate, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-shadow.bg-ember, .cus-mini.fr-shadow.bg-ember {
+    animation: frShadow 2.6s ease-in-out infinite alternate, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-sakura.bg-ember, .cus-mini.fr-sakura.bg-ember {
+    animation: frSakura 2.4s ease-in-out infinite alternate, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-storm.bg-ember, .cus-mini.fr-storm.bg-ember {
+    animation: frStorm 1.1s steps(2, end) infinite alternate, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-sunrise.bg-ember, .cus-mini.fr-sunrise.bg-ember {
+    animation: frSunrise 5s linear infinite, bgFlowY 7s ease-in-out infinite;
+}
+
+.panel[class*="h-"].fr-plasma.bg-ember, .cus-mini.fr-plasma.bg-ember {
+    animation: frPlasma 3s linear infinite, bgFlowY 7s ease-in-out infinite;
+}
