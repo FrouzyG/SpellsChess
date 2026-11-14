@@ -5075,7 +5075,7 @@ function maybeStart() {
     netSend({ t: 'start', ...NET.lastStart });
     selectedHeroes = heroes;
     NET.ready = false; NET.oppReady = false;
-    startGame();
+    startGame(); playVsIntro();
 }
 
 // Пока вы нажали «Готов», а партия не началась, раз в 3 секунды повторяем сигнал (на случай потерянного сообщения)
@@ -5086,7 +5086,7 @@ setInterval(() => {
 $('#startBtn').addEventListener('click', () => {
     if (NET.on) { toggleReady(); return; }
     _seed = (LOCALBOARD.mode === 'fischer' && !CUSTOM) ? -1 - ((Math.random() * 2147483646) | 0) : (Math.random() * 2147483647) | 0;      // отрицательное число = шахматы Фишера
-    startGame();
+    startGame(); playVsIntro();
 });
 
 function boardCellAct(r, c) {
@@ -5371,7 +5371,7 @@ function netRecv(m) {
             maybeStart();
             break;
         case 'start':
-            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; if (m.inc !== undefined) NET.inc = m.inc | 0; if (m.mode !== undefined) NET.mode = MODES[m.mode] ? m.mode : null; if (m.rated !== undefined) NET.rated = !!m.rated; selectedHeroes = { ...m.heroes }; _seed = m.seed; CUSTOM = normCfg(m.custom); NET.ready = false; NET.oppReady = false; startGame(); }
+            if (!NET.host) { if (NET.lastSeed === m.seed && G && !G.over) break; NET.lastSeed = m.seed; if (m.tc !== undefined) NET.tc = m.tc; if (m.inc !== undefined) NET.inc = m.inc | 0; if (m.mode !== undefined) NET.mode = MODES[m.mode] ? m.mode : null; if (m.rated !== undefined) NET.rated = !!m.rated; selectedHeroes = { ...m.heroes }; _seed = m.seed; CUSTOM = normCfg(m.custom); NET.ready = false; NET.oppReady = false; startGame(); playVsIntro(); }
             break;
         case 'orb':
             showOrbNote(!!m.gained);
@@ -6802,7 +6802,7 @@ setInterval(() => {
     const now = performance.now();
     const dt = (now - CLOCK.last) / 1000;
     CLOCK.last = now;
-    if (!CLOCK.on || !G || G.over || document.getElementById('app').classList.contains('hidden')) return;
+    if (!CLOCK.on || !G || G.over || INTRO.on || document.getElementById('app').classList.contains('hidden')) return;      // во время заставки VS время не идёт
     const side = G.turn;
     const opening = inOpening(side);                      // до первого хода идёт особое время, основное стоит
     const pool = opening ? CLOCK.open : CLOCK.left;
@@ -6826,6 +6826,43 @@ render = function () {
     saveResume();      // запоминаем онлайн-партию, чтобы в неё можно было вернуться после закрытия приложения
 };
 
+
+// ===== Заставка в начале партии: карточки героев с никами выезжают друг против друга, между ними VS, потом карточки улетают =====
+const INTRO = { on: false };
+function vsCardHTML(col) {
+    const hk = G.hero[col], h = HEROES[hk] || { icon: '♟', name: '', tag: '' };
+    const cos = panelCos(col);
+    let nick = '', ava = '';
+    if (NET.on) {
+        if (col === NET.me) { if (ACC.profile) { nick = ACC.profile.nick; ava = ACC.profile.avatar; } }
+        else if (NET.oppNick) { nick = NET.oppNick; ava = NET.oppAvatar; }
+    }
+    const cls = `panel h-${hk}${cos.frame ? ' fr-' + cos.frame : ''}${cos.bg ? ' bg-' + cos.bg : ''}`;
+    const you = NET.on && col === NET.me ? `<div class="vs-you">${L('ВЫ', 'YOU')}</div>` : '';
+    return `<div class="vs-wrap ${col === (NET.on ? NET.me : 'w') ? 'vs-l' : 'vs-r'}"><div class="vs-card ${cls}">${you}<div class="vs-side">${colorName(col)}</div><div class="vs-icon">${h.icon}</div><div class="vs-hero">${h.name}</div><div class="vs-tag">${h.tag || ''}</div>${nick ? `<div class="vs-nick" data-notr><span class="pn-ava">${avaHTML(ava)}</span><span class="pn-name${nickCls(cos.nc)}"${nickStyle(cos.nc)}>${escH(nick)}</span></div>` : ''}</div></div>`;
+}
+function playVsIntro() {
+    if (!G || REPLAY.on) return;
+    if (G.hero.w === 'none' && G.hero.b === 'none') return;      // обычные шахматы без героев: показывать нечего
+    const old = document.getElementById('vsIntro'); if (old) old.remove();
+    const full = ANIM.board !== false, left = NET.on ? NET.me : 'w';
+    const ov = document.createElement('div');
+    ov.id = 'vsIntro'; ov.className = 'vs-ov' + (full ? '' : ' calm');
+    ov.innerHTML = vsCardHTML(left) + `<div class="vs-mid"><div class="vs-ring"></div><div class="vs-vs">VS</div></div>` + vsCardHTML(other(left)) + '<div class="vs-flash"></div>';
+    document.body.appendChild(ov);
+    translateNode(ov);
+    INTRO.on = true;
+    const t0 = performance.now();
+    let gone = false;
+    const out = () => {
+        if (gone) return; gone = true;
+        ov.classList.add('out');
+        setTimeout(() => { ov.remove(); INTRO.on = false; CLOCK.last = performance.now(); }, full ? 850 : 450);
+    };
+    setTimeout(() => { try { sfx('boom'); } catch (e) { } }, full ? 600 : 100);
+    setTimeout(out, full ? 2900 : 1300);
+    ov.addEventListener('click', () => { if (performance.now() - t0 > 1500) out(); });      // нажатием можно пропустить, когда карточки уже показались
+}
 
 // ===== Чат: на компьютере под правой рамкой героя, на телефоне внутри выезжающего меню =====
 (function () {

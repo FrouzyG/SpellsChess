@@ -8169,3 +8169,312 @@ body.piece-drag {
 .panel[class*="h-"].fr-plasma.bg-portaltwin, .cus-mini.fr-plasma.bg-portaltwin {
     animation: frPlasma 3s linear infinite, pRotA 8s linear infinite, pRotB 8s linear infinite;
 }
+
+/* ===================== Заставка VS в начале партии ===================== */
+.vs-ov {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(6px, 2.5vw, 36px);
+    padding: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    background: radial-gradient(circle at 50% 50%, rgba(70, 24, 104, 0.97), rgba(10, 4, 22, 0.99) 75%);
+    animation: vsBgIn 0.45s ease-out both;
+}
+
+    .vs-ov.out {
+        animation: vsBgOut 0.85s ease-in forwards;
+        pointer-events: none;
+    }
+
+.vs-wrap {
+    flex: none;
+    perspective: 900px;
+}
+
+    .vs-wrap.vs-l {
+        animation: vsInL 0.8s cubic-bezier(0.2, 1.25, 0.4, 1) both;
+    }
+
+    .vs-wrap.vs-r {
+        animation: vsInR 0.8s cubic-bezier(0.2, 1.25, 0.4, 1) both;
+    }
+
+.vs-ov.out .vs-wrap.vs-l {
+    animation: vsOutL 0.85s cubic-bezier(0.55, 0, 0.9, 0.5) forwards;
+}
+
+.vs-ov.out .vs-wrap.vs-r {
+    animation: vsOutR 0.85s cubic-bezier(0.55, 0, 0.9, 0.5) forwards;
+}
+
+.vs-card.panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: clamp(150px, 30vw, 330px);
+    min-height: clamp(220px, 46vh, 400px);
+    max-height: none;
+    padding: 22px 16px;
+    overflow: hidden;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+}
+
+.vs-card .vs-side {
+    font-size: clamp(11px, 1.6vw, 15px);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+
+.vs-card .vs-icon {
+    font-size: clamp(54px, 9vw, 104px);
+    line-height: 1.1;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
+}
+
+.vs-card .vs-hero {
+    font-family: Georgia, serif;
+    font-size: clamp(18px, 2.8vw, 32px);
+    line-height: 1.15;
+}
+
+.vs-card .vs-tag {
+    font-size: clamp(11px, 1.5vw, 15px);
+    opacity: 0.7;
+}
+
+.vs-card .vs-nick {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    max-width: 100%;
+    margin-top: 10px;
+    padding: 5px 12px;
+    font-size: clamp(14px, 2vw, 20px);
+    font-weight: 700;
+    color: var(--gold);
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 999px;
+}
+
+    .vs-card .vs-nick .pn-ava {
+        flex: none;
+    }
+
+.vs-card .vs-you {
+    position: absolute;
+    z-index: 2;
+    top: 22px;
+    right: 24px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2a1d00;
+    background: var(--gold);
+    border-radius: 999px;
+}
+
+.vs-mid {
+    position: relative;
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: clamp(70px, 14vw, 170px);
+}
+
+.vs-vs {
+    position: relative;
+    z-index: 1;
+    font-family: Georgia, serif;
+    font-size: clamp(46px, 11vw, 130px);
+    font-weight: 900;
+    font-style: italic;
+    line-height: 1;
+    background: linear-gradient(180deg, #fff3b0, #ffb300 55%, #ff5f2e);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 18px rgba(255, 170, 40, 0.85));
+    animation: vsSlam 0.55s 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.vs-ov.out .vs-vs {
+    animation: vsVsOut 0.6s ease-in forwards;
+}
+
+.vs-ring {
+    position: absolute;
+    width: 100%;
+    aspect-ratio: 1;
+    border: 4px solid rgba(255, 190, 80, 0.9);
+    border-radius: 50%;
+    opacity: 0;
+    animation: vsRing 0.9s 0.62s ease-out both;
+}
+
+.vs-flash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: #fff;
+    opacity: 0;
+    animation: vsFlash 0.5s 0.6s ease-out both;
+}
+
+.vs-ov.calm .vs-wrap.vs-l, .vs-ov.calm .vs-wrap.vs-r, .vs-ov.calm .vs-vs, .vs-ov.calm .vs-ring, .vs-ov.calm .vs-flash {
+    animation: none;
+}
+
+.vs-ov.calm.out .vs-wrap, .vs-ov.calm.out .vs-vs {
+    animation: none;
+}
+
+@keyframes vsBgIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes vsBgOut {
+    0%, 35% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes vsInL {
+    from {
+        transform: translateX(-110vw) rotate(-14deg) scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: none;
+        opacity: 1;
+    }
+}
+
+@keyframes vsInR {
+    from {
+        transform: translateX(110vw) rotate(14deg) scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: none;
+        opacity: 1;
+    }
+}
+
+@keyframes vsOutL {
+    from {
+        transform: none;
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(-120vw) rotate(-18deg) scale(0.85);
+        opacity: 1;
+    }
+}
+
+@keyframes vsOutR {
+    from {
+        transform: none;
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(120vw) rotate(18deg) scale(0.85);
+        opacity: 1;
+    }
+}
+
+@keyframes vsSlam {
+    0% {
+        transform: scale(5) rotate(-8deg);
+        opacity: 0;
+    }
+
+    60% {
+        transform: scale(0.92) rotate(2deg);
+        opacity: 1;
+    }
+
+    100% {
+        transform: none;
+        opacity: 1;
+    }
+}
+
+@keyframes vsVsOut {
+    to {
+        transform: scale(2.4);
+        opacity: 0;
+    }
+}
+
+@keyframes vsRing {
+    0% {
+        transform: scale(0.3);
+        opacity: 0.95;
+    }
+
+    100% {
+        transform: scale(2.6);
+        opacity: 0;
+    }
+}
+
+@keyframes vsFlash {
+    0% {
+        opacity: 0.85;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+@media (max-width: 760px) {
+    .vs-ov {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .vs-card.panel {
+        width: min(74vw, 300px);
+        min-height: 0;
+        padding: 12px 14px;
+    }
+
+    .vs-card .vs-icon {
+        font-size: 48px;
+    }
+
+    .vs-mid {
+        width: auto;
+        height: 70px;
+    }
+
+    .vs-vs {
+        font-size: 56px;
+    }
+}
