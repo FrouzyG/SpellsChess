@@ -4364,7 +4364,9 @@ function renderBoard() {
             const cvm = G.conv.find(x => x.r === r && x.c === c);
             if (cvm) html += `<div class="conv-mark">${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[cvm.dir.map(x => (flip ? -x : x)).join(',')]}</div>`;
             const ptm = G.portals.find(x => x.r === r && x.c === c);
-            if (ptm) html += `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
+            if (ptm) html += ptm.owner === 'n'
+                ? `<div class="portal-mark pm9"><span>⇄</span><i class="pn">${[...new Set(G.portals.filter(x => x.owner === 'n').map(x => x.id))].sort((a, b) => a - b).indexOf(ptm.id) + 1}</i></div>`
+                : `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me || x.owner === 'n'))) html += '<div class="trap-mark">🪤</div>';
             {
@@ -9270,7 +9272,7 @@ const TILE_DIRS = { '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' };
 const TILE_PALETTE = [
     { id: 'wall', k: 'wall', ico: '🧱', ru: 'Стена', en: 'Wall' },
     { id: 'conv', k: 'conv', ico: '➡', ru: 'Конвейер', en: 'Conveyor', own: true, dir: true },
-    { id: 'portal', k: 'portal', ico: '🌀', ru: 'Портал (пара)', en: 'Portal (pair)', own: true, pair: true },
+    { id: 'portal', k: 'portal', ico: '🌀', ru: 'Портал (пары без ограничения)', en: 'Portal (any number of pairs)', pair: true },
     { id: 'gen+', k: 'gen', s: '+', ico: '＋', ru: 'Короткое замыкание +', en: 'Short circuit +', own: true },
     { id: 'gen-', k: 'gen', s: '-', ico: '－', ru: 'Короткое замыкание −', en: 'Short circuit −', own: true },
     { id: 'virus', k: 'virus', ico: '☣️', ru: 'Заражённая плитка', en: 'Infected tile', own: true },
@@ -9308,7 +9310,7 @@ function normCfg(x) {
     }
     if (!n.w || !n.b) return null;
     const tiles = [], base = new Set(), fogs = new Set(), pairs = {};
-    for (const t of (Array.isArray(x.tiles) ? x.tiles.slice(0, 200) : [])) {
+    for (const t of (Array.isArray(x.tiles) ? x.tiles.slice(0, 520) : [])) {
         if (!t || !TILE_KINDS.includes(t.k) || !Number.isInteger(t.r) || !Number.isInteger(t.c) || t.r < 0 || t.r >= sz || t.c < 0 || t.c >= sz) return null;
         const key = t.r + ',' + t.c, o = t.o === 'b' ? 'b' : (t.o === 'n' && ['ritual', 'trap', 'lure', 'banana'].includes(t.k)) ? 'n' : 'w', nt = { k: t.k, r: t.r, c: t.c, o };
         if (t.k === 'fog') { if (fogs.has(key)) return null; fogs.add(key); tiles.push(nt); continue; }
@@ -9321,8 +9323,8 @@ function normCfg(x) {
         }
         if (t.k === 'gen') { if (t.s !== '+' && t.s !== '-') return null; nt.s = t.s; }
         if (t.k === 'portal') {
-            if (!Number.isInteger(t.id) || t.id < 1 || t.id > 4) return null;
-            nt.id = t.id; nt.o = t.id <= 2 ? 'w' : 'b';
+            if (!Number.isInteger(t.id) || t.id < 1 || t.id > 999) return null;
+            nt.id = t.id; nt.o = 'n';
             pairs[t.id] = (pairs[t.id] || 0) + 1;
         }
         tiles.push(nt);
@@ -9467,7 +9469,7 @@ function edTileHtml(t) {
     switch (t.k) {
         case 'wall': return '<div class="wall-mark"></div>';
         case 'conv': return `<div class="conv-mark">${TILE_DIRS[t.d.join(',')]}</div><span class="ed-own ${t.o}"></span>`;
-        case 'portal': return `<div class="portal-mark pm${(t.o === 'w' ? 0 : 2) + t.id % 2}"><span>⇄</span></div><span class="ed-own ${t.o}"></span>`;
+        case 'portal': return `<div class="portal-mark pm9"><span>⇄</span><i class="pn">${[...new Set(ED.tiles.filter(x => x.k === 'portal').map(x => x.id))].sort((a, b) => a - b).indexOf(t.id) + 1}</i></div>`;
         case 'gen': return `<div class="tile-mark gen-mark ${t.s === '+' ? 'plus' : 'minus'}">${t.s === '+' ? '＋' : '－'}</div><span class="ed-own ${t.o}"></span>`;
         case 'virus': return `<div class="tile-mark virus-mark">☣️</div><span class="ed-own ${t.o}"></span>`;
         case 'vine': return `<div class="tile-mark vine-mark">🌿<i class="vine-t">∞</i></div><span class="ed-own ${t.o}"></span>`;
@@ -9542,10 +9544,7 @@ function edRender() {
     let op = '';
     if (cur.own && !cur.pair) op += `<div class="ed-optrow"><span>${L('Владелец:', 'Owner:')}</span>` + (cur.neu ? ['w', 'b', 'n'] : ['w', 'b']).map(o => `<button class="${(ED.opt.o === 'n' && !cur.neu ? 'w' : ED.opt.o) === o ? 'on' : ''}" data-o="${o}">${o === 'w' ? L('⬜ Белые', '⬜ White') : o === 'b' ? L('⬛ Чёрные', '⬛ Black') : L('⚪ Нейтральная', '⚪ Neutral')}</button>`).join('') + '</div>';
     if (cur.dir) op += `<div class="ed-optrow"><span>${L('Направление:', 'Direction:')}</span>` + Object.entries(TILE_DIRS).map(([k, a]) => `<button class="${ED.opt.d.join(',') === k ? 'on' : ''}" data-d="${k}">${a}</button>`).join('') + '</div>';
-    if (cur.pair) {
-        op += `<div class="ed-optrow"><span>${L('Пара:', 'Pair:')}</span>` + [1, 2, 3, 4].map(i => `<button class="${ED.opt.pair === i ? 'on' : ''}" data-pair="${i}">${i <= 2 ? '⬜' : '⬛'}${i <= 2 ? i : i - 2}</button>`).join('') + '</div>';
-        op += `<div class="ed-hint">${L('Порталы ставятся по два на пару (⬜ белых и ⬛ чёрных пар по две). На порталы зеркало не действует.', 'Portals come two to a pair (two ⬜ white and two ⬛ black pairs). Mirror does not affect portals.')}</div>`;
-    }
+    if (cur.pair) op += `<div class="ed-hint">${L('Нажмите на клетку: первый портал ждёт пару, следующий сам с ним свяжется. Пар можно ставить сколько угодно, номер на портале показывает, какие связаны. Убрать портал: нажмите на него ещё раз или ластиком, вторая половина пары уйдёт вместе с ним. На порталы зеркало не действует.', 'Click a square: the first portal waits for its pair and the next one links to it. Place as many pairs as you like; the number on a portal shows which ones are linked. To remove one, click it again or use the eraser: its partner goes with it. Mirror does not affect portals.')}</div>`;
     $('#edTileOpts').innerHTML = op;
     $('#edMirror').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === ED.mirror));
     // слоты
@@ -9611,7 +9610,7 @@ function edErase(r, c) {
         if (f) { ED.tiles = ED.tiles.filter(x => x !== f); return; }
         if (ED.rows[tr][tc] !== '.') { ED.rows[tr][tc] = '.'; return; }
         const b = edBaseAt(tr, tc);
-        if (b) ED.tiles = ED.tiles.filter(x => x !== b);
+        if (b) ED.tiles = ED.tiles.filter(x => x !== b && !(b.k === 'portal' && x.k === 'portal' && x.id === b.id));      // у портала уходит и вторая половина пары
     });
     ED.msg = '';
     edFixWin();
@@ -9621,14 +9620,33 @@ function edErase(r, c) {
 // Плитка с учётом отражения
 function edTileFor(item, r, c, fv, fh) {
     const flip = o => (fv ? (o === 'w' ? 'b' : o === 'b' ? 'w' : o) : o);
-    const t = { k: item.k, r, c, o: item.pair ? (ED.opt.pair <= 2 ? 'w' : 'b') : (item.own ? flip(ED.opt.o === 'n' && !item.neu ? 'w' : ED.opt.o) : 'w') };
+    const t = { k: item.k, r, c, o: item.pair ? 'n' : (item.own ? flip(ED.opt.o === 'n' && !item.neu ? 'w' : ED.opt.o) : 'w') };
     if (item.dir) { const [dr, dc] = ED.opt.d; t.d = [fv ? -dr : dr, fh ? -dc : dc]; }
     if (item.s) t.s = item.s;
-    if (item.pair) t.id = ED.opt.pair;
+    if (item.pair) t.id = 0;      // номер пары назначает edPlacePortal
     return t;
+}
+// Портал: первый нажатый ждёт пару, следующий сам с ним связывается. Пар можно ставить сколько угодно.
+// Нажатие на уже стоящий портал убирает его вместе с парой.
+function edPlacePortal(r, c) {
+    const there = edBaseAt(r, c);
+    if (there && there.k === 'portal') {
+        ED.tiles = ED.tiles.filter(x => !(x.k === 'portal' && x.id === there.id));
+        ED.msg = ''; edRender(); return;
+    }
+    const cnt = {};
+    ED.tiles.forEach(x => { if (x.k === 'portal') cnt[x.id] = (cnt[x.id] || 0) + 1; });
+    const ids = Object.keys(cnt).map(Number);
+    const lone = ids.filter(id => cnt[id] === 1).sort((a, b) => a - b)[0];
+    const id = lone || (Math.max(0, ...ids) + 1);
+    ED.tiles = ED.tiles.filter(x => !(x.r === r && x.c === c && x.k !== 'fog'));
+    ED.tiles.push({ k: 'portal', r, c, id, o: 'n' });
+    ED.msg = lone ? '' : L('Поставьте второй портал: он свяжется с первым.', 'Place the second portal: it will link to the first.');
+    edRender();
 }
 function edPlaceTile(r, c) {
     const item = TILE_PALETTE.find(x => x.id === ED.tileId);
+    if (item.pair) { edPlacePortal(r, c); return; }
     const cells = item.pair ? [[r, c, false, false]] : edMirrorCells(r, c);
     const same = (a, b) => a && a.k === b.k && a.o === b.o && a.s === b.s && a.id === b.id && (a.d || []).join() === (b.d || []).join();
     // нажатие на ту же плитку с теми же настройками убирает её

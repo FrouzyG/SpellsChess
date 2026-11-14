@@ -7821,3 +7821,31 @@ body.piece-drag {
 .panel[class*="h-"].fr-plasma.bg-ember, .cus-mini.fr-plasma.bg-ember {
     animation: frPlasma 3s linear infinite, bgFlowY 7s ease-in-out infinite;
 }
+
+/* робот в палитре фигур редактора: нормального размера, как остальные фигуры */
+.img-pieces .ed-tool .pi.t-x, .img-pieces .ed-tool .pi.t-u {
+    font-size: 28px;
+    line-height: 1.5;
+    background-image: none;
+}
+
+/* портал из редактора: один цвет и номер пары */
+.portal-mark.pm9 {
+    background: radial-gradient(circle, #2a0b66, #9b6bff);
+    color: #cdb8ff;
+}
+
+.portal-mark .pn {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    min-width: 1.3em;
+    padding: 0 3px;
+    font-size: 0.5em;
+    font-style: normal;
+    line-height: 1.35;
+    text-align: center;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.78);
+    border-radius: 999px;
+}
