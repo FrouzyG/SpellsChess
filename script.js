@@ -4427,7 +4427,7 @@ function renderBoard() {
                 if (p.t === 'x' && p.rob) html += `<span class="rb">${p.rob.kind === 'wing' ? '🪽' : '👢'}</span>`;
                 if (p.t === 'x' && p.chg > 0) html += '<span class="chg">🔋</span>';
                 if (p.t === 'u' && p.tur) html += `<span class="rb">${p.tur.kind === 'instant' ? '⚡' : '🎯'}</span>`;
-                if (p.hare) html += `<span class="jl">🐇${p.hare.left}</span>`;
+                if (p.hare) html += `<span class="jl">🐇${Number.isFinite(p.hare.left) ? p.hare.left : '∞'}</span>`;
                 if (p.cap > 0 && jesterSees(p.capBy)) html += `<span class="cp">🤡${p.cap}</span>`;
                 if (p.betray && jesterSees(p.betray)) html += '<span class="bt">🃏</span>';
                 if (p.warded > 0) html += `<span class="wd">✴${p.warded}</span>`;
@@ -5974,7 +5974,7 @@ const EN = {
     "Океан": "Ocean",
     "Ледяная": "Ice",
     "Графит": "Graphite",
-    "Конфетная": "Candy", "Обсидиан": "Obsidian", "Изумрудная": "Emerald", "Аметист": "Amethyst", "Персиковая": "Peach",
+    "Конфетная": "Candy", "🎟 Секретный код": "🎟 Secret code", "Введите код, чтобы получить награду (один раз на аккаунт)": "Enter a code to get a reward (once per account)", "Применить": "Apply", "Обсидиан": "Obsidian", "Изумрудная": "Emerald", "Аметист": "Amethyst", "Персиковая": "Peach",
     "⚡ Быстрый поиск: рейтинговая партия": "⚡ Quick search: rated game",
     "🚪 Комнаты: дружеская партия": "🚪 Rooms: friendly game",
     "на одном экране": "on one screen",
@@ -9257,7 +9257,7 @@ $('#installBtn').addEventListener('click', async () => {
    Плитки хранятся списком: { k: вид, r, c, o: владелец, d: направление, id: пара портала, s: знак генератора }.
    ===================================================================== */
 const BOARD_SLOTS = 10;
-const ED_CH = '.KQRBNPJXkqrbnpjx';      // X/x: роботы Инженера (правила лежат в cfg.robs)
+const ED_CH = '.KQRBNPJXHkqrbnpjxh';      // X/x: роботы Инженера (правила лежат в cfg.robs)
 //      // J/j: заводные челюсти без таймера жизни
 const CLASSIC_ROWS = ['rnbqkbnr', 'pppppppp', '........', '........', '........', '........', 'PPPPPPPP', 'RNBQKBNR'];
 const chColor = ch => (ch === ch.toUpperCase() ? 'w' : 'b');
@@ -9292,7 +9292,7 @@ const TILE_PALETTE = [
     { id: 'burn', k: 'burn', ico: '🔥', ru: 'Горящая клетка', en: 'Burning square', own: true },
     { id: 'hog', k: 'hog', ico: '⏳', ru: 'Ход сурка', en: 'Groundhog tile', own: true },
     { id: 'charger', k: 'charger', ico: '🔋', ru: 'Плитка-зарядка', en: 'Charger tile', own: true },
-    { id: 'fog', k: 'fog', ico: '🌫️', ru: 'Дым (поверх всего)', en: 'Smoke (over anything)', own: true }
+    { id: 'fog', k: 'fog', ico: '🌫️', ru: 'Дым (поверх всего)', en: 'Smoke (over anything)' }
 ];
 
 // Проверка и приведение доски к единому виду (годится и для данных от соперника)
@@ -9320,7 +9320,7 @@ function normCfg(x) {
     for (const t of (Array.isArray(x.tiles) ? x.tiles.slice(0, 520) : [])) {
         if (!t || !TILE_KINDS.includes(t.k) || !Number.isInteger(t.r) || !Number.isInteger(t.c) || t.r < 0 || t.r >= sz || t.c < 0 || t.c >= sz) return null;
         const key = t.r + ',' + t.c, o = t.o === 'b' ? 'b' : (t.o === 'n' && ['ritual', 'trap', 'lure', 'banana'].includes(t.k)) ? 'n' : 'w', nt = { k: t.k, r: t.r, c: t.c, o };
-        if (t.k === 'fog') { if (fogs.has(key)) return null; fogs.add(key); tiles.push(nt); continue; }
+        if (t.k === 'fog') { if (fogs.has(key)) return null; fogs.add(key); nt.o = 'n'; tiles.push(nt); continue; }      // дым всегда нейтральный (в старых досках владелец сбрасывается)
         if (base.has(key)) return null;
         base.add(key);
         if (t.k === 'wall' && rows[t.r][t.c] !== '.') return null;
@@ -9391,6 +9391,7 @@ function boardFromCfg(cfg) {
         const col = chColor(ch), t = ch.toLowerCase(), p = mk(t, col), home = col === 'w' ? cfg.rows.length - 1 : 0, std = cfg.rows.length === 8;      // рокировка только на доске 8×8
         if (t === 'k') p.moved = !(std && r === home && c === 4);                     // рокировка возможна, только если король и ладья на своих местах
         if (t === 'r') p.moved = !(std && r === home && (c === 0 || c === 7));
+        if (t === 'h') { p.moved = true; p.hare = { t: 'p', left: Infinity, by: col }; }      // заяц из редактора остаётся зайцем всю партию
         if (t === 'j') { p.moved = true; p.life = Infinity; }      // челюсти из редактора живут всю партию
         if (t === 'x') { p.moved = true; const o = (cfg.robs || []).find(q => q.r === r && q.c === c); if (o) p.rob = JSON.parse(JSON.stringify(o.rob)); }      // робот Инженера со своими правилами
         return p;
@@ -9487,7 +9488,7 @@ function edTileHtml(t) {
         case 'banana': return `<div class="tile-mark banana-mark">🍌<i>${TILE_DIRS[t.d.join(',')]}</i></div><span class="ed-own ${t.o}"></span>`;
         case 'burn': return `<div class="burn-mark"><span>🔥</span><i>∞</i></div><span class="ed-own ${t.o}"></span>`;
         case 'hog': return `<div class="tile-mark hog-mark">⏳</div><span class="ed-own ${t.o}"></span>`;
-        case 'fog': return `<div class="fog-mark"></div><span class="ed-own ${t.o}"></span>`;
+        case 'fog': return '<div class="fog-mark"></div>';
         case 'charger': return `<div class="tile-mark charger-mark ${t.o}"><span>⚡</span></div><span class="ed-own ${t.o}"></span>`;
     }
     return '';
@@ -9536,9 +9537,9 @@ function edRender() {
     $('#edPalette').classList.toggle('hidden', ED.tab !== 'pieces');
     $('#edTilePanel').classList.toggle('hidden', ED.tab !== 'tiles');
     // фигуры для расстановки
-    const nm = { k: L('король', 'king'), q: L('ферзь', 'queen'), r: L('ладья', 'rook'), b: L('слон', 'bishop'), n: L('конь', 'knight'), p: L('пешка', 'pawn'), j: L('заводные челюсти (без таймера)', 'windup jaws (no timer)'), x: L('робот Инженера (настраивается на планшете, нажмите на робота на доске, чтобы перенастроить)', 'Engineer robot (set up on a tablet; click a robot on the board to reconfigure)') };
+    const nm = { k: L('король', 'king'), q: L('ферзь', 'queen'), r: L('ладья', 'rook'), b: L('слон', 'bishop'), n: L('конь', 'knight'), p: L('пешка', 'pawn'), j: L('заводные челюсти (без таймера)', 'windup jaws (no timer)'), h: L('заяц Фокусника (ходит как ферзь, никого не рубит, остаётся зайцем всю партию)', 'Magician hare (moves like a queen, captures nothing, stays a hare all game)'), x: L('робот Инженера (настраивается на планшете, нажмите на робота на доске, чтобы перенастроить)', 'Engineer robot (set up on a tablet; click a robot on the board to reconfigure)') };
     let p = '';
-    ['K', 'Q', 'R', 'B', 'N', 'P', 'J', 'X', 'k', 'q', 'r', 'b', 'n', 'p', 'j', 'x'].forEach(ch => {
+    ['K', 'Q', 'R', 'B', 'N', 'P', 'J', 'X', 'H', 'k', 'q', 'r', 'b', 'n', 'p', 'j', 'x', 'h'].forEach(ch => {
         p += `<button class="ed-tool${ED.tab === 'pieces' && ED.tool === ch ? ' on' : ''}" data-tool="${ch}" title="${(chColor(ch) === 'w' ? L('Белая ', 'White ') : L('Чёрная ', 'Black ')) + nm[ch.toLowerCase()]}">${pImg(chColor(ch), ch.toLowerCase())}</button>`;
     });
     p += `<button class="ed-tool erase${ED.tool === '.' ? ' on' : ''}" data-tool="." title="${L('Ластик: сначала убирает дым, потом фигуру, потом плитку', 'Eraser: removes smoke first, then the piece, then the tile')}">✖</button>`;
@@ -9627,7 +9628,7 @@ function edErase(r, c) {
 // Плитка с учётом отражения
 function edTileFor(item, r, c, fv, fh) {
     const flip = o => (fv ? (o === 'w' ? 'b' : o === 'b' ? 'w' : o) : o);
-    const t = { k: item.k, r, c, o: item.pair ? 'n' : (item.own ? flip(ED.opt.o === 'n' && !item.neu ? 'w' : ED.opt.o) : 'w') };
+    const t = { k: item.k, r, c, o: (item.pair || item.k === 'fog') ? 'n' : (item.own ? flip(ED.opt.o === 'n' && !item.neu ? 'w' : ED.opt.o) : 'w') };
     if (item.dir) { const [dr, dc] = ED.opt.d; t.d = [fv ? -dr : dr, fh ? -dc : dc]; }
     if (item.s) t.s = item.s;
     if (item.pair) t.id = 0;      // номер пары назначает edPlacePortal
@@ -9822,7 +9823,7 @@ $('.ed-tabs').addEventListener('click', e => {
     const b = e.target.closest('[data-tab]');
     if (!b) return;
     ED.tab = b.dataset.tab;
-    if (ED.tab === 'pieces' && !'KQRBNPJXkqrbnpjx.'.includes(ED.tool)) ED.tool = 'P';
+    if (ED.tab === 'pieces' && !'KQRBNPJXHkqrbnpjxh.'.includes(ED.tool)) ED.tool = 'P';
     if (ED.tab === 'tiles' && ED.tool !== '.') ED.tool = 'T';
     edRender();
 });
@@ -10272,6 +10273,31 @@ const openSettings = () => { buildSettings(); $('#settings').classList.remove('h
 $('#themePickClose').addEventListener('click', () => { $('#themePick').classList.add('hidden'); buildSettings(); });
 $('#themePick').addEventListener('click', e => { if (e.target.id === 'themePick') { $('#themePick').classList.add('hidden'); buildSettings(); } });
 $('#setClose').addEventListener('click', () => $('#settings').classList.add('hidden'));
+// Секретный код: награду выдаёт сервер, один раз на аккаунт, у каждого кода ограничено число использований
+$('#setCodeBtn').addEventListener('click', async () => {
+    const msg = $('#setCodeMsg'), inp = $('#setCode'), btn = $('#setCodeBtn'), code = inp.value.trim();
+    const say = (t, ok) => { msg.textContent = t; msg.classList.remove('hidden'); msg.style.color = ok ? '#7dff9a' : '#ff9a9a'; };
+    if (!code) { say(L('Введите код.', 'Enter a code.')); return; }
+    if (!SB || !ACC.user) { say(L('Войдите в аккаунт, чтобы ввести код.', 'Sign in to enter a code.')); return; }
+    btn.disabled = true;
+    try {
+        const { data, error } = await SB.rpc('redeem_code', { p_code: code });
+        if (error) {
+            const m = String(error.message || '');
+            say(m.includes('already_used') ? L('Вы уже использовали этот код.', 'You have already used this code.')
+                : m.includes('code_exhausted') ? L('Этот код больше не действует: использования закончились.', 'This code is no longer valid: all uses are gone.')
+                    : m.includes('bad_code') ? L('Такого кода нет.', 'No such code.')
+                        : L('Не получилось применить код. Попробуйте позже.', 'Could not apply the code. Try again later.'));
+        } else {
+            inp.value = '';
+            await loadUnlocks();
+            if (!$('#coll').classList.contains('hidden')) renderCollection();
+            say(L(`Код принят! Магических шаров на аккаунте: ${data}.`, `Code accepted! Magic orbs on your account: ${data}.`), true);
+        }
+    } catch (e) { say(L('Нет связи с сервером.', 'No connection to the server.')); }
+    finally { btn.disabled = false; }
+});
+$('#setCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#setCodeBtn').click(); });
 $('#settings').addEventListener('click', e => {
     if (e.target.id === 'settings') { $('#settings').classList.add('hidden'); return; }
     if (e.target.closest('[data-theme-open]')) { renderThemePicker(); $('#themePick').classList.remove('hidden'); return; }      // окно выбора доски

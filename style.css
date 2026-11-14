@@ -7876,3 +7876,33 @@ body.piece-drag {
     border-radius: 8px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
 }
+
+/* секретный код в настройках */
+.set-row.set-code {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.set-codebox {
+    display: flex;
+    gap: 8px;
+}
+
+#setCode {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    font-size: 15px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid var(--line);
+    border-radius: 8px;
+}
+
+#setCodeMsg {
+    margin: 0;
+    font-size: 13px;
+}
