@@ -826,7 +826,11 @@ const wrapsOf = p => { const o = p && p.c; return !!p && !p.orig && !kSafe(p) &&
 // Ход прошёл сквозь левый/правый край доски? (клетки пути соседние, поэтому скачок по столбцам больше 2 может быть только через край)
 function crossedEdge(mv) {
     const pts = [[mv.fr, mv.fc], ...(mv.path || []), [mv.tr, mv.tc]];
-    for (let i = 0; i + 1 < pts.length; i++) if (Math.abs(pts[i + 1][1] - pts[i][1]) > 2 && Math.abs(pts[i + 1][0] - pts[i][0]) <= 2) return true;
+    for (let i = 0; i + 1 < pts.length; i++) {
+        const ex = portalExit(pts[i][0], pts[i][1]);
+        if (ex && ex[0] === pts[i + 1][0] && ex[1] === pts[i + 1][1]) continue;      // перескок между парными порталами это не край доски
+        if (Math.abs(pts[i + 1][1] - pts[i][1]) > 2 && Math.abs(pts[i + 1][0] - pts[i][0]) <= 2) return true;
+    }
     return false;
 }
 const wcol = (p, c) => (c >= 0 && c < N ? c : (wrapsOf(p) ? ((c % N) + N) % N : -1));
@@ -1082,7 +1086,15 @@ function pseudoMoves(b, r, c) {
     const add = (tr, tc, extra = {}) => {
         if (wallAt(tr, tc)) return;
         const k = tr + ',' + tc + (extra.castle ? 'c' : '') + (extra.ep ? 'e' : '') + (extra.double ? 'd' : '');
-        if (seen.has(k)) return;
+        if (seen.has(k)) {
+            // Фокусник: на клетку можно дойти и напрямую, и сквозь край доски. Оставляем прямой путь, чтобы распиливание не включалось зря.
+            if (extra.path && wrapsOf(p)) {
+                const i = mv.findIndex(m => m.tr === tr && m.tc === tc && !!m.castle === !!extra.castle && !!m.ep === !!extra.ep && !!m.double === !!extra.double);
+                const nm = { fr: r, fc: c, tr, tc, ...extra };
+                if (i >= 0 && crossedEdge(mv[i]) && !crossedEdge(nm)) mv[i] = nm;
+            }
+            return;
+        }
         seen.add(k);
         mv.push({ fr: r, fc: c, tr, tc, ...extra });
     };
@@ -1523,9 +1535,9 @@ function safeAfter(nb, col) {
 }
 
 // Шут знает свои банановые кожуры: фигура, вставшая на неё, съедет на соседнюю клетку (для проверки шаха)
-function bananaSlideOnBoard(nb, r, c, col) {
+function bananaSlideOnBoard(nb, r, c, col, any) {
     if (typeof G === 'undefined' || !G || !G.bananas || !G.bananas.length) return;
-    const bn = G.bananas.find(x => x.r === r && x.c === c && (x.owner === col || x.owner === 'n'));
+    const bn = G.bananas.find(x => x.r === r && x.c === c && (any || x.revealed || x.owner === col || x.owner === 'n'));
     const q = nb[r][c];
     if (!bn || !q || q.c !== col || kSafe(q) || q.ghost || q.warded > 0) return;
     const tr = r + bn.dir[0], tc = c + bn.dir[1];
@@ -3040,8 +3052,30 @@ function endTurn() {
     startTurn();
 }
 
+// Скрытая банановая кожура врага: если съезжание с неё вернуло бы шах своему королю, хода не происходит:
+// кожура раскрывается, а ход на эту клетку становится недоступен. Ход не тратится, можно выбрать другой.
+function bananaCheckTrap(mv) {
+    if (!G.bananas || !G.bananas.length) return false;
+    const p = G.board[mv.fr][mv.fc];
+    if (!p) return false;
+    const col = p.c;
+    const bn = G.bananas.find(x => x.r === mv.tr && x.c === mv.tc && x.owner !== col && x.owner !== 'n' && !x.revealed);
+    if (!bn) return false;
+    const nb = cloneBoard(G.board);
+    applyMove(nb, mv, 'q');
+    const q = nb[mv.tr][mv.tc];
+    bananaSlideOnBoard(nb, mv.tr, mv.tc, col, true);
+    if (nb[mv.tr][mv.tc] === q) return false;      // фигура не съехала (давит кожуру без последствий): обычный ход
+    if (safeAfter(nb, col)) return false;          // после съезжания король в безопасности: обычный ход
+    bn.revealed = true;
+    sfx('trap');
+    addLog('n', L(`🍌 На ${sqName(mv.tr, mv.tc)} была спрятана банановая кожура: ход невозможен (король остался бы под шахом), кожура раскрыта`, `🍌 A banana peel was hidden on ${sqName(mv.tr, mv.tc)}: that move is impossible (the king would stay in check), the peel is revealed`));
+    return true;
+}
+
 function tryMove(mv, ctx) {
     if (mv.decoy) { if (!mv.redirect) return; mv = mv.redirect; }   // «сквозь» невидимую фигуру: на деле рубка её (или ход невозможен)
+    if (bananaCheckTrap(mv)) { G.sel = null; G.moves = []; render(); return; }
     ctx = ctx || (G.bonus ? { bonus: true, zw: G.bonus.kind === 'zw' ? G.bonus.step : 0 } : {});
     if (!G.bonus && !ctx.pairSecond && !ctx.apo && !ctx.charge) {      // Зарядка: ход заряженного робота бесплатный (обычный ход остаётся), но им нельзя ставить шах
         const q0 = G.board[mv.fr][mv.fc];
@@ -4165,7 +4199,7 @@ function onCell(r, c) {
     }
     if (G.sel) {
         const cands = G.moves.filter(m => (m.tr === r && m.tc === c && !(m.castle && Math.abs(m.tc - m.fc) < 2)) || (m.castle && m.click && m.click[0] === r && m.click[1] === c));      // рокировка: нажатие на клетку короля (если он идёт на 2+ клетки) или на свою ладью
-        let mv = cands[0];
+        let mv = cands.find(m => !m.castle && !m.possess && !crossedEdge(m)) || cands[0];      // Фокусник: если дойти можно и напрямую, и сквозь край доски, ходим напрямую
         if (cands.length > 1 && cands.some(m => m.castle) && cands.some(m => m.possess)) {   // Призрак: рокировка и вселение на одну клетку
             const pick = pickOverride || (uiConfirm('Рокировка (ОК) или обычный ход короля без ладьи (Отмена)?') ? 'castle' : 'possess');
             lastPick = pick;
@@ -4308,6 +4342,7 @@ function render() {
 }
 
 function updateEndBtn() {
+    $('#btnExit').classList.toggle('hidden', !(G && G.over) || REPLAY.on);      // после конца партии можно выйти в меню прямо с доски
     $('#btnNew').classList.toggle('hidden', !!NET.on && !(G && G.over && !NET.oppLeft));      // в онлайн-партии новую игру начать нельзя, но после конца партии кнопка работает как «Сыграть ещё»
     updateRematchUI();
     const b = $('#btnEnd');
@@ -4377,6 +4412,7 @@ function renderBoard() {
             {
                 const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
                 if (bn && (bn.owner === 'n' || jesterSees(bn.owner))) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
+                else if (bn && bn.revealed) html += '<div class="tile-mark banana-mark">🍌</div>';      // раскрытая врагом кожура: видно, где она лежит, но не куда откидывает
             }
             if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${Number.isFinite(vn.left) ? vn.left : '∞'}</i></div>`; }
             if (G.virus.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark virus-mark">☣️</div>';
@@ -5166,7 +5202,8 @@ function rematchBadge(col) {
 setInterval(() => { if (NET.on && !NET.lost && NET.againMe && G && G.over) netSend({ t: 'again', on: true }); }, 3000);
 $('#goNew').addEventListener('click', () => { if (NET.on) { rematchPress(); return; } openSetup(); });
 $('#goView').addEventListener('click', () => $('#gameover').classList.add('hidden'));
-$('#goExit').addEventListener('click', () => { if (NET.on && !NET.oppLeft) netSend({ t: 'leave' }); leaveToMenu(); });      // выйти на начальный экран; сопернику придёт «вышел»
+$('#goExit').addEventListener('click', () => { if (NET.on && !NET.oppLeft) netSend({ t: 'leave' }); leaveToMenu(); });
+$('#btnExit').addEventListener('click', () => { if (NET.on && !NET.oppLeft) netSend({ t: 'leave' }); leaveToMenu(); });      // та же кнопка «Выйти», но в панели у доски: она остаётся, когда окно конца партии закрыто      // выйти на начальный экран; сопернику придёт «вышел»
 $('#btnEnd').addEventListener('click', () => {
     if (G && !G.over && G.archUsed && !G.check && !G.pendingPromo) netDo({ t: 'end' });
 });
@@ -6433,7 +6470,7 @@ setLang(LANG);
     g('mClose').addEventListener('click', closeSheet);
     mEnd.addEventListener('click', () => end.click());
     app.addEventListener('click', e => { if (e.target === app) closeSheet(); });      // тап по затемнению закрывает окно
-    ['btnDraw', 'btnResign', 'btnNew'].forEach(id => g(id).addEventListener('click', closeSheet));
+    ['btnDraw', 'btnResign', 'btnNew', 'btnExit'].forEach(id => g(id).addEventListener('click', closeSheet));
 })();
 
 
