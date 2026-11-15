@@ -7149,6 +7149,15 @@ function fxHidden(x, r, c) {
 function hatchFall(from, to, pp) {
     const p = pp || G.board[from[0]][from[1]];      // pp: фигуру уже сняли с доски (две фигуры проваливаются одновременно)
     if (!p) return;
+    // Капкан под люком срабатывает на фигуре, которая в него провалилась: она пропустит следующий ход, и этот эффект остаётся на ней и после падения
+    const ti = G.traps.findIndex(t => t.r === from[0] && t.c === from[1]);
+    if (ti >= 0 && !kSafe(p) && !p.ghost) {
+        G.traps.splice(ti, 1);
+        p.snared = 2;      // посреди хода ставим 2: в конце хода одна единица спадёт, и фигура всё равно пропустит следующий ход (как у Зарядки)
+        if (!p.invis) G.fx.push({ r: from[0], c: from[1], type: 'trap' });
+        sfx('trap');
+        addLog('n', p.invis ? '🪤 Невидимая фигура попадает в капкан' : `🪤 ${pieceSym(p)} попадает в капкан на ${sqName(from[0], from[1])} и проваливается в люк`);
+    }
     if (!pp) G.board[from[0]][from[1]] = null;
     G.board[to[0]][to[1]] = p;
     p.prev = [from[0], from[1]];
@@ -7274,7 +7283,7 @@ function hatchPlanBump(r, c) {
 }
 
 // Фокус-Покус: две фигуры в квадрате 5×5 вокруг первой
-const hocusPiece = (p, col) => !!p && !kSafe(p) && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col);
+const hocusPiece = (p, col) => !!p && !kSafe(p) && !(p.warded > 0) && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col);      // фигура под Очищением защищена от магии: Фокус-Покус её не меняет
 function hocusOk(a, b2, col) {
     const b = G.board, p = b[a[0]][a[1]], q = b[b2[0]][b2[1]];
     if (!hocusPiece(p, col) || !hocusPiece(q, col)) return false;

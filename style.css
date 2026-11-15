@@ -8478,3 +8478,38 @@ body.piece-drag {
         font-size: 56px;
     }
 }
+
+
+/* ===================== Компьютер: интерфейс не прокручивается всей страницей =====================
+   Доска, панели героев, чат и журнал помещаются в окно целиком: прокручиваются только внутренние списки (способности, журнал, сообщения чата) */
+@media (min-width: 1101px) and (pointer: fine) and (not (any-pointer: coarse)) {
+    :root {
+        --cell: min((100vw - 760px) / var(--n), (100vh - 118px) / var(--n), 84px);
+    }
+
+    html, body {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    #app.game {
+        height: 100vh;
+        box-sizing: border-box;
+        overflow: hidden;
+    }
+
+        /* когда виден чат, правая рамка героя уступает ему место снизу */
+        #app.game:not(.flipped):has(#chat:not(.hidden)) #panel-b,
+        #app.game.flipped:has(#chat:not(.hidden)) #panel-w {
+            max-height: calc(100vh - 24px - 270px);
+        }
+
+    #app > #chat {
+        align-self: start;
+        min-height: 0;
+    }
+
+        #app > #chat #chatLog {
+            max-height: 150px;
+        }
+}
