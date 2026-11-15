@@ -1012,8 +1012,8 @@ function brotherImmune(b, r, c) {
 }
 
 // Фигура Мага в радиусе 3×3 от его короля
-function auraProtected(b, r, c) {
-    const p = b[r][c];
+function auraProtected(b, r, c, pp) {
+    const p = pp || b[r][c];
     if (p && !kSafe(p) && p.warded > 0) return true;                     // Очищение: такая же защита, как у барьера
     if (!p || kSafe(p) || p.orig || G.hero[p.c] !== 'mage') return false;
     const k = findKing(b, p.c);
@@ -1539,7 +1539,7 @@ function bananaSlideOnBoard(nb, r, c, col, any) {
     if (typeof G === 'undefined' || !G || !G.bananas || !G.bananas.length) return;
     const bn = G.bananas.find(x => x.r === r && x.c === c && (any || x.revealed || x.owner === col || x.owner === 'n'));
     const q = nb[r][c];
-    if (!bn || !q || q.c !== col || kSafe(q) || q.ghost || q.warded > 0) return;
+    if (!bn || !q || q.c !== col || kSafe(q) || q.ghost || auraProtected(nb, r, c)) return;      // защита от магии (Очищение и барьер) от кожуры не скользит
     const tr = r + bn.dir[0], tc = c + bn.dir[1];
     if (inb(tr, tc) && !nb[tr][tc] && !wallAt(tr, tc)) { nb[tr][tc] = q; nb[r][c] = null; }
 }
@@ -1559,7 +1559,7 @@ function isLegalMove(b, mv) {
 // null: люк не срабатывает (нет люка, король, иллюзия, защита или нет свободных люков).
 function hatchSafeExits(nb, tr, tc, col) {
     const q = nb[tr] && nb[tr][tc];
-    if (!G.hatches || !G.hatches.length || !q || kSafe(q) || q.warded > 0) return null;
+    if (!G.hatches || !G.hatches.length || !q || kSafe(q) || auraProtected(nb, tr, tc)) return null;
     if (!G.hatches.some(h => h.r === tr && h.c === tc)) return null;
     const exits = G.hatches.filter(h => !(h.r === tr && h.c === tc) && hatchCellOpen(h.r, h.c, q, nb));
     if (!exits.length) return null;
@@ -2795,8 +2795,8 @@ function sweepTraps() {
     G.traps = G.traps.filter(t => {
         const p = G.board[t.r][t.c];
         if (!p || kSafe(p) || p.ghost) return true;
-        if (p.warded > 0) {      // Очищение: фигура давит капкан без последствий
-            addLog('n', p.invis ? '✴ Невидимая фигура под Очищением уничтожает капкан' : `✴ ${pieceSym(p)} под Очищением уничтожает капкан на ${sqName(t.r, t.c)}`);
+        if (auraProtected(G.board, t.r, t.c)) {      // защита от магии (Очищение или барьер): фигура давит капкан без последствий
+            addLog('n', p.invis ? '✴ Невидимая фигура под защитой от магии уничтожает капкан' : `✴ ${pieceSym(p)} под защитой от магии уничтожает капкан на ${sqName(t.r, t.c)}`);
             return false;
         }
         p.snared = 1;
@@ -2825,7 +2825,7 @@ function sweepChargers(mid) {      // mid: ход ещё не закончилс
             return;
         }
         if (kSafe(p)) return;
-        if (p.warded > 0) { addLog('n', p.invis ? '✴ Невидимая фигура под Очищением не боится разряда' : `✴ ${pieceSym(p)} на ${here} под Очищением не боится разряда`); return; }
+        if (auraProtected(G.board, r, c)) { addLog('n', p.invis ? '✴ Невидимая фигура под защитой от магии не боится разряда' : `✴ ${pieceSym(p)} на ${here} под защитой от магии не боится разряда`); return; }
         p.snared = mid ? 2 : 1; p.shock = true;      // посреди хода ставим 2: в конце хода одна единица спадёт, и фигура всё равно пропустит следующий ход
         if (!p.invis) G.fx.push({ r, c, type: 'zap' });
         sfx('zap');
@@ -2847,7 +2847,7 @@ function chargerTurrets() {
             if (p.t === 'x') {
                 p.chg = 1;
             } else {
-                if (kSafe(p) || p.warded > 0) return;
+                if (kSafe(p) || auraProtected(G.board, rr, cc)) return;
                 p.snared = 1; p.shock = true;
             }
             hit.add(p);
@@ -3416,9 +3416,11 @@ function useAbility(key, r, c, ref) {
         sfx('shield');
     } else if (key === 'purify') {
         if (target.lie) revealLie(r, c);
+        if (target.hare) revertHare(r, c, target);                          // заяц снова становится фигурой
+        if (target.chg) addLog('n', `🔋 Очищение снимает заряд с робота на ${sqName(r, c)}`);
         if (target.hypno && target.orig) target.c = target.orig;            // гипноз тоже снимается
         if (target.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(target)} на ${sqName(r, c)} (Очищение)`);
-        ['cap', 'capBy', 'betray', 'scared', 'scaredT', 'zombie', 'shield', 'altruist', 'sup', 'lure', 'hypno', 'orig', 'fresh', 'bomb', 'bombBy', 'invis', 'phase', 'x', 'warded'].forEach(f => { delete target[f]; });
+        ['cap', 'capBy', 'betray', 'scared', 'scaredT', 'zombie', 'shield', 'altruist', 'sup', 'lure', 'hypno', 'orig', 'fresh', 'bomb', 'bombBy', 'invis', 'phase', 'x', 'chg', 'onChg', 'warded'].forEach(f => { delete target[f]; });
         target.frozen = 0; target.snared = 0; target.shield = false;
         if (target.soul) { delete target.soul; G.soulList = G.soulList.filter(e => e.p !== target); }
         target.warded = CONFIG.wardTurns + 1;
@@ -7198,7 +7200,7 @@ function hatchBump(to) {
 function hatchTrigger(p, mv, cont) {
     if (!G.hatches || !G.hatches.length) return false;
     const q = G.board[mv.tr][mv.tc];
-    if (q !== p || kSafe(p) || p.warded > 0) return false;
+    if (q !== p || kSafe(p) || auraProtected(G.board, mv.tr, mv.tc)) return false;
     if (!G.hatches.some(h => h.r === mv.tr && h.c === mv.tc)) return false;
     let exits = hatchExits(mv.tr, mv.tc, p);
     if (!exits.length) return false;
@@ -7217,7 +7219,7 @@ function hatchTrigger(p, mv, cont) {
 function hatchPlan(items, cont, onBump) {
     const falls = [];
     items.forEach((it, i) => {
-        if (G.hatches && G.hatches.length && !kSafe(it.p) && !(it.p.warded > 0) && G.hatches.some(h => h.r === it.to[0] && h.c === it.to[1])) falls.push(i);
+        if (G.hatches && G.hatches.length && !kSafe(it.p) && !auraProtected(G.board, it.to[0], it.to[1], it.p) && G.hatches.some(h => h.r === it.to[0] && h.c === it.to[1])) falls.push(i);
     });
     HATCH_PLAN = { items, falls, chosen: [], idx: 0, cont, onBump, via: G.mode && G.mode.via, from: items[0].from };      // via: способность вызвана через Зеркало
     hatchPlanNext();
@@ -7283,10 +7285,10 @@ function hatchPlanBump(r, c) {
 }
 
 // Фокус-Покус: две фигуры в квадрате 5×5 вокруг первой
-const hocusPiece = (p, col) => !!p && !kSafe(p) && !(p.warded > 0) && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col);      // фигура под Очищением защищена от магии: Фокус-Покус её не меняет
+const hocusPiece = (p, col, r, c) => !!p && !kSafe(p) && !(r !== undefined ? auraProtected(G.board, r, c, p) : p.warded > 0) && !p.soul && !p.sup && !p.lie && !hiddenFor(p, col);      // фигура под защитой от магии (Очищение или барьер Мага): Фокус-Покус её не меняет
 function hocusOk(a, b2, col) {
     const b = G.board, p = b[a[0]][a[1]], q = b[b2[0]][b2[1]];
-    if (!hocusPiece(p, col) || !hocusPiece(q, col)) return false;
+    if (!hocusPiece(p, col, a[0], a[1]) || !hocusPiece(q, col, b2[0], b2[1])) return false;
     if (p.ghost || q.ghost) {      // иллюзия среди целей: она просто рассеется
         const nb0 = cloneBoard(b);
         [a, b2].forEach(([rr, cc]) => { if (nb0[rr][cc].ghost) nb0[rr][cc] = null; });
@@ -7343,7 +7345,7 @@ function magiCellsRaw(key, col, first) {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) { cells.push([r, c]); if (first && cells.length >= 2) return cells; }
     } else if (key === 'hocus') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-            if (!hocusPiece(b[r][c], col)) continue;
+            if (!hocusPiece(b[r][c], col, r, c)) continue;
             if (hocusCells(col, [r, c], true).length) { cells.push([r, c]); if (first) return cells; }
         }
     } else if (key === 'assistant') {
