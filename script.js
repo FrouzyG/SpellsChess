@@ -7439,6 +7439,7 @@ function engCells(key, col) {
         if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом плитка не спасает короля, а ход тратит
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) cells.push([r, c]);
     } else if (key === 'reprogram') {
+        if (!safeAfter(cloneBoard(b), col)) return cells;      // под шахом перепрограммирование не спасает короля, а ход тратит: как «действие» для мата и пата не считается
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
             if (p && p.c === col && !p.orig && !p.ghost && ((p.t === 'x' && p.rob) || (p.t === 'u' && p.tur))) cells.push([r, c]);

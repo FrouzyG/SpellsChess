@@ -1152,7 +1152,7 @@ button {
 .trap-mark {
     position: absolute;
     inset: 14%;
-    z-index: 1;
+    z-index: 2;
     display: grid;
     place-items: center;
     font-size: calc(var(--cell) * 0.45);
@@ -4768,7 +4768,7 @@ button {
 .hatch-mark {
     position: absolute;
     inset: 14%;
-    z-index: 2;
+    z-index: 1;
     pointer-events: none;
 }
 
