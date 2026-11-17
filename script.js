@@ -40,11 +40,11 @@ const CONFIG = {
         conveyor: 5, portals: 8, relocate: 2,        // Архитектор
         shomen: 9, fukashi: 7, fenyan: 6,            // Самурай
         teleport: 10,                                // пассивка Самурая «Кагэватари»
-        phase: 4, soulmates: 7, scream: 4,           // Призрак
+        phase: 4, soulmates: 7, scream: 6,           // Призрак
         zawarudo: 12, misclick: 12, superposition: 6,  // Повелитель времени
         groundhog: 7,                                // Ход сурка
         timeslow: 5,                                 // пассивка Повелителя времени
-        guardian: 5, purify: 10, lie: 9, virus: 3,  // новые способности
+        guardian: 5, purify: 10, lie: 9, virus: 8,  // новые способности
         vine: 5, ritual: 4, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
         fog: 5, hatch: 4, hocus: 9, assistant: 6,        // Фокусник
@@ -53,10 +53,10 @@ const CONFIG = {
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
     timePassiveCostsTurn: false,   // true: пассивка Повелителя времени тратит ход
-    guardianTurns: 5,        // Ангел-хранитель: сколько ходов держится самоотверженность
+    guardianTurns: 3,        // Ангел-хранитель: сколько ходов держится самоотверженность
     wardTurns: 3,            // Очищение: сколько ходов держится защита от магии
     capTurns: 4,             // Шут: сколько ходов ВРАГА держится шутовской колпак (колпак держится на 1 меньше)
-    jawsTurns: 3,            // Шут: сколько своих ходов живут заводные челюсти
+    jawsTurns: 5,            // Шут: сколько своих ходов живут заводные челюсти
     fogTurns: 5,             // Фокусник: сколько ходов владельца держится дым
     sawingCooldown: 4,       // Фокусник: на сколько своих ходов пассивка «Распиливание» отключается у ВСЕХ фигур после прохода через край доски
     hareTurns: 3,            // Фокусник: на сколько своих ходов фигура становится зайцем
@@ -202,8 +202,9 @@ const ABILITIES = {
     },
     // --- Новые способности
     guardian: {
+        free: true,
         icon: '👼', name: 'Ангел-хранитель',
-        desc: 'На ' + CONFIG.guardianTurns + ' ходов фигура прикрывает союзников в 3×3: если любую из них убивают (рубкой или магией), она меняется с ней местами и гибнет вместо неё.'
+        desc: 'На ' + CONFIG.guardianTurns + ' хода фигура прикрывает союзников в 3×3: если любую из них убивают (рубкой или магией), она меняется с ней местами и гибнет вместо неё.'
     },
     purify: {
         icon: '✴️', name: 'Очищение',
@@ -214,6 +215,7 @@ const ABILITIES = {
         desc: 'Выберите клетку, куда встанет невидимая фигура, и клетку её иллюзии (оба хода обычные). После хода врага правда раскрывается.'
     },
     virus: {
+        free: true,
         icon: '☣️', name: 'Вирус',
         desc: 'Заражённая плитка: вставшая на неё фигура (не король) становится зомби.'
     },
@@ -274,7 +276,7 @@ Object.assign(ABILITIES, {
     },
     jaws: {
         icon: '🦷', name: 'Заводные челюсти',
-        desc: 'Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт ' + CONFIG.jawsTurns + ' ваших хода. Её можно срубить.'
+        desc: 'Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт ' + CONFIG.jawsTurns + ' ваших ходов. Её можно срубить.'
     },
     tomato: {
         free: true,
@@ -3496,7 +3498,7 @@ function finishAbility(key, text) {
     G.lastAb[col] = key;
     addLog(col, text);
     if (G.screamed && key !== 'scream') { G.screamed = false; G.archUsed = false; }      // обязательная способность после Скримера применена: дальше как обычно
-    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog') { continueTurn(); return; }   // свободное действие: после него обычный ход
+    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog' || key === 'guardian' || key === 'virus') { continueTurn(); return; }   // свободное действие: после него обычный ход
     G.ep = null;
     if (key === 'scream' && G.hero[col] !== 'architect') {      // после Скримера обязательно нужна другая способность; ходить фигурой нельзя, нет способностей: ход пропускается
         G.archUsed = true; G.screamed = true;
@@ -6010,7 +6012,7 @@ const EN = {
     "В начале партии тайно выберите вражеского слона или коня: Предательство. Враг ходит ею как обычно. После 10-го хода врага можно потратить ход и дважды нажать на неё: она навсегда сменит цвет и будет подчиняться только вам (в этот ход сама не ходит).": "At the start of the game, secretly pick an enemy bishop or knight: Betrayal. The enemy moves it as usual. After the enemy's 10th move you can spend your turn and click it twice: it changes color for good and obeys only you (it does not move on that turn).",
     "Шутовской колпак на вашу фигуру (враг не видит, на какую): 3 хода врага она не может рубить и создавать шахи. Срубивший её погибает, а колпак слетает. Перед четвёртым ходом врага колпак слетает сам: фигура снова создаёт угрозу, и её можно срубить.": "A jester's hat on your piece (the enemy cannot see which): for 3 enemy turns it cannot capture or give check. Whoever captures it dies, and the hat falls off. Before the enemy's fourth turn the hat falls off by itself: the piece threatens again and can be captured.",
     "Невидимая для врага кожура на свободной клетке с направлением (вверх, вниз, влево, вправо): вставшая на неё фигура (не король) поскальзывается и съезжает на соседнюю клетку в эту сторону, кожура исчезает. Ход не тратится.": "A peel invisible to the enemy on a free square with a direction (up, down, left, right): a piece (not a king) that steps on it slips onto the neighbouring square in that direction and the peel vanishes. Costs no turn.",
-    "Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт 3 ваших хода. Её можно срубить.": "A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for 3 of your turns. It can be captured.",
+    "Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт 5 ваших ходов. Её можно срубить.": "A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for 5 of your turns. It can be captured.",
     "Помидор в одну из способностей врага: она отключается на 5 ходов врага (перезарядка идёт как обычно). Нельзя бросить в уже отключённую способность. Ход не тратится.": "A tomato at one of the enemy's abilities: it is disabled for 5 enemy turns (its cooldown keeps running as usual). Cannot be thrown at an ability that is already disabled. Costs no turn.",
     "🍅 уже отключена": "🍅 already disabled",
     "(ход не потрачен)": "(no turn spent)",
@@ -6256,7 +6258,7 @@ const EN = {
     "Участвовал в бета-тестировании SpellsChess": "Took part in the SpellsChess beta test",
     "Метка в радиусе 5 от короля. В начале вашего хода взрыв, затем 3 хода клетка горит: фигуры на ней сгорают. Уничтожает плитки.": "A mark within 5 squares of your king. It explodes at the start of your turn, then burns for 3 turns: pieces on it burn up. Destroys tiles.",
     "Вражеская фигура (не король) ходит только на 1 клетку: конь как слон, пешка вперёд без рубки. Страх спадает после её хода, у пешки через ": "An enemy piece (not a king) moves only 1 square: a knight like a bishop, a pawn forward without capturing. The fear wears off after its move, for a pawn after ",
-    " ходов фигура прикрывает союзников в 3×3: если любую из них убивают (рубкой или магией), она меняется с ней местами и гибнет вместо неё.": " turns the piece covers allies in 3×3: if one of them is killed (by capture or magic), it swaps places with that ally and dies instead.",
+    " хода фигура прикрывает союзников в 3×3: если любую из них убивают (рубкой или магией), она меняется с ней местами и гибнет вместо неё.": " turns the piece covers allies in 3×3: if one of them is killed (by capture or magic), it swaps places with that ally and dies instead.",
     "Выберите клетку, куда встанет невидимая фигура, и клетку её иллюзии (оба хода обычные). После хода врага правда раскрывается.": "Choose the square for the invisible piece and the square for its illusion (both are normal moves). After the enemy's move the truth is revealed.",
     "Одноразово: фигура (не король) не мешает, через неё можно пройти и встать на её клетку, а она возвращается на клетку прошлого хода (если там встала ходившая фигура, ту рубят).": "One-time: a piece (not a king) does not block: others can pass through it or stop on its square, and it returns to its previous square (if the moving piece stopped there, it is captured).",
     "Невидима для врага, но блокирует ходы (пройти сквозь неё значит срубить). Раскрывается, если рубит, даёт шах или ей грозит пешка. Если ход врага упирается в неё, она раскрывается, а ход не тратится.": "Invisible to the enemy but blocks moves (passing through it means capturing it). Revealed if it captures, gives check or is threatened by a pawn. If the enemy's move runs into it, it is revealed and the move is not spent.",
