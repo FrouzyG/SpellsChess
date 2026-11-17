@@ -41,13 +41,13 @@ const CONFIG = {
         shomen: 9, fukashi: 7, fenyan: 6,            // Самурай
         teleport: 10,                                // пассивка Самурая «Кагэватари»
         phase: 4, soulmates: 7, scream: 4,           // Призрак
-        zawarudo: 10, misclick: 12, superposition: 6,  // Повелитель времени
-        groundhog: 6,                                // Ход сурка
-        timeslow: 4,                                 // пассивка Повелителя времени
+        zawarudo: 12, misclick: 12, superposition: 6,  // Повелитель времени
+        groundhog: 7,                                // Ход сурка
+        timeslow: 5,                                 // пассивка Повелителя времени
         guardian: 5, purify: 10, lie: 9, virus: 3,  // новые способности
-        vine: 5, ritual: 5, bumpuku: 3, generator: 7,
+        vine: 5, ritual: 4, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
-        fog: 5, hatch: 3, hocus: 7, assistant: 6,        // Фокусник
+        fog: 5, hatch: 4, hocus: 9, assistant: 6,        // Фокусник
         assemble: 3, charger: 7, turret: 5, reprogram: 4  // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
@@ -162,7 +162,7 @@ const ABILITIES = {
     },
     scream: {
         icon: '😱', name: 'Скример',
-        desc: 'Вражеская фигура (не король) ходит только на 1 клетку: конь как слон, пешка вперёд без рубки. Страх спадает после её хода, у пешки через ' + CONFIG.scaredPawnTurns + ' хода.'
+        desc: 'Вражеская фигура (не король) ходит только на 1 клетку: конь как слон, пешка вперёд без рубки. Страх спадает после её хода, у пешки через ' + CONFIG.scaredPawnTurns + ' хода. После Скримера нужно обязательно применить другую способность (ходить фигурой нельзя); если способностей нет, ход пропускается.'
     },
     // --- Самурай
     shomen: {
@@ -185,7 +185,7 @@ const ABILITIES = {
     },
     portals: {
         icon: '🌀', name: 'Порталы',
-        desc: 'Две связанные плитки: ход через портал продолжается из второго, вставшая фигура переносится на второй. Одновременно две пары.'
+        desc: 'Две связанные плитки: ход через портал продолжается из второго, вставшая фигура переносится на второй. Одновременно две пары. Портал можно поставить и на клетку с другой плиткой (кроме стены и огня).'
     },
     relocate: {
         icon: '🧭', name: 'Перемещение',
@@ -233,7 +233,7 @@ const ABILITIES = {
     },
     generator: {
         icon: '⚡', name: 'Короткое замыкание',
-        desc: 'Плитки плюс и минус. Все плюсы связаны со всеми минусами: если фигуры стоят и на плюсе, и на минусе, их убивает разряд.'
+        desc: 'Плитки плюс и минус. Первым ставится плюс (синяя клетка), вторым минус (красная). Все плюсы связаны со всеми минусами: если фигуры стоят и на плюсе, и на минусе, их убивает разряд.'
     },
     groundhog: {
         free: true,
@@ -451,11 +451,11 @@ Object.assign(ABILITIES, {
     },
     hatch: {
         icon: '🪵', name: 'Потайной люк',
-        desc: 'Создаёт плитку-люк на свободной клетке. Фигура (не король), вставшая на неё, проваливается и вылезает из другой свободной плитки на выбор того, кто ходит. Если других плиток нет или все заняты, ничего не происходит. Король игрока после падения не должен остаться под шахом: если вылезти можно безопасно, только туда и можно, а если нельзя, ход на люк недоступен.'
+        desc: 'Создаёт плитку-люк на свободной клетке: в первый раз сразу два люка, дальше по одному. Фигура (не король), вставшая на неё, проваливается и вылезает из другой свободной плитки на выбор того, кто ходит. Если других плиток нет или все заняты, ничего не происходит. Король игрока после падения не должен остаться под шахом: если вылезти можно безопасно, только туда и можно, а если нельзя, ход на люк недоступен.'
     },
     hocus: {
         icon: '🪄', name: 'Фокус-Покус',
-        desc: 'Меняет местами две любые фигуры (кроме королей) в квадрате 5×5 вокруг первой. Ваш король не должен остаться под шахом.'
+        desc: 'Меняет местами две любые фигуры (кроме королей) в квадрате 5×5 вокруг первой. Ваш король не должен остаться под шахом. Союзную пешку нельзя поставить на последнюю горизонталь, где она превращается, поэтому с фигурами на ней она не меняется. Фигуры под защитой от магии (Очищение, Магический барьер) не меняются.'
     },
     assistant: {
         icon: '🐇', name: 'Ассистент',
@@ -1470,13 +1470,14 @@ function applyMove(board, mv, promo) {
 }
 
 /* ---------- Конвейеры и порталы Архитектора: срабатывают в конце каждого хода ---------- */
-function applyEffects(b, log) {
+function applyEffects(b, log, forSide) {      // forSide: проверка шаха глазами этой стороны (чужие скрытые ловушки Хода сурка она не знает)
     if (!G.conv.length && !G.portals.length && !G.hogs.length) return;
     const touched = new Set();
     // Ход сурка: фигура на временной ловушке возвращается туда, откуда пришла (король не страдает).
     // Срабатывает ДО конвейера, иначе конвейер увёл бы фигуру с ловушки.
     const hogStep = () => {
         G.hogs.slice().forEach(h => {
+            if (forSide && !(h.visible || h.owner === forSide)) return;
             const q = b[h.r][h.c];
             if (!q) { if (log) h.exempt = null; return; }
             if (q.ghost || kSafe(q) || (h.exempt && q.uid === h.exempt)) return;
@@ -1529,8 +1530,19 @@ function applyEffects(b, log) {
 }
 
 // Король в безопасности после хода/способности, с учётом срабатывания конвейеров и порталов (nb: копия доски)
+// Плитки короткого замыкания: если после хода на плюсе и на минусе стоят фигуры, разряд убьёт их (в том числе защищавшую короля)
+function gensDischargeOnBoard(nb) {
+    if (typeof G === 'undefined' || !G || !G.gens || !G.gens.length) return;
+    const occ = sign => G.gens.filter(g => g.sign === sign && nb[g.r][g.c] && !nb[g.r][g.c].ghost);
+    const plus = occ('+'), minus = occ('-');
+    if (!plus.length || !minus.length) return;
+    [...plus, ...minus].forEach(g => { if (nb[g.r][g.c] && !magicProof(nb, g.r, g.c)) nb[g.r][g.c] = null; });
+}
+
 function safeAfter(nb, col) {
-    applyEffects(nb, false);
+    applyEffects(nb, false, col);
+    gensDischargeOnBoard(nb);
+    if (!allMode(col) && !findKing(nb, col)) return false;      // разряд убил своего короля
     return kingSafe(nb, col, G.fire, true);
 }
 
@@ -1542,6 +1554,16 @@ function bananaSlideOnBoard(nb, r, c, col, any) {
     if (!bn || !q || q.c !== col || kSafe(q) || q.ghost || auraProtected(nb, r, c)) return;      // защита от магии (Очищение и барьер) от кожуры не скользит
     const tr = r + bn.dir[0], tc = c + bn.dir[1];
     if (inb(tr, tc) && !nb[tr][tc] && !wallAt(tr, tc)) { nb[tr][tc] = q; nb[r][c] = null; }
+}
+
+// Ход сурка: фигура, вставшая на ловушку, вернётся на прежнюю клетку (для проверки шаха). any: учитывать и скрытые ловушки
+function hogReturnOnBoard(nb, mv, col, any) {
+    if (typeof G === 'undefined' || !G || !G.hogs || !G.hogs.length) return false;
+    const h = G.hogs.find(x => x.r === mv.tr && x.c === mv.tc && (any || x.visible || x.owner === col));
+    const q = nb[mv.tr][mv.tc];
+    if (!h || !q || q.c !== col || q.ghost || kSafe(q) || (h.exempt && q.uid === h.exempt) || nb[mv.fr][mv.fc]) return false;
+    nb[mv.fr][mv.fc] = q; nb[mv.tr][mv.tc] = null;
+    return true;
 }
 
 function isLegalMove(b, mv) {
@@ -1696,11 +1718,12 @@ function invisReason(b, r, c) {
     return null;
 }
 
-function revealPiece(r, c, why) {
+function revealPiece(r, c, why, probe) {
     const p = G.board[r][c];
     if (p.lie) { revealLie(r, c); return; }
     delete p.invis;
     if (p.fog) p.fogSeen = true;       // фигура в дыму раскрыта и остаётся видимой, пока не сходит
+    else if (probe) p.fukashiHeld = true;      // раскрыта попыткой поставить плитку: после её хода Фукаши снова скроет её
     if (p.uid) G.log.forEach(e => { if (e.hid === p.uid) { e.text = e.real + ' 🥷'; delete e.hid; delete e.real; } });
     G.fx.push({ r, c, type: 'ghost' });
     sfx('poof');
@@ -2036,7 +2059,7 @@ function rescueDests(r, c) {
     const b = G.board, p = b[r][c], col = p.c, out = [], home = col === 'w' ? N - 1 : 0;
     (p.t === 'p' ? ownHalf(col).filter(x => x !== home) : [home]).forEach(rr => {
         for (let cc = 0; cc < N; cc++) {
-            if (b[rr][cc] && !hiddenFor(b[rr][cc], col)) continue;
+            if (b[rr][cc] && !hiddenUnknown(b[rr][cc], rr, cc, col)) continue;
             if (!kSafe(p) && burnAt(rr, cc)) continue;
             const nb = cloneBoard(b);
             nb[rr][cc] = nb[r][c];
@@ -2080,10 +2103,13 @@ function arrowCells(col, range, ignoreFrozen) {
 // VIEWER: чьими глазами смотрим (внутри abilityCells и onModeCell). Вражеская невидимка для него выглядит как свободная клетка
 let VIEWER = null;
 // Для заводных челюстей годится любая пустая клетка, в том числе с плиткой или порталом
-const isEmptyCell = (r, c) => !G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER));
-const isFreeCell = (r, c) => !wallAt(r, c) && (!G.board[r][c] || (VIEWER && hiddenFor(G.board[r][c], VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
+const isEmptyCell = (r, c) => !G.board[r][c] || (VIEWER && hiddenUnknown(G.board[r][c], r, c, VIEWER));
+const isFreeCell = (r, c) => !wallAt(r, c) && (!G.board[r][c] || (VIEWER && hiddenUnknown(G.board[r][c], r, c, VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c) && !G.conv.some(x => x.r === r && x.c === c) &&
     !G.gens.some(x => x.r === r && x.c === c) && !G.virus.some(x => x.r === r && x.c === c) && !G.vines.some(x => x.r === r && x.c === c) &&
     !G.rituals.some(x => x.r === r && x.c === c) && !(G.hatches || []).some(x => x.r === r && x.c === c) && !(G.chargers || []).some(x => x.r === r && x.c === c);
+
+// Клетка под портал: пустая, без стены, огня и другого портала; другие плитки (конвейер, люк, зарядка и т. д.) не мешают
+const isPortalCell = (r, c) => !wallAt(r, c) && (!G.board[r][c] || (VIEWER && hiddenUnknown(G.board[r][c], r, c, VIEWER))) && !burnAt(r, c) && !G.portals.some(x => x.r === r && x.c === c);
 
 // Порталы: одновременно две пары, при создании третьей самая старая исчезает
 function portalsWith(col, a, b2, id) {
@@ -2113,7 +2139,7 @@ function portalSafe(a, b2, col) {
 function portalPartners(a, col, first) {
     const out = [];
     for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-        if ((r === a[0] && c === a[1]) || !isFreeCell(r, c)) continue;
+        if ((r === a[0] && c === a[1]) || !isPortalCell(r, c)) continue;
         if (portalSafe(a, [r, c], col)) { out.push([r, c]); if (first) return out; }
     }
     return out;
@@ -2163,6 +2189,19 @@ function aimCells(col) {
 // ===== Невидимые фигуры и способности-размещения =====
 // Невидимая вражеская фигура для игрока col выглядит как пустая клетка, но мешает: попытка поставить туда фигуру её раскрывает (ход не тратится)
 const hiddenFor = (p, col) => !!p && !!p.invis && p.c !== col && !p.ghost;
+// Клетку, где фигура стала невидимой стоя на месте, враг знает (последний раз видел её именно там): прицелиться туда плиткой или ловушкой нельзя.
+// Если фигура двигалась в невидимости или шагнула в туман, её место неизвестно, и туда целиться можно (с раскрытием при подтверждении).
+const knownSpot = (p, r, c) => !!p && !!p.seenAt && p.seenAt[0] === r && p.seenAt[1] === c;
+const hiddenUnknown = (p, r, c, col) => hiddenFor(p, col) && !knownSpot(p, r, c);
+function refreshSeen() {      // запоминаем, где враг видел каждую фигуру в последний раз
+    if (!G || !G.board) return;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const p = G.board[r][c];
+        if (!p) continue;
+        if (!hiddenFor(p, other(p.c))) p.seenAt = [r, c];
+        else if (p.seenAt && (p.seenAt[0] !== r || p.seenAt[1] !== c)) p.seenAt = null;      // ушла со знакомой клетки: место теряется, возвращение его не вернёт
+    }
+}
 
 // Доска глазами игрока col: вражеские невидимки исчезли, вражеские иллюзии выглядят настоящими угрозами
 function visionBoard(nb, col) {
@@ -2183,7 +2222,7 @@ const placeVerdict = (nb, col) => ({ real: safeAfter(cloneBoard(nb), col), vis: 
 // true — действие перехвачено, ход не тратится
 function guardPlacement(col, r, c, build, isKing) {
     const b = G.board, occ = b[r][c];
-    if (hiddenFor(occ, col)) { revealPiece(r, c, 'на её клетку попытались встать'); return true; }
+    if (hiddenFor(occ, col)) { revealPiece(r, c, 'на её клетку попытались встать', true); return true; }
     const nb = cloneBoard(b);
     build(nb);
     if (safeAfter(cloneBoard(nb), col)) return false;
@@ -2234,7 +2273,7 @@ function abilityCellsRaw(key, col, t, first) {
     if (key === 'resurrect' || key === 'raise') {
         (t.t === 'p' ? ownHalf(col) : [col === 'w' ? N - 1 : 0]).forEach(r => {   // первая горизонталь (пешка: любая из первых четырёх)
             for (let c = 0; c < N; c++) {
-                if (b[r][c] && !hiddenFor(b[r][c], col)) continue;
+                if (b[r][c] && !hiddenUnknown(b[r][c], r, c, col)) continue;
                 const nb = cloneBoard(b);
                 nb[r][c] = { ...mk(t.t, col), x: [...(t.x || [])], rob: t.rob, moved: true, zombie: key === 'raise' };
                 if (safeAfter(nb, col)) cells.push([r, c]);
@@ -2354,7 +2393,7 @@ function abilityCellsRaw(key, col, t, first) {
         if (!k) return [];
         const show = [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-            if (b[r][c] && !hiddenFor(b[r][c], col)) continue;
+            if (b[r][c] && !hiddenUnknown(b[r][c], r, c, col)) continue;
             const nb = cloneBoard(b);
             nb[r][c] = nb[k[0]][k[1]];
             nb[k[0]][k[1]] = null;
@@ -2368,7 +2407,7 @@ function abilityCellsRaw(key, col, t, first) {
         }
     } else if (key === 'portals') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-            if (isFreeCell(r, c) && portalPartners([r, c], col, true).length) cells.push([r, c]);
+            if (isPortalCell(r, c) && portalPartners([r, c], col, true).length) cells.push([r, c]);
         }
     } else if (key === 'relocate') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
@@ -2401,7 +2440,7 @@ function abilityCellsRaw(key, col, t, first) {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (G.hogs.some(h => h.r === r && h.c === c && h.visible)) continue;      // скрытую ловушку сурка новая заменит
             const p = b[r][c];
-            if (!p || hiddenFor(p, col)) cells.push([r, c]);    // пустая клетка (или невидимка врага): скрыто и бесплатно
+            if (!p || hiddenUnknown(p, r, c, col)) cells.push([r, c]);    // пустая клетка (или невидимка врага, чьё место неизвестно): скрыто и бесплатно
             else if (safeNow && !p.ghost) cells.push([r, c]);   // на фигуру: видно и тратит ход
         }
     } else if (key === 'superposition') {
@@ -2423,7 +2462,7 @@ function abilityCellsRaw(key, col, t, first) {
     } else if (key === 'trap') {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-            if (!b[r][c] || hiddenFor(b[r][c], col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
+            if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
         }
     } else if (key === 'lure') {
         if (!safeNow) return [];
@@ -2583,8 +2622,8 @@ function addLog(c, text) { G.log.push({ c, text, n: logNo() }); }
 const logNo = () => (G.log.length ? (G.turnNo || 0) + 1 : 0);
 
 // Ход невидимой фигуры: в журнале просто «сделала ход», подробности раскроются, когда фигура станет видимой
-function logHidden(c, p, real) {
-    G.log.push({ c, text: '🥷 Невидимая фигура сделала ход', hid: uidOf(p), real, n: logNo() });
+function logHidden(c, p, real, shown) {
+    G.log.push({ c, text: shown || '🥷 Невидимая фигура сделала ход', hid: uidOf(p), real, n: logNo() });
 }
 
 // Плитки (сейчас только конвейеры) уничтожаются огненным шаром. Ловушки (капкан) плитками не считаются.
@@ -2671,11 +2710,34 @@ function bombStep(c) {
     });
 }
 
+// Пешка, ставшая обратно из зайца на последней горизонтали, ждёт выбора фигуры: владелец выбирает в начале своего хода
+function pendingPromoOf(col) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const p = G.board[r][c];
+        if (p && p.c === col && p.t === 'p' && p.promoPending && !p.ghost) return [r, c];
+    }
+    return null;
+}
+function promoteAuto(pos, t) {
+    const q = G.board[pos[0]][pos[1]];
+    if (q) {
+        delete q.promoPending;
+        q.t = t;
+        G.fx.push({ r: pos[0], c: pos[1], type: 'land' });
+        addLog('n', `♟ Пешка на ${sqName(pos[0], pos[1])} превращается: ${pieceSym(q)}`);
+    }
+    startTurn();
+}
+
 function startTurn() {
+    if (typeof syncFog === 'function') syncFog();
+    refreshSeen();
+    const pend = pendingPromoOf(G.turn);
+    if (pend && !G.pendingPromo) { render(); showPromo({ auto: pend }, {}); return; }
     const c = G.turn;
     G.noZForce = false;
     G.bonus = null;
-    G.archUsed = false;
+    G.archUsed = false; G.screamed = false;
     G.pairStep = null;
 
     // 1. Взрываются огненные шары и прилетают стрелы игрока, чей ход начинается
@@ -2968,7 +3030,7 @@ function endTurn() {
     soulSync();
     G.bonus = null;
     G.noZForce = false;
-    G.archUsed = false;
+    G.archUsed = false; G.screamed = false;
     G.pairStep = null;
     G.board.forEach((row, r) => row.forEach((p, cc) => {
         if (!p) return;
@@ -3052,6 +3114,21 @@ function endTurn() {
     startTurn();
 }
 
+// После раскрытия ловушки у игрока могло не остаться ходов: тогда мат (или пат) засчитывается сразу
+function afterTrapReveal() {
+    const c = G.turn;
+    const { attacked, latent } = computeState(c);
+    const can = G.bonus ? hasBonusMove(c) : hasAnyAction(c);
+    if (!can) {
+        G.over = (attacked || latent)
+            ? { winner: other(c), title: 'Мат!', text: `${colorName(other(c))} побеждают.` }
+            : { winner: null, title: 'Пат', text: 'У игрока нет возможных действий. Ничья.' };
+        render(); showGameOver();
+        return;
+    }
+    render();
+}
+
 // Скрытая банановая кожура врага: если съезжание с неё вернуло бы шах своему королю, хода не происходит:
 // кожура раскрывается, а ход на эту клетку становится недоступен. Ход не тратится, можно выбрать другой.
 function bananaCheckTrap(mv) {
@@ -3073,9 +3150,28 @@ function bananaCheckTrap(mv) {
     return true;
 }
 
+// Скрытая ловушка Хода сурка врага: если возврат фигуры назад оставил бы своего короля под шахом, хода не происходит:
+// ловушка раскрывается, а ход на эту клетку становится недоступен. Ход не тратится, можно выбрать другой.
+function hogCheckTrap(mv) {
+    if (!G.hogs || !G.hogs.length) return false;
+    const p = G.board[mv.fr][mv.fc];
+    if (!p) return false;
+    const col = p.c;
+    const h = G.hogs.find(x => x.r === mv.tr && x.c === mv.tc && x.owner !== col && !x.visible);
+    if (!h) return false;
+    const nb = cloneBoard(G.board);
+    applyMove(nb, mv, 'q');
+    if (!hogReturnOnBoard(nb, mv, col, true)) return false;      // ловушка на этой фигуре не сработает: обычный ход
+    if (safeAfter(nb, col)) return false;                         // после возврата король в безопасности: обычный ход
+    h.visible = true;
+    sfx('rewind');
+    addLog('n', L(`⏳ На ${sqName(mv.tr, mv.tc)} была спрятана ловушка Хода сурка: ход невозможен (король остался бы под шахом), ловушка раскрыта`, `⏳ A Groundhog Move trap was hidden on ${sqName(mv.tr, mv.tc)}: that move is impossible (the king would stay in check), the trap is revealed`));
+    return true;
+}
+
 function tryMove(mv, ctx) {
     if (mv.decoy) { if (!mv.redirect) return; mv = mv.redirect; }   // «сквозь» невидимую фигуру: на деле рубка её (или ход невозможен)
-    if (bananaCheckTrap(mv)) { G.sel = null; G.moves = []; render(); return; }
+    if (bananaCheckTrap(mv) || hogCheckTrap(mv)) { G.sel = null; G.moves = []; afterTrapReveal(); return; }
     ctx = ctx || (G.bonus ? { bonus: true, zw: G.bonus.kind === 'zw' ? G.bonus.step : 0 } : {});
     if (!G.bonus && !ctx.pairSecond && !ctx.apo && !ctx.charge) {      // Зарядка: ход заряженного робота бесплатный (обычный ход остаётся), но им нельзя ставить шах
         const q0 = G.board[mv.fr][mv.fc];
@@ -3199,9 +3295,17 @@ function executeMove(mv, promo, ctx) {
     if (harvest) text += ' 🌾';
 
     G.ep = (mv.double && !wasGhost) ? { r: (mv.fr + mv.tr) / 2, c: mv.fc, pr: mv.tr, pc: mv.tc } : null;
+    const wasInvis = !!p.invis;      // была ли фигура уже невидимой до этого хода
+    if (p.fukashiHeld) { delete p.fukashiHeld; if (!cap && !own && !res.thorn && !res.burned) p.invis = true; }      // Фукаши: раскрытая попыткой постановки фигура после хода снова невидима (если не рубила; шах и угроза пешки раскроют её по обычным правилам)
     const hideMove = (!!p.invis || (!kSafe(p) && !p.ghost && fogAt(mv.tr, mv.tc))) && !res.thorn && !res.burned;      // ход невидимой фигуры и ход в дым не выдаём
-    G.last = (kgBs.length || hideMove) ? null : { fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc };
-    if (!kgBs.length) { if (hideMove) logHidden(col, p, text); else addLog(col, text); }
+    const intoFog = !kSafe(p) && fogAt(mv.tr, mv.tc) && !wasInvis && !res.thorn && !res.burned;      // фигура шагнула в туман из видимости
+    const fogText = `🌫️ ${sym} с ${from} уходит в туман`;
+    G.last = (kgBs.length || hideMove || intoFog) ? null : { fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc };
+    if (!kgBs.length) {
+        if (intoFog) { if (p.ghost) addLog(col, fogText); else logHidden(col, p, text, fogText); }
+        else if (hideMove) logHidden(col, p, text);
+        else addLog(col, text);
+    }
     if (res.released) addLog('n', `🌀 ${sym} срубила фигуру и вырывается из-под гипноза`);
     if (res.guard) {
         const gd = res.guard;
@@ -3373,10 +3477,15 @@ function revealLies(c) {
 // Ходы зомби под управлением Апокалипсиса: чужой зомби ходит как фигура игрока (рубит свои же фигуры)
 function zombieMoves(r, c, col) {
     const p = G.board[r][c];
-    if (p.c === col) return legalMovesAt(G.board, r, c);
+    // Апокалипсис это дополнительный ход, после него ещё будет обычный: под шахом зомби может сходить и не спасая короля (короля рубить нельзя)
+    const moves = () => {
+        if (!kingAttacked(G.board, col)) return legalMovesAt(G.board, r, c);
+        return pseudoMoves(G.board, r, c).filter(mv => { const t = G.board[mv.tr][mv.tc]; return !(t && t.t === 'k') && !mv.castle; });
+    };
+    if (p.c === col) return moves();
     const o = p.c;
     p.c = col;
-    try { return legalMovesAt(G.board, r, c); } finally { p.c = o; }
+    try { return moves(); } finally { p.c = o; }
 }
 
 function finishAbility(key, text) {
@@ -3386,8 +3495,14 @@ function finishAbility(key, text) {
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = key;
     addLog(col, text);
+    if (G.screamed && key !== 'scream') { G.screamed = false; G.archUsed = false; }      // обязательная способность после Скримера применена: дальше как обычно
     if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog') { continueTurn(); return; }   // свободное действие: после него обычный ход
     G.ep = null;
+    if (key === 'scream' && G.hero[col] !== 'architect') {      // после Скримера обязательно нужна другая способность; ходить фигурой нельзя, нет способностей: ход пропускается
+        G.archUsed = true; G.screamed = true;
+        continueTurn();
+        return;
+    }
     if (G.hero[col] === 'architect') {      // пассивка «Мастер на все руки»: способности не заканчивают ход
         G.archUsed = true;
         continueTurn();
@@ -3416,7 +3531,7 @@ function useAbility(key, r, c, ref) {
         sfx('shield');
     } else if (key === 'purify') {
         if (target.lie) revealLie(r, c);
-        if (target.hare) revertHare(r, c, target);                          // заяц снова становится фигурой
+        if (target.hare && Number.isFinite(target.hare.left)) revertHare(r, c, target);      // временный заяц (от Ассистента) это дебафф и снимается; постоянный заяц из редактора остаётся
         if (target.chg) addLog('n', `🔋 Очищение снимает заряд с робота на ${sqName(r, c)}`);
         if (target.hypno && target.orig) target.c = target.orig;            // гипноз тоже снимается
         if (target.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(target)} на ${sqName(r, c)} (Очищение)`);
@@ -3906,8 +4021,8 @@ const FREE_CELL_KEYS = ['assemble', 'charger', 'turret', 'hatch', 'ritual', 'vin
 
 function onModeCell(r, c) {
     const m = G.mode, t = m.type;
-    if (FREE_CELL_KEYS.includes(t) && hiddenFor(G.board[r][c], G.turn)) {
-        revealPiece(r, c, 'на её клетку попытались поставить плитку или ловушку');
+    if (FREE_CELL_KEYS.includes(t) && t !== 'conveyor' && hiddenFor(G.board[r][c], G.turn)) {      // у конвейера невидимка раскрывается только при подтверждении направления
+        revealPiece(r, c, 'на её клетку попытались поставить плитку или ловушку', true);
         cancelAbilityMode();
         return;
     }
@@ -3957,10 +4072,14 @@ function onModeCell(r, c) {
     if (t === 'banana') {                    // Банановая кожура: сначала клетка, потом направление
         const me = G.turn;
         if (m.stage === 'piece') {
-            if (hiddenFor(G.board[r][c], me)) { revealPiece(r, c, 'на её клетку попытались положить банановую кожуру'); cancelAbilityMode(); return; }
             m.first = [r, c]; m.stage = 'dir';
             m.cells = [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dr, dc]) => [r + dr, c + dc]).filter(([rr, cc]) => inb(rr, cc));
             render();
+            return;
+        }
+        if (hiddenFor(G.board[m.first[0]][m.first[1]], me)) {      // подтвердили установку на клетку с невидимкой: она раскрывается, кожура не ставится
+            revealPiece(m.first[0], m.first[1], 'на её клетку попытались положить банановую кожуру', true);
+            cancelAbilityMode();
             return;
         }
         placeBanana(m.first, [r, c]);
@@ -4080,6 +4199,11 @@ function onModeCell(r, c) {
             G.sel = { r, c };
             render();
         } else {
+            if (hiddenFor(G.board[m.at[0]][m.at[1]], G.turn)) {      // подтвердили установку на клетку с невидимкой: она раскрывается, конвейер не ставится
+                revealPiece(m.at[0], m.at[1], 'на её клетку попытались поставить конвейер', true);
+                cancelAbilityMode();
+                return;
+            }
             doConveyor(m.at, m.dirs.find(([dr, dc]) => m.at[0] + dr === r && m.at[1] + dc === c));
         }
         return;
@@ -4285,6 +4409,7 @@ function applyPromo(t) {
     const pp = G.pendingPromo;
     G.pendingPromo = null;
     $('#promo').classList.add('hidden');
+    if (pp.mv.auto) { promoteAuto(pp.mv.auto, t); return; }
     executeMove(pp.mv, t, pp.ctx);
 }
 
@@ -4364,7 +4489,7 @@ function renderBoard() {
     $('#app').classList.toggle('flipped', flip);
     if (G.sel && actor) G.moves.filter(m => m.castle && m.click && !m.hidden).forEach(m => { targets.set(m.click.join(','), 't-move'); });      // рокировку можно сделать нажатием на ладью
     if (G.sel && actor) G.moves.filter(m => !(m.castle && Math.abs(m.tc - m.fc) < 2) && !m.hidden).forEach(m => targets.set(m.tr + ',' + m.tc, ((G.board[m.tr][m.tc] && !G.board[m.tr][m.tc].invis && !supOpen(G.board, G.board[m.tr][m.tc])) || m.ep) ? 't-cap' : 't-move'));
-    if (G.mode && G.mode.cells && actor) (G.mode.cells.show || G.mode.cells).forEach(([r, c]) => targets.set(r + ',' + c, 't-' + G.mode.type));      // show: клетки, которые подсвечиваем (остальные нажимаются, но выглядят опасными)
+    if (G.mode && G.mode.cells && actor) (G.mode.cells.show || G.mode.cells).forEach(([r, c]) => targets.set(r + ',' + c, 't-' + (G.mode.type === 'generator' ? (G.mode.stage === 'piece' ? 'genplus' : 'genminus') : G.mode.type)));      // show: клетки, которые подсвечиваем (остальные нажимаются, но выглядят опасными)
     let kingPos = [];
     if (G.check) {
         kingPos = findKings(G.board, G.turn).filter(k => isAttacked(G.board, k[0], k[1], other(G.turn)));
@@ -4427,6 +4552,7 @@ function renderBoard() {
                 }
             }
             const gm = G.gens.find(x => x.r === r && x.c === c);
+            if (!gm && G.mode && G.mode.type === 'generator' && G.mode.a && G.mode.a[0] === r && G.mode.a[1] === c) html += '<div class="tile-mark gen-mark genpick">＋</div>';      // выбранный первым плюс уже виден синим
             if (gm) html += `<div class="tile-mark gen-mark ${gm.sign === '+' ? 'plus' : 'minus'} ${G.hero[gm.owner] === 'architect' ? '' : 'alt'}">${gm.sign === '+' ? '＋' : '－'}</div>`;
             const htm = (G.hatches || []).find(x => x.r === r && x.c === c);
             if (htm) html += '<div class="tile-mark hatch-mark"><span></span></div>';
@@ -4688,7 +4814,7 @@ function renderStatus() {
         else if (t === 'vine') h = 'Выберите свободную клетку для лозы.';
         else if (t === 'ritual') h = 'Выберите свободную клетку для призрачной плитки.';
         else if (t === 'bumpuku') h = 'Выберите союзную фигуру (не короля), на которую повесить бомбу.';
-        else if (t === 'generator') h = m.stage === 'piece' ? 'Выберите свободную клетку для плитки ПЛЮС.' : 'Выберите свободную клетку для плитки МИНУС.';
+        else if (t === 'generator') h = m.stage === 'piece' ? 'Выберите свободную клетку для плитки ПЛЮС (синяя).' : 'Выберите свободную клетку для плитки МИНУС (красная).';
         else if (t === 'groundhog') h = 'Выберите клетку для временной ловушки. Пустая: скрыто и бесплатно. С фигурой: видно, тратит ход.';
         else if (t === 'lie') h = m.stage === 'piece' ? 'Выберите фигуру, которая сделает ложный ход.' : m.stage === 'real' ? 'Выберите клетку НЕВИДИМОЙ фигуры (настоящий ход).' : 'Выберите клетку ИЛЛЮЗИИ (фейковый ход).';
         else if (t === 'superposition') h = 'Выберите любую фигуру (кроме короля): она получит суперпозицию.';
@@ -4713,6 +4839,8 @@ function renderStatus() {
         if (m.via) h = '🪞 Зеркало: ' + h;
     } else if (G.sel && G.board[G.sel.r][G.sel.c] && G.board[G.sel.r][G.sel.c].betray === G.turn && G.board[G.sel.r][G.sel.c].c !== G.turn) {
         h = '🃏 Нажмите на фигуру ещё раз: она навсегда перейдёт на вашу сторону. Это тратит ход.';
+    } else if (G.archUsed && G.screamed) {
+        h = '😱 Скример применён: теперь нужно применить другую способность, ходить фигурой нельзя.';
     } else if (G.archUsed) {
         h = '🧰 Ходить фигурой уже нельзя: можно применить ещё способность или нажать «Завершить ход».';
     } else if (G.bonus) {
@@ -7407,7 +7535,7 @@ function revertHare(r, c, p) {
     p.t = h.t;
     if (h.x && h.x.length) p.x = h.x;
     let note = '';
-    if (p.t === 'p' && (r === 0 || r === N - 1)) { p.t = 'q'; note = ' (пешка дошла до края и стала ферзём)'; }
+    if (p.t === 'p' && r === (p.c === 'w' ? 0 : N - 1)) { p.promoPending = true; note = ' (пешка дошла до края: превращение выберет владелец в начале своего хода)'; }
     G.fx.push({ r, c, type: 'poof' });
     addLog('n', p.invis ? '🐇 Заяц снова становится фигурой' : `🐇 Заяц на ${sqName(r, c)} снова становится фигурой: ${pieceSym(p)}${note}`);
 }
