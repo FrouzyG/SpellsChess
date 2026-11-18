@@ -32,9 +32,9 @@ const CONFIG = {
     // Перезарядка способностей (в ходах владельца)
     cooldown: {
         resurrect: 11, shield: 5, rescue: 9,         // Паладин
-        fireball: 7, freeze: 5, copy: 15,            // Маг
+        fireball: 7, freeze: 6, copy: 15,            // Маг
         illusion: 7, hypnosis: 8, confusion: 7,      // Экстрасенс
-        raise: 8, frankenstein: 3, apocalypse: 8,    // Некромант
+        raise: 8, frankenstein: 1, apocalypse: 8,    // Некромант
         trap: 4, arrow: 4, lure: 7,                  // Охотник
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
         conveyor: 5, portals: 8, relocate: 2,        // Архитектор
@@ -44,15 +44,19 @@ const CONFIG = {
         zawarudo: 12, misclick: 12, superposition: 6,  // Повелитель времени
         groundhog: 7,                                // Ход сурка
         timeslow: 5,                                 // пассивка Повелителя времени
-        guardian: 5, purify: 10, lie: 9, virus: 8,  // новые способности
+        guardian: 9, purify: 10, lie: 9, virus: 8,  // новые способности
         vine: 5, ritual: 4, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
         fog: 5, hatch: 4, hocus: 9, assistant: 6,        // Фокусник
+        openbook: 3, prediction: 9, charlatan: 3, unlucky: 6, badomen: 3,   // Гадалка
         assemble: 3, charger: 7, turret: 5, reprogram: 4  // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
     timePassiveCostsTurn: false,   // true: пассивка Повелителя времени тратит ход
+    predTurns: 3,            // Гадалка: за сколько своих ходов должна сходить фигура с предсказанием, иначе (если оно настоящее) умрёт
+    unluckyTurns: 1,         // Гадалка: сколько ходов ВРАГА живёт «Невезучий ход»
+    omenTurns: 3,            // Гадалка: сколько ходов ВРАГА живёт «Плохая примета»
     guardianTurns: 3,        // Ангел-хранитель: сколько ходов держится самоотверженность
     wardTurns: 3,            // Очищение: сколько ходов держится защита от магии
     capTurns: 4,             // Шут: сколько ходов ВРАГА держится шутовской колпак (колпак держится на 1 меньше)
@@ -491,8 +495,41 @@ Object.assign(ABILITIES, {
 });
 HEROES.engineer = { icon: '🤖', name: 'Инженер', tag: 'Робототехника', passive: 'eureka', abilities: ['assemble', 'charger', 'turret', 'reprogram'] };
 
+// Гадалка: видит выбор врага, ставит настоящие и фальшивые предсказания
+PASSIVES.openbook = {
+    icon: '📖', name: 'Как открытая книга',
+    desc: 'Вы видите, когда враг нажимает на свои фигуры: подсвечиваются её ходы, и видно, какой способностью он целится (куда именно, не видно, пока он не применит). Раз в ' + CONFIG.cooldown.openbook + ' хода можно тайно от врага выбрать вражескую фигуру, которой, по-вашему, враг походит следующим ходом. Если угадали, у всех ваших способностей перезарядка −1. Выбор не тратит ход.'
+};
+Object.assign(ABILITIES, {
+    prediction: {
+        free: true,
+        icon: '🔮', name: 'Предсказание',
+        desc: 'Вражеская фигура (не король) получает предсказание: если ею не походят в течение ваших ' + CONFIG.predTurns + ' следующих ходов, она погибнет на ходе врага. Враг видит предсказание, но не знает, настоящее ли оно. Перезарядка скрыта. Ход не тратится.'
+    },
+    charlatan: {
+        free: true,
+        icon: '🎴', name: 'Шарлатанство',
+        desc: 'Фальшивое предсказание: выглядит так же, как настоящее, но в конце срока ничего не происходит. Перезарядка скрыта. Ход не тратится.'
+    },
+    unlucky: {
+        free: true,
+        icon: '🍂', name: 'Невезучий ход',
+        desc: 'Невидимая для врага ловушка на ' + CONFIG.unluckyTurns + ' ход врага: фигура, которая встанет на неё, получит настоящее предсказание. Перезарядка скрыта. Ход не тратится.'
+    },
+    badomen: {
+        free: true,
+        icon: '🦉', name: 'Плохая примета',
+        desc: 'То же, что Невезучий ход, но предсказание фальшивое, а ловушка стоит ' + CONFIG.omenTurns + ' хода врага. Перезарядка скрыта. Ход не тратится.'
+    }
+});
+HEROES.fortune = { icon: '🔮', name: 'Гадалка', tag: 'Предсказания и блеф', passive: 'openbook', abilities: ['prediction', 'charlatan', 'unlucky', 'badomen'] };
+// В зеркале Мага настоящая и фальшивая версии выглядят одинаково: название со знаком вопроса и описание настоящей
+const FORTUNE_KEYS = ['prediction', 'charlatan', 'unlucky', 'badomen'];
+const mirrorShown = k => ({ charlatan: 'prediction', badomen: 'unlucky' }[k] || k);
+const mirrorName = k => (FORTUNE_KEYS.includes(k) ? ABILITIES[mirrorShown(k)].name + '?' : ABILITIES[k].name);
+
 // Способности, у которых выбор идёт в два шага: сначала фигура, потом клетка
-const ACTIVE_PASSIVES = ['aim', 'teleport', 'timeslow'];
+const ACTIVE_PASSIVES = ['aim', 'teleport', 'timeslow', 'openbook'];
 const NO_TARGET = ['zawarudo', 'misclick'];   // способности без выбора цели: срабатывают сразу по кнопке   // пассивки, у которых есть кнопка и перезарядка
 const STAGED = ['hocus', 'lie', 'generator', 'illusion', 'frankenstein', 'rescue', 'confusion', 'apocalypse', 'conveyor', 'portals', 'relocate', 'soulmates', 'banana'];
 
@@ -1354,6 +1391,7 @@ function castle960(board, fromKing, fromRook) {
 
 function applyMove(board, mv, promo) {
     const p = board[mv.fr][mv.fc];
+    if (p.pred) delete p.pred;      // Гадалка: фигура сходила, предсказание снимается
     const res = { dead: [], thorn: false, burned: false, vanished: [], supBack: [] };
     // иллюзия (своя или чужая) на пути или на конечной клетке рассеивается; иллюзия чужие иллюзии не трогает
     moveCells(mv).forEach(([r, c]) => {
@@ -2222,9 +2260,72 @@ const placeVerdict = (nb, col) => ({ real: safeAfter(cloneBoard(nb), col), vis: 
 // Вызывается перед способностью, которая ставит фигуру на (r,c). build(nb) выполняет постановку на копии доски.
 // Невидимка раскрывается, если на её клетку пытаются поставить фигуру. Угроза от невидимки раскрывает её только когда ставят КОРОЛЯ (isKing, Кагэватари).
 // true — действие перехвачено, ход не тратится
+// Попытка поставить плитку, ловушку или фигуру на клетку с невидимой вражеской фигурой (туман, Фукаши):
+// фигура не раскрывается, в журнал пишется, что там кто-то оказался, и на этом ходу туда больше пробовать нельзя.
+// «Ход — это ложь» работает по-старому: попытка раскрывает фигуру.
+function probeCell(r, c, col) {
+    const p = G.board[r][c];
+    if (!p || !hiddenFor(p, col) || p.lie || (G.probed && G.probed.includes(r + ',' + c))) return false;
+    G.board[r][c] = null;
+    try { return isFreeCell(r, c); } finally { G.board[r][c] = p; }
+}
+function probeInvis(r, c, why) {
+    const p = G.board[r][c];
+    if (!p) return;
+    if (p.lie) { revealPiece(r, c, why, true); return; }
+    if (!G.probed) G.probed = [];
+    G.probed.push(r + ',' + c);
+    p.seenAt = [r, c];
+    const me = G.turn;
+    G.log.push({ c: me, text: `🔎 На ${sqName(r, c)} оказалась фигура: ${why}. Попытка не удалась, невидимость сохраняется`, n: logNo(), only: me });
+    sfx('trap');
+}
+
+// Гадалка: предсказания на фигурах и ловушки
+function predStep() {      // в начале хода: у кого срок предсказания вышел, того настоящее предсказание убивает
+    const due = [];
+    G.board.forEach((row, r) => row.forEach((p, c) => { if (p && p.pred && p.pred.left <= 0) due.push({ r, c, p }); }));
+    orderVictims(due).forEach(({ r, c }) => {
+        const p = G.board[r][c];
+        if (!p || !p.pred) return;
+        const real = p.pred.real;
+        delete p.pred;
+        if (!real) { addLog('n', `🔮 Предсказание на ${sqName(r, c)} рассеялось: оно было фальшивым`); return; }
+        if (p.ghost) { vanishGhost(r, c, 'предсказание'); return; }
+        if (magicProof(G.board, r, c)) { addLog('n', `🔮 Предсказание на ${sqName(r, c)}: цель неуязвима для магии`); return; }
+        const dp = guardSwap(r, c) || p;
+        G.board[r][c] = null;
+        toGrave(dp);
+        G.fx.push({ r, c, type: 'boom' });
+        sfx('boom');
+        addLog('n', `🔮 Предсказание сбылось: ${pieceSym(dp)} на ${sqName(r, c)} погибает`);
+    });
+}
+function sweepOmens() {      // ловушки Гадалки: вставшая на клетку фигура получает предсказание (настоящее или фальшивое)
+    if (!G.omens || !G.omens.length) return;
+    G.omens = G.omens.filter(o => {
+        const p = G.board[o.r][o.c];
+        if (!p || kSafe(p) || p.ghost) return true;
+        if (auraProtected(G.board, o.r, o.c)) { addLog('n', '✴ Фигура под защитой от магии уничтожает ловушку'); return false; }
+        p.pred = { by: o.owner, left: CONFIG.predTurns + (G.turn === o.owner ? 1 : 0), real: o.real };
+        if (!p.invis) G.fx.push({ r: o.r, c: o.c, type: 'cast' });
+        sfx('trap');
+        addLog('n', p.invis ? '🔮 Невидимая фигура наступает на ловушку и получает предсказание' : `🔮 ${pieceSym(p)} наступает на ловушку на ${sqName(o.r, o.c)} и получает предсказание`);
+        return false;
+    });
+}
+function doOpenbook(r, c) {      // пассивка Гадалки: тайная догадка, какой фигурой походит враг
+    const col = G.turn, p = G.board[r][c];
+    G.guess = { by: col, uid: uidOf(p) };
+    G.cd[col].openbook = cdOf(col, 'openbook');
+    sfx('cast');
+    G.log.push({ c: col, text: '📖 Как открытая книга: догадка сделана втайне (ход не потрачен)', n: logNo(), only: col });
+    G.mode = null; G.sel = null; G.moves = [];
+    render();
+}
 function guardPlacement(col, r, c, build, isKing) {
     const b = G.board, occ = b[r][c];
-    if (hiddenFor(occ, col)) { revealPiece(r, c, 'на её клетку попытались встать', true); return true; }
+    if (hiddenFor(occ, col)) { probeInvis(r, c, 'туда попытались встать'); return true; }
     const nb = cloneBoard(b);
     build(nb);
     if (safeAfter(cloneBoard(nb), col)) return false;
@@ -2245,7 +2346,7 @@ function dropGhostOn(nb, r, c) {
     delete p.pair;
 }
 function withBoardTemp(nb, fn) { const sv = G.board; G.board = nb; try { return fn(); } finally { G.board = sv; } }
-const GHOST_TARGET_KEYS = ['shield', 'rescue', 'guardian', 'purify', 'bumpuku', 'phase', 'fukashi', 'superposition', 'scream', 'freeze', 'hypnosis', 'confusion', 'assistant', 'hocus', 'soulmates', 'lie'];
+const GHOST_TARGET_KEYS = ['prediction', 'charlatan', 'shield', 'rescue', 'guardian', 'purify', 'bumpuku', 'phase', 'fukashi', 'superposition', 'scream', 'freeze', 'hypnosis', 'confusion', 'assistant', 'hocus', 'soulmates', 'lie'];
 function ghostIntercept(r, c) {
     const m = G.mode, t = m.type, p = G.board[r][c];
     if (!p || !GHOST_TARGET_KEYS.includes(t)) return false;
@@ -2427,7 +2528,7 @@ function abilityCellsRaw(key, col, t, first) {
         }
     } else if (key === 'virus' || key === 'vine' || key === 'ritual') {
         if (!safeNow) return [];
-        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) cells.push([r, c]);
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c) || probeCell(r, c, col)) cells.push([r, c]);
     } else if (key === 'generator') {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isFreeCell(r, c)) cells.push([r, c]);
@@ -2461,10 +2562,27 @@ function abilityCellsRaw(key, col, t, first) {
         if (n >= 3 && HIST[n - 1].turn === col && HIST[n - 2].turn === enemy && HIST[n - 3].turn === col) return [[0, 0]];
     } else if (key === 'timeslow') {
         return findKing(b, col) ? [[0, 0]] : [];
+    } else if (key === 'prediction' || key === 'charlatan') {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+            const p = b[r][c];
+            if (!p || p.c !== enemy || kSafe(p) || p.pred || hiddenFor(p, col)) continue;
+            if (p.ghost) { cells.push([r, c]); continue; }
+            if (magicProof(b, r, c, col)) continue;
+            cells.push([r, c]);
+        }
+    } else if (key === 'openbook') {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+            const p = b[r][c];
+            if (p && p.c === enemy && !p.ghost && !hiddenFor(p, col)) cells.push([r, c]);
+        }
+    } else if (key === 'unlucky' || key === 'badomen') {
+        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+            if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);
+        }
     } else if (key === 'trap') {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-            if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
+            if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
         }
     } else if (key === 'lure') {
         if (!safeNow) return [];
@@ -2509,7 +2627,7 @@ function abilityAvailable(col, k) {
 }
 
 // Способности Шута, не тратящие ход и не спасающие короля (кожура, помидор): для мата и пата не считаются «действием»
-const NOT_AN_ESCAPE = ['banana', 'tomato', 'fog'];
+const NOT_AN_ESCAPE = ['banana', 'tomato', 'fog', 'prediction', 'charlatan', 'unlucky', 'badomen'];
 function hasAnyAction(col) {
     if (col === G.turn && G.forced && G.forced.length) return true;
     if (anyLegalMove(G.board, col)) return true;
@@ -2571,7 +2689,7 @@ function newState(board, hero, win) {
         ep: null, sel: null, moves: [], mode: null, forced: [], forcedKind: null,
         bonus: null, noZForce: false,
         last: null, over: null, log: [], fx: [], check: null, pendingPromo: null, nextPair: 1, nextUid: 1, deaths: 0,
-        cdBonus: { w: {}, b: {} }, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
+        cdBonus: { w: {}, b: {} }, omens: [], probed: [], guess: null, vines: [], virus: [], rituals: [], gens: [], hogs: [], decoys: [],
         bananas: [], walls: [], disabled: { w: {}, b: {} }, pretense: { w: null, b: null }, done: { w: 0, b: 0 }, fogs: [], hatches: [], hatchUsed: { w: false, b: false }, chargers: [], chargeUsed: [], eurekaUsed: { w: false, b: false }, engCost: { w: 0, b: 0, wt: 0, bt: 0, wr: 0, br: 0 },
         win
     };
@@ -2741,6 +2859,8 @@ function startTurn() {
     G.bonus = null;
     G.archUsed = false; G.screamed = false;
     G.pairStep = null;
+    G.probed = [];      // попытки поставить что-то на клетку с невидимкой считаются в пределах одного хода
+    if (G.guess && G.guess.by === c) G.guess = null;      // догадка Гадалки живёт только один ход врага
 
     // 1. Взрываются огненные шары и прилетают стрелы игрока, чей ход начинается
     const mine = G.fire.filter(f => f.owner === c && !(f.wait > 0));
@@ -2777,6 +2897,7 @@ function startTurn() {
         if (!arrow) { destroyTiles(f.r, f.c); burnTile(f.r, f.c, c); }       // клетка продолжает гореть
     });
     bombStep(c);
+    predStep();
     soulSync();
     checkIllusions();
 
@@ -3056,6 +3177,7 @@ function endTurn() {
         if (p.c === c && p.frozen > 0) p.frozen--;
         if (p.c === c && p.snared > 0) { p.snared--; if (!p.snared) delete p.shock; }
         if (p.c === c && p.altruist > 0) { p.altruist--; if (!p.altruist) delete p.altruist; }
+        if (p.pred && p.pred.by === c) p.pred = { ...p.pred, left: p.pred.left - 1 };      // срок предсказания идёт по ходам Гадалки
         if (p.c === c && p.warded > 0) { p.warded--; if (!p.warded) delete p.warded; }
         if (p.c === c && p.scaredT > 0) {
             p.scaredT--;
@@ -3079,12 +3201,12 @@ function endTurn() {
         }
     }));
     if (G.conv.length || G.portals.length) {      // ловушки срабатывают и на фигуре, которую конвейер/портал сейчас сдвинет
-        sweepBananas(); sweepBurn(); sweepTraps(); sweepChargers(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true);
+        sweepBananas(); sweepBurn(); sweepTraps(); sweepOmens(); sweepChargers(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true);
     }
     applyEffects(G.board, true);
     sweepBananas();
     sweepBurn();
-    sweepTraps();
+    sweepTraps(); sweepOmens();
     sweepChargers();
     sweepVirus();
     sweepVines();
@@ -3092,6 +3214,7 @@ function endTurn() {
     sweepSharp();
     sweepGens();
     turretScan();      // турели Инженера: мгновенные убивают врагов в радиусе, артиллерия наводится на новых
+    if (G.omens && G.omens.length) { G.omens.forEach(o => { if (o.owner !== c) o.left--; }); G.omens = G.omens.filter(o => o.left > 0); }      // ловушки Гадалки живут столько ходов врага
     G.vines.forEach(v => { if (v.owner === c) v.left--; });
     G.vines = G.vines.filter(v => v.left > 0);
     Object.keys(G.disabled[c] || {}).forEach(k => {      // Красная обструкция: отключение спадает в конце ходов самого игрока
@@ -3207,6 +3330,13 @@ function executeMove(mv, promo, ctx) {
     const b = G.board, p = b[mv.fr][mv.fc], col = p.c;
     const sym = pieceSym(p), note = p.t === 'p' ? '' : sym;
     const from = sqName(mv.fr, mv.fc), to = sqName(mv.tr, mv.tc);
+    if (G.guess && col !== G.guess.by) {      // пассивка Гадалки: угадала ли она, какой фигурой походит враг
+        const gs = G.guess; G.guess = null;
+        if (p.uid && p.uid === gs.uid) {
+            (HEROES[G.hero[gs.by]].abilities || []).forEach(k => { if (G.cd[gs.by][k] > 0) G.cd[gs.by][k]--; });
+            G.log.push({ c: gs.by, text: '📖 Догадка верна: перезарядка всех способностей −1', n: logNo(), only: gs.by });
+        } else G.log.push({ c: gs.by, text: '📖 Догадка не оправдалась', n: logNo(), only: gs.by });
+    }
     delete p.fogSeen;
     HATCH_UNDO = null;
     if (G.hatches && G.hatches.length && G.hatches.some(h => h.r === mv.tr && h.c === mv.tc) &&
@@ -3498,7 +3628,7 @@ function finishAbility(key, text) {
     G.lastAb[col] = key;
     addLog(col, text);
     if (G.screamed && key !== 'scream') { G.screamed = false; G.archUsed = false; }      // обязательная способность после Скримера применена: дальше как обычно
-    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog' || key === 'guardian' || key === 'virus') { continueTurn(); return; }   // свободное действие: после него обычный ход
+    if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog' || key === 'guardian' || key === 'virus' || FORTUNE_KEYS.includes(key)) { continueTurn(); return; }   // свободное действие: после него обычный ход
     G.ep = null;
     if (key === 'scream' && G.hero[col] !== 'architect') {      // после Скримера обязательно нужна другая способность; ходить фигурой нельзя, нет способностей: ход пропускается
         G.archUsed = true; G.screamed = true;
@@ -3537,7 +3667,7 @@ function useAbility(key, r, c, ref) {
         if (target.chg) addLog('n', `🔋 Очищение снимает заряд с робота на ${sqName(r, c)}`);
         if (target.hypno && target.orig) target.c = target.orig;            // гипноз тоже снимается
         if (target.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(target)} на ${sqName(r, c)} (Очищение)`);
-        ['cap', 'capBy', 'betray', 'scared', 'scaredT', 'zombie', 'shield', 'altruist', 'sup', 'lure', 'hypno', 'orig', 'fresh', 'bomb', 'bombBy', 'invis', 'phase', 'x', 'chg', 'onChg', 'warded'].forEach(f => { delete target[f]; });
+        ['cap', 'capBy', 'betray', 'scared', 'scaredT', 'zombie', 'shield', 'altruist', 'pred', 'sup', 'lure', 'hypno', 'orig', 'fresh', 'bomb', 'bombBy', 'invis', 'phase', 'x', 'chg', 'onChg', 'warded'].forEach(f => { delete target[f]; });
         target.frozen = 0; target.snared = 0; target.shield = false;
         if (target.soul) { delete target.soul; G.soulList = G.soulList.filter(e => e.p !== target); }
         target.warded = CONFIG.wardTurns + 1;
@@ -3595,6 +3725,16 @@ function useAbility(key, r, c, ref) {
         text = `${A.icon} ${A.name}: на ${sqName(r, c)} появляются челюсти (живут ${CONFIG.jawsTurns} ${plural(CONFIG.jawsTurns)})`;
         G.fx.push({ r, c, type: 'revive' });
         sfx('revive');
+    } else if (key === 'prediction' || key === 'charlatan') {
+        target.pred = { by: col, left: CONFIG.predTurns + 1, real: key === 'prediction' };      // +1: в конце этого же хода счётчик уменьшится
+        text = `🔮 Предсказание: ${pieceSym(target)} ${sqName(r, c)} получает предсказание`;
+        G.fx.push({ r, c, type: 'cast' });
+        sfx('cast');
+    } else if (key === 'unlucky' || key === 'badomen') {
+        G.omens = G.omens.filter(x => !(x.r === r && x.c === c));
+        G.omens.push({ r, c, owner: col, left: key === 'unlucky' ? CONFIG.unluckyTurns : CONFIG.omenTurns, real: key === 'unlucky' });
+        text = '🍂 Ловушка Гадалки установлена (место скрыто)';
+        sfx('trap');
     } else if (key === 'trap') {
         G.traps = G.traps.filter(x => !(x.r === r && x.c === c));      // одинаковые ловушки: действует та, что поставлена последней
         G.traps.push({ r, c, owner: col });
@@ -3771,7 +3911,7 @@ function confusionLanding(p) {
             addLog('n', p.invis ? '⏳ Ход сурка: невидимая фигура вернулась назад' : `⏳ Ход сурка: ${pieceSym(p)} возвращается с ${sqName(pos[0], pos[1])} на ${sqName(pv[0], pv[1])}`);
         }
     }
-    sweepBananas(); sweepBurn(); sweepTraps(); sweepChargers(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true); sweepGens();      // тот же порядок, что в конце обычного хода
+    sweepBananas(); sweepBurn(); sweepTraps(); sweepOmens(); sweepChargers(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true); sweepGens();      // тот же порядок, что в конце обычного хода
     if (!pieceObjAt(p)) return 'dead';
     return p.snared > 0 ? 'snared' : null;
 }
@@ -4019,12 +4159,12 @@ function startMode(k, via) {
 }
 
 // Способности, зависящие от свободной клетки: попытка применить их на клетку с невидимой вражеской фигурой раскрывает её, ход не тратится
-const FREE_CELL_KEYS = ['assemble', 'charger', 'turret', 'hatch', 'ritual', 'vine', 'virus', 'trap', 'lure', 'generator', 'conveyor', 'portals', 'relocate'];
+const FREE_CELL_KEYS = ['assemble', 'charger', 'turret', 'hatch', 'ritual', 'vine', 'virus', 'trap', 'lure', 'unlucky', 'badomen', 'generator', 'conveyor', 'portals', 'relocate'];
 
 function onModeCell(r, c) {
     const m = G.mode, t = m.type;
     if (FREE_CELL_KEYS.includes(t) && t !== 'conveyor' && hiddenFor(G.board[r][c], G.turn)) {      // у конвейера невидимка раскрывается только при подтверждении направления
-        revealPiece(r, c, 'на её клетку попытались поставить плитку или ловушку', true);
+        probeInvis(r, c, 'туда попытались поставить плитку или ловушку');
         cancelAbilityMode();
         return;
     }
@@ -4080,7 +4220,7 @@ function onModeCell(r, c) {
             return;
         }
         if (hiddenFor(G.board[m.first[0]][m.first[1]], me)) {      // подтвердили установку на клетку с невидимкой: она раскрывается, кожура не ставится
-            revealPiece(m.first[0], m.first[1], 'на её клетку попытались положить банановую кожуру', true);
+            probeInvis(m.first[0], m.first[1], 'туда попытались положить банановую кожуру');
             cancelAbilityMode();
             return;
         }
@@ -4295,6 +4435,7 @@ function onModeCell(r, c) {
         return;
     }
 
+    if (t === 'openbook') { doOpenbook(r, c); return; }
     if (t === 'aim') { placeAim(r, c); return; }
     if (t === 'teleport') {
         const me = G.turn, k = findKing(G.board, me);
@@ -4487,11 +4628,13 @@ function renderBoard() {
     const km = G.mode && G.mode.type === 'kghost' ? G.mode : null;   // король-иллюзия: пока не выбрана клетка, король стоит на старом месте
     const targets = new Map();
     const actor = isActor();                       // подсказки выбора видит только тот, кто ходит
+    const peek = !!(NET.on && !actor && !G.over && G.hero[NET.me] === 'fortune');      // пассивка Гадалки «Как открытая книга»: видит выбор врага
+    const show = actor || peek;
     const flip = NET.on && NET.me === 'b';         // чёрные видят доску со своей стороны
     $('#app').classList.toggle('flipped', flip);
-    if (G.sel && actor) G.moves.filter(m => m.castle && m.click && !m.hidden).forEach(m => { targets.set(m.click.join(','), 't-move'); });      // рокировку можно сделать нажатием на ладью
-    if (G.sel && actor) G.moves.filter(m => !(m.castle && Math.abs(m.tc - m.fc) < 2) && !m.hidden).forEach(m => targets.set(m.tr + ',' + m.tc, ((G.board[m.tr][m.tc] && !G.board[m.tr][m.tc].invis && !supOpen(G.board, G.board[m.tr][m.tc])) || m.ep) ? 't-cap' : 't-move'));
-    if (G.mode && G.mode.cells && actor) (G.mode.cells.show || G.mode.cells).forEach(([r, c]) => targets.set(r + ',' + c, 't-' + (G.mode.type === 'generator' ? (G.mode.stage === 'piece' ? 'genplus' : 'genminus') : G.mode.type)));      // show: клетки, которые подсвечиваем (остальные нажимаются, но выглядят опасными)
+    if (G.sel && show) G.moves.filter(m => m.castle && m.click && !m.hidden).forEach(m => { targets.set(m.click.join(','), 't-move'); });      // рокировку можно сделать нажатием на ладью
+    if (G.sel && show) G.moves.filter(m => !(m.castle && Math.abs(m.tc - m.fc) < 2) && !m.hidden).forEach(m => targets.set(m.tr + ',' + m.tc, ((G.board[m.tr][m.tc] && !G.board[m.tr][m.tc].invis && !supOpen(G.board, G.board[m.tr][m.tc])) || m.ep) ? 't-cap' : 't-move'));
+    if (G.mode && G.mode.cells && show) (G.mode.cells.show || G.mode.cells).forEach(([r, c]) => targets.set(r + ',' + c, 't-' + (G.mode.type === 'generator' ? (G.mode.stage === 'piece' ? 'genplus' : 'genminus') : G.mode.type)));      // show: клетки, которые подсвечиваем (остальные нажимаются, но выглядят опасными)
     let kingPos = [];
     if (G.check) {
         kingPos = findKings(G.board, G.turn).filter(k => isAttacked(G.board, k[0], k[1], other(G.turn)));
@@ -4508,7 +4651,7 @@ function renderBoard() {
             if (km && km.orig[0] === r && km.orig[1] === c) p = km.kp;
             const dc = (!p && G.decoys.find(x => x.r === r && x.c === c)) || null;
             let cls = 'cell ' + ((r + c) % 2 ? 'dark' : 'light');
-            if (G.sel && actor && G.sel.r === r && G.sel.c === c) cls += ' sel';
+            if (G.sel && show && G.sel.r === r && G.sel.c === c) cls += ' sel';
             if (G.last && ((G.last.fr === r && G.last.fc === c) || (G.last.tr === r && G.last.tc === c))) cls += ' last';
             const tm = targets.get(r + ',' + c);
             if (tm) cls += ' ' + tm;
@@ -4538,6 +4681,7 @@ function renderBoard() {
                 : `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me || x.owner === 'n'))) html += '<div class="trap-mark">🪤</div>';
+            if (showTraps && G.omens && G.omens.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me))) html += '<div class="trap-mark">🍂</div>';
             {
                 const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
                 if (bn && (bn.owner === 'n' || jesterSees(bn.owner))) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
@@ -4594,6 +4738,8 @@ function renderBoard() {
                 if (p.scared) html += `<span class="sc">😱${p.scaredT || ''}</span>`;
                 if (p.sup) html += '<span class="sp">⚛</span>';
                 if (p.altruist > 0) html += `<span class="al">👼${p.altruist}</span>`;
+                if (p.pred) html += `<span class="pr">🔮${Math.max(1, Math.min(p.pred.left, CONFIG.predTurns))}</span>`;      // настоящее оно или нет, не видно никому, кроме Гадалки по её памяти
+                if (G.guess && p.uid && p.uid === G.guess.uid && (!NET.on || G.guess.by === NET.me)) html += '<span class="pr gs">📖</span>';
                 if (p.t === 'j') html += `<span class="jl">${Number.isFinite(p.life) ? '⏳' + p.life : '∞'}</span>`;
                 if (p.t === 'x' && p.rob) html += `<span class="rb">${p.rob.kind === 'wing' ? '🪽' : '👢'}</span>`;
                 if (p.t === 'x' && p.chg > 0) html += '<span class="chg">🔋</span>';
@@ -4696,14 +4842,15 @@ function panelHTML(col) {
         }
         const offT = (G.disabled && G.disabled[col] && G.disabled[col][k]) || 0;
         // «Ход — это ложь» и зеркало, пока в нём лежит эта способность: перезарядка скрыта от соперника, чтобы не выдавать применение
-        const secret = k === 'lie' || (k === 'copy' && G.lastAb[other(col)] === 'lie');
+        const secret = k === 'lie' || FORTUNE_KEYS.includes(k) || (k === 'copy' && (G.lastAb[other(col)] === 'lie' || FORTUNE_KEYS.includes(G.lastAb[other(col)])));
         const hideCd = secret && (NET.on ? col !== NET.me : !active);
         if (slowMode) {
             h += `<button class="ab slowable" data-slow="${k}" title="${abilityDesc(k)}">
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${secret ? '?' : ''} → +2</span>${(!secret && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
             return;
         }
-        const on = active && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
+        const peekPanel = !!(NET.on && col === G.turn && col !== NET.me && !G.over && G.hero[NET.me] === 'fortune');      // Гадалка видит, какой способностью враг целится
+        const on = (active || peekPanel) && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
         const can = active && !lock && abilityAvailable(col, k);
         const eu = active && !lock && !G.mode && !G.bonus && cd > 0 && !offT && !hideCd && eurekaReady(col);      // Эврика: можно обнулить перезарядку
         let sub = 'готово';
@@ -4712,7 +4859,7 @@ function panelHTML(col) {
         else if (active && G.forced.length && k !== 'apocalypse') sub = G.forcedKind === 'lure' ? 'приманка' : 'зомби рубит';
         else if (active && k === 'shomen' && !G.deaths) sub = 'до первой смерти';
         else if (active && !can) sub = 'нет целей';
-        else if (k === 'copy' && can) sub = '→ ' + ABILITIES[G.lastAb[other(col)]].name;
+        else if (k === 'copy' && can) sub = '→ ' + mirrorName(G.lastAb[other(col)]);
         if (offT) sub = '🍅 отключена';
         if (hideCd) sub = 'скрыто';      // применение не должно быть видно по перезарядке
         if (eu) sub = '💡 Эврика?';
@@ -4725,9 +4872,9 @@ function panelHTML(col) {
         const pk = hero.passive, cd = G.cd[col][pk];
         const on = active && G.mode && G.mode.type === pk;
         const can = active && !lock && canPassive(col, pk);
-        const sub = cd > 0 ? '' : (active && !can ? 'нет целей' : ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? 'бесплатно' : 'готово'));
+        const sub = cd > 0 ? '' : (active && !can ? 'нет целей' : ((pk === 'aim' || pk === 'openbook' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? 'бесплатно' : 'готово'));
         h += `<button class="ab passive-btn ${on ? 'on' : ''}" data-ab="${pk}" ${can || on ? '' : 'disabled'} title="${ps.desc}">
-      <span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}${(pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${cd > 0 ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
+      <span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}${(pk === 'aim' || pk === 'openbook' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${cd > 0 ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
     }
     if (hero.passive === 'sawing') {      // пассивка Фокусника: просто показывает перезарядку
         const scd = G.cd[col].sawing | 0;
@@ -4827,6 +4974,9 @@ function renderStatus() {
         else if (t === 'blunder') h = 'Выберите свою фигуру (не короля): на неё наденется шутовской колпак. Враг не узнает, на какую.';
         else if (t === 'banana') h = m.stage === 'dir' ? 'Выберите соседнюю клетку: в эту сторону поскользнётся фигура. Ход не тратится.' : 'Выберите свободную клетку для невидимой банановой кожуры. Ход не тратится.';
         else if (t === 'jaws') h = 'Выберите свободную клетку на первых трёх горизонталях вашей стороны: там появятся заводные челюсти.';
+        else if (t === 'prediction' || t === 'charlatan') h = '🔮 Выберите вражескую фигуру (не короля): она получит предсказание на ' + CONFIG.predTurns + ' ваших хода. Враг видит его, но не знает, настоящее оно или нет. Ход не тратится.';
+        else if (t === 'unlucky' || t === 'badomen') h = '🍂 Выберите свободную клетку для невидимой ловушки: фигура, вставшая на неё, получит предсказание. Ход не тратится.';
+        else if (t === 'openbook') h = '📖 Выберите вражескую фигуру, которой, по-вашему, враг походит следующим ходом. Это тайно и не тратит ход.';
         else if (t === 'tomato') h = '🍅 Нажмите на способность врага в его панели: она отключится на ' + CONFIG.tomatoTurns + ' ходов. Ход не тратится.';
         else if (t === 'kghost') h = 'Король ушёл из-под шаха: выберите клетку, где останется его иллюзия.';
         else if (t === 'fog') h = '🌫️ Выберите центр дымовой завесы 3×3 (любая клетка). Ход не тратится.';
@@ -4859,6 +5009,7 @@ function renderStatus() {
     if (NET.on && G.turn !== NET.me) {
         const tm = G.mode && ENG_TAB_MODES.includes(G.mode.type) && G.mode.stage !== 'spawn' && G.mode.stage !== 'piece';      // соперник сидит в планшете Инженера
         h = NET.lost ? 'Соединение потеряно.' : tm ? '🔧 Враг мастерит...' : '⏳ Ход соперника...';
+        if (!NET.lost && !tm && !G.over && G.hero[NET.me] === 'fortune' && G.mode) { const A0 = G.mode.via ? { name: 'Зеркало' } : (ABILITIES[G.mode.type] || PASSIVES[G.mode.type]); if (A0) h += ' · 📖 целится: ' + A0.name; }
     }
     hi.textContent = h;
     renderChat();
@@ -4872,6 +5023,7 @@ function renderLog() {
     // Все записи одного хода (ход фигурой, способности, события) идут под одним номером
     const groups = [];
     G.log.forEach(e => {
+        if (e.only && !(NET.on ? NET.me === e.only : G.turn === e.only)) return;      // записи только для одного игрока (Гадалка, попытки на невидимку)
         const g = groups[groups.length - 1];
         if (e.n && g && g.n === e.n) g.items.push(e); else groups.push({ n: e.n, items: [e] });
     });
@@ -4893,7 +5045,7 @@ const openHeroes = new Set();   // у каких героев раскрыто �
 // Зелёный кружок «не тратит ход» (то же правило, что и в панели героя во время партии)
 const FREE_DOT = '<i class="free-dot" title="Не тратит ход"></i>';
 const abFreeDot = k => (ABILITIES[k].free ? FREE_DOT : '');
-const psFreeDot = pk => ((pk === 'aim' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? FREE_DOT : '');
+const psFreeDot = pk => ((pk === 'aim' || pk === 'openbook' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? FREE_DOT : '');
 
 /* ---------- Замки героев и магические шары ---------- */
 // Замки работают только в рейтинговых онлайн-партиях. В дружеских комнатах и на одном экране открыты все герои.
@@ -8374,8 +8526,9 @@ function engPickRepro(r, c) {
    АНИМАЦИИ СПОСОБНОСТЕЙ
    ===================================================================== */
 // Полоска с названием способности: быстро влетает слева в центр доски, медленно плывёт, быстро улетает вправо
-const BANNER_SKIP = ['lie'];      // секретные способности не показываем, чтобы не выдавать их применение
+const BANNER_SKIP = ['lie', 'unlucky', 'badomen'];      // секретные способности не показываем, чтобы не выдавать их применение
 function abilityBanner(key) {
+    if (key === 'charlatan') key = 'prediction';      // фальшивое предсказание выглядит так же, как настоящее
     if (REPLAY_REC && !BANNER_SKIP.includes(key)) { REPLAY_REC.push({ k: 'banner', key }); return; }
     try {
         if (typeof document === 'undefined' || !ANIM.banner || BANNER_SKIP.includes(key)) return;
@@ -10358,12 +10511,23 @@ async function tryResume() {
     render();
 }
 // На замороженную фигуру нельзя накинуть ни бафф, ни дебафф: способности по одной фигуре её не выбирают
-const FROZEN_BLOCK = ['shield', 'rescue', 'guardian', 'purify', 'bumpuku', 'phase', 'fukashi', 'superposition', 'scream', 'hypnosis', 'confusion', 'assistant', 'hocus', 'soulmates', 'lie', 'illusion', 'blunder', 'frankenstein'];
+const FROZEN_BLOCK = ['prediction', 'charlatan', 'shield', 'rescue', 'guardian', 'purify', 'bumpuku', 'phase', 'fukashi', 'superposition', 'scream', 'hypnosis', 'confusion', 'assistant', 'hocus', 'soulmates', 'lie', 'illusion', 'blunder', 'frankenstein'];
 const _abilityCellsFrozen = abilityCells;
 abilityCells = function (key) {
     const res = _abilityCellsFrozen.apply(this, arguments);
     if (!FROZEN_BLOCK.includes(key) || !Array.isArray(res) || !G) return res;
     const ok = ([r, c]) => { const q = G.board[r] && G.board[r][c]; return !(q && q.frozen > 0); };
+    const out = res.filter(ok);
+    if (res.show) out.show = res.show.filter(ok);
+    return out;
+};
+
+// Клетки, куда на этом ходу уже пробовали поставить что-то и нашли невидимую фигуру, второй раз выбрать нельзя
+const _abilityCellsProbed = abilityCells;
+abilityCells = function (key) {
+    const res = _abilityCellsProbed.apply(this, arguments);
+    if (!G || !G.probed || !G.probed.length || !FREE_CELL_KEYS.includes(key) || !Array.isArray(res)) return res;
+    const ok = ([r, c]) => !G.probed.includes(r + ',' + c);
     const out = res.filter(ok);
     if (res.show) out.show = res.show.filter(ok);
     return out;

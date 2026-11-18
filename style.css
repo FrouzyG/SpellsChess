@@ -8533,3 +8533,42 @@ body.piece-drag {
     background: rgba(70, 130, 255, 0.4);
     box-shadow: inset 0 0 0 2px #4682ff;
 }
+
+/* ===== Гадалка ===== */
+.cell.t-prediction::after, .cell.t-charlatan::after {
+    inset: 3%;
+    border: 3px solid #b86bff;
+    border-radius: 50%;
+    background: rgba(184, 107, 255, 0.28);
+}
+
+.cell.t-unlucky::after, .cell.t-badomen::after {
+    inset: 3%;
+    border: 3px dashed #c9a24a;
+    border-radius: 8px;
+    background: rgba(201, 162, 74, 0.28);
+}
+
+.cell.t-openbook::after {
+    inset: 3%;
+    border: 3px solid #ffd86b;
+    border-radius: 50%;
+    background: rgba(255, 216, 107, 0.25);
+}
+
+.pr {
+    position: absolute;
+    z-index: 5;
+    left: 4%;
+    bottom: 24%;
+    font-size: calc(var(--cell) * 0.22);
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+    text-shadow: 0 0 3px #000;
+}
+
+    .pr.gs {
+        bottom: auto;
+        top: 4%;
+    }
