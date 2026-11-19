@@ -48,15 +48,16 @@ const CONFIG = {
         vine: 5, ritual: 4, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
         fog: 5, hatch: 4, hocus: 9, assistant: 6,        // Фокусник
-        openbook: 2, prediction: 9, charlatan: 3, unlucky: 6, badomen: 3,   // Гадалка
+        openbook: 2, prediction: 5, charlatan: 2, unlucky: 4, badomen: 2,   // Гадалка
         assemble: 3, charger: 7, turret: 5, reprogram: 4  // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
     timePassiveCostsTurn: false,   // true: пассивка Повелителя времени тратит ход
     predTurns: 3,            // Гадалка: за сколько своих ходов должна сходить фигура с предсказанием, иначе (если оно настоящее) умрёт
-    unluckyTurns: 3,         // Гадалка: сколько ходов ВРАГА живёт «Невезучий ход»
-    omenTurns: 3,            // Гадалка: сколько ходов ВРАГА живёт «Плохая примета»
+    unluckyTurns: 8,         // Гадалка: сколько ходов ВРАГА живёт «Невезучий ход»
+    omenTurns: 8,            // Гадалка: сколько ходов ВРАГА живёт «Плохая примета»
+    omenRefreshTurns: 3,     // Гадалка: если враг наступил на ловушку в её первые столько ходов, перезарядка этой способности обновляется
     guardianTurns: 3,        // Ангел-хранитель: сколько ходов держится самоотверженность
     wardTurns: 3,            // Очищение: сколько ходов держится защита от магии
     capTurns: 4,             // Шут: сколько ходов ВРАГА держится шутовской колпак (колпак держится на 1 меньше)
@@ -2321,6 +2322,10 @@ function sweepOmens() {      // ловушки Гадалки: вставшая 
         if (!p || kSafe(p) || p.ghost) return true;
         if (auraProtected(G.board, o.r, o.c)) { addLog('n', '✴ Фигура под защитой от магии уничтожает ловушку'); return false; }
         p.preds = (p.preds || []).concat([{ by: o.owner, left: CONFIG.predTurns + (G.turn === o.owner ? 1 : 0), real: o.real }]);
+        if (p.c !== o.owner && o.total - o.left < CONFIG.omenRefreshTurns && G.cd[o.owner] && G.cd[o.owner][o.key] > 0) {      // враг наступил в первые ходы ловушки: её способность перезаряжена
+            G.cd[o.owner][o.key] = 0;
+            G.log.push({ c: o.owner, text: '🍀 Ловушка сработала в первые ходы: способность готова снова', n: logNo(), only: o.owner });
+        }
         if (!p.invis) G.fx.push({ r: o.r, c: o.c, type: 'cast' });
         sfx('trap');
         addLog('n', p.invis ? '🔮 Невидимая фигура наступает на ловушку и получает предсказание' : `🔮 ${pieceSym(p)} наступает на ловушку на ${sqName(o.r, o.c)} и получает предсказание`);
@@ -3744,7 +3749,8 @@ function useAbility(key, r, c, ref) {
         sfx('cast');
     } else if (key === 'unlucky' || key === 'badomen') {
         G.omens = G.omens.filter(x => !(x.r === r && x.c === c));
-        G.omens.push({ r, c, owner: col, left: key === 'unlucky' ? CONFIG.unluckyTurns : CONFIG.omenTurns, real: key === 'unlucky' });
+        const life = key === 'unlucky' ? CONFIG.unluckyTurns : CONFIG.omenTurns;
+        G.omens.push({ r, c, owner: col, left: life, total: life, key, real: key === 'unlucky' });
         text = '👁 Ловушка Гадалки установлена (место скрыто)';
         sfx('trap');    } else if (key === 'trap') {
         G.traps = G.traps.filter(x => !(x.r === r && x.c === c));      // одинаковые ловушки: действует та, что поставлена последней
@@ -6738,10 +6744,10 @@ Object.assign(EN, {
             'A piece (not a king) gets a prediction: if it is not moved during your next ' + C.predTurns + ' ' + en(C.predTurns) + ', it dies on the enemy\'s turn. The prediction is visible, but whether it is real is not. The cooldown is hidden. Does not use your move.'],
         charlatan: ['Фальшивое предсказание: выглядит как настоящее, но в конце ничего не происходит. Перезарядка скрыта. Ход не тратится.',
             'A fake prediction: it looks like a real one, but nothing happens at the end. The cooldown is hidden. Does not use your move.'],
-        unlucky: ['Невидимая для врага ловушка на ' + C.unluckyTurns + ' ' + pl(C.unluckyTurns) + ' врага: вставшая на неё фигура получает настоящее предсказание. Перезарядка скрыта. Ход не тратится.',
-            'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. The cooldown is hidden. Does not use your move.'],
-        badomen: ['То же, что Невезучий ход, но предсказание фальшивое. Перезарядка скрыта. Ход не тратится.',
-            'The same as Unlucky Move, but the prediction is fake. The cooldown is hidden. Does not use your move.']
+        unlucky: ['Невидимая для врага ловушка на ' + C.unluckyTurns + ' ' + pl(C.unluckyTurns) + ' врага: вставшая на неё фигура получает настоящее предсказание. Если враг наступил в первые ' + C.omenRefreshTurns + ' ' + pl(C.omenRefreshTurns) + ', способность перезаряжается. Перезарядка скрыта. Ход не тратится.',
+            'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. If the enemy steps on it during its first ' + C.omenRefreshTurns + ' ' + en(C.omenRefreshTurns) + ', the ability is recharged. The cooldown is hidden. Does not use your move.'],
+        badomen: ['То же, что Невезучий ход, но предсказание фальшивое и перезаряжается своя способность. Перезарядка скрыта. Ход не тратится.',
+            'The same as Unlucky Move, but the prediction is fake and this ability is the one recharged. The cooldown is hidden. Does not use your move.']
     };
     const add = {};
     Object.keys(SHORT).forEach(k => {
@@ -6753,6 +6759,7 @@ Object.assign(EN, {
     // подсказка при выборе цели для предсказания (теперь можно и на свою фигуру)
     add['🔮 Выберите фигуру (не короля): она получит предсказание на ' + C.predTurns + ' ' + pl(C.predTurns) + '. Враг видит его, но не знает, настоящее оно или нет. Ход не тратится.'] =
         '🔮 Choose a piece (not a king): it gets a prediction for ' + C.predTurns + ' ' + en(C.predTurns) + '. The enemy sees it but does not know whether it is real. Does not use your move.';
+    add['🍀 Ловушка сработала в первые ходы: способность готова снова'] = '🍀 The trap went off early: the ability is ready again';
     Object.assign(EN, add);
 })();
 
