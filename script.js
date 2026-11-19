@@ -48,14 +48,14 @@ const CONFIG = {
         vine: 5, ritual: 4, bumpuku: 3, generator: 7,
         blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
         fog: 5, hatch: 4, hocus: 9, assistant: 6,        // Фокусник
-        openbook: 3, prediction: 9, charlatan: 3, unlucky: 6, badomen: 3,   // Гадалка
+        openbook: 2, prediction: 9, charlatan: 3, unlucky: 6, badomen: 3,   // Гадалка
         assemble: 3, charger: 7, turret: 5, reprogram: 4  // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
     },
     startCooldown: 3,        // с какой перезарядкой стартуют все способности в начале партии
     scaredPawnTurns: 3,      // сколько ходов своей стороны пешка остаётся напуганной (если не сходит раньше)
     timePassiveCostsTurn: false,   // true: пассивка Повелителя времени тратит ход
     predTurns: 3,            // Гадалка: за сколько своих ходов должна сходить фигура с предсказанием, иначе (если оно настоящее) умрёт
-    unluckyTurns: 1,         // Гадалка: сколько ходов ВРАГА живёт «Невезучий ход»
+    unluckyTurns: 3,         // Гадалка: сколько ходов ВРАГА живёт «Невезучий ход»
     omenTurns: 3,            // Гадалка: сколько ходов ВРАГА живёт «Плохая примета»
     guardianTurns: 3,        // Ангел-хранитель: сколько ходов держится самоотверженность
     wardTurns: 3,            // Очищение: сколько ходов держится защита от магии
@@ -513,17 +513,26 @@ Object.assign(ABILITIES, {
     },
     unlucky: {
         free: true,
-        icon: '🍂', name: 'Невезучий ход',
-        desc: 'Невидимая для врага ловушка на ' + CONFIG.unluckyTurns + ' ход врага: фигура, которая встанет на неё, получит настоящее предсказание. Перезарядка скрыта. Ход не тратится.'
+        icon: '🍀', name: 'Невезучий ход',
+        desc: 'Невидимая для врага ловушка на ' + CONFIG.unluckyTurns + ' хода врага: фигура, которая встанет на неё, получит настоящее предсказание. Перезарядка скрыта. Ход не тратится.'
     },
     badomen: {
         free: true,
-        icon: '🦉', name: 'Плохая примета',
+        icon: '🐈‍⬛', name: 'Плохая примета',
         desc: 'То же, что Невезучий ход, но предсказание фальшивое, а ловушка стоит ' + CONFIG.omenTurns + ' хода врага. Перезарядка скрыта. Ход не тратится.'
     }
 });
-HEROES.fortune = { icon: '🔮', name: 'Гадалка', tag: 'Предсказания и блеф', passive: 'openbook', abilities: ['prediction', 'charlatan', 'unlucky', 'badomen'] };
+HEROES.fortune = { icon: '👁️', name: 'Гадалка', tag: 'Предсказания и гадания', passive: 'openbook', abilities: ['prediction', 'charlatan', 'unlucky', 'badomen'] };
 // В зеркале Мага настоящая и фальшивая версии выглядят одинаково: название со знаком вопроса и описание настоящей
+// чёрный кот есть не на всех устройствах: если не нарисуется одним значком, берём зеркало
+(function () {
+    try {
+        const cx = document.createElement('canvas').getContext('2d');
+        cx.font = '32px sans-serif';
+        const cat = cx.measureText('🐈‍⬛').width, one = cx.measureText('🐈').width;
+        if (!(cat > 0 && cat < one * 1.6)) ABILITIES.badomen.icon = '🪞';
+    } catch (e) { ABILITIES.badomen.icon = '🪞'; }
+})();
 const FORTUNE_KEYS = ['prediction', 'charlatan', 'unlucky', 'badomen'];
 const mirrorShown = k => ({ charlatan: 'prediction', badomen: 'unlucky' }[k] || k);
 const mirrorName = k => (FORTUNE_KEYS.includes(k) ? ABILITIES[mirrorShown(k)].name + '?' : ABILITIES[k].name);
@@ -1391,7 +1400,7 @@ function castle960(board, fromKing, fromRook) {
 
 function applyMove(board, mv, promo) {
     const p = board[mv.fr][mv.fc];
-    if (p.pred) delete p.pred;      // Гадалка: фигура сходила, предсказание снимается
+    if (p.preds) delete p.preds;      // Гадалка: фигура сходила, все предсказания на ней снимаются
     const res = { dead: [], thorn: false, burned: false, vanished: [], supBack: [] };
     // иллюзия (своя или чужая) на пути или на конечной клетке рассеивается; иллюзия чужие иллюзии не трогает
     moveCells(mv).forEach(([r, c]) => {
@@ -2284,21 +2293,25 @@ function probeInvis(r, c, why) {
 // Гадалка: предсказания на фигурах и ловушки
 function predStep() {      // в начале хода: у кого срок предсказания вышел, того настоящее предсказание убивает
     const due = [];
-    G.board.forEach((row, r) => row.forEach((p, c) => { if (p && p.pred && p.pred.left <= 0) due.push({ r, c, p }); }));
+    G.board.forEach((row, r) => row.forEach((p, c) => { if (p && p.preds && p.preds.some(x => x.left <= 0)) due.push({ r, c, p }); }));
     orderVictims(due).forEach(({ r, c }) => {
         const p = G.board[r][c];
-        if (!p || !p.pred) return;
-        const real = p.pred.real;
-        delete p.pred;
-        if (!real) { addLog('n', `🔮 Предсказание на ${sqName(r, c)} рассеялось: оно было фальшивым`); return; }
-        if (p.ghost) { vanishGhost(r, c, 'предсказание'); return; }
-        if (magicProof(G.board, r, c)) { addLog('n', `🔮 Предсказание на ${sqName(r, c)}: цель неуязвима для магии`); return; }
-        const dp = guardSwap(r, c) || p;
-        G.board[r][c] = null;
-        toGrave(dp);
-        G.fx.push({ r, c, type: 'boom' });
-        sfx('boom');
-        addLog('n', `🔮 Предсказание сбылось: ${pieceSym(dp)} на ${sqName(r, c)} погибает`);
+        if (!p || !p.preds) return;
+        const done = p.preds.filter(x => x.left <= 0);
+        p.preds = p.preds.filter(x => x.left > 0);      // предсказания стакаются: у каждого свой счётчик
+        if (!p.preds.length) delete p.preds;
+        for (const pr of done) {
+            if (!pr.real) { addLog('n', `🔮 Предсказание на ${sqName(r, c)} рассеялось: оно было фальшивым`); continue; }
+            if (p.ghost) { vanishGhost(r, c, 'предсказание'); return; }
+            if (magicProof(G.board, r, c)) { addLog('n', `🔮 Предсказание на ${sqName(r, c)}: цель неуязвима для магии`); continue; }
+            const dp = guardSwap(r, c) || p;
+            G.board[r][c] = null;
+            toGrave(dp);
+            G.fx.push({ r, c, type: 'boom' });
+            sfx('boom');
+            addLog('n', `🔮 Предсказание сбылось: ${pieceSym(dp)} на ${sqName(r, c)} погибает`);
+            return;      // фигура уже погибла, остальные предсказания на ней не нужны
+        }
     });
 }
 function sweepOmens() {      // ловушки Гадалки: вставшая на клетку фигура получает предсказание (настоящее или фальшивое)
@@ -2307,7 +2320,7 @@ function sweepOmens() {      // ловушки Гадалки: вставшая 
         const p = G.board[o.r][o.c];
         if (!p || kSafe(p) || p.ghost) return true;
         if (auraProtected(G.board, o.r, o.c)) { addLog('n', '✴ Фигура под защитой от магии уничтожает ловушку'); return false; }
-        p.pred = { by: o.owner, left: CONFIG.predTurns + (G.turn === o.owner ? 1 : 0), real: o.real };
+        p.preds = (p.preds || []).concat([{ by: o.owner, left: CONFIG.predTurns + (G.turn === o.owner ? 1 : 0), real: o.real }]);
         if (!p.invis) G.fx.push({ r: o.r, c: o.c, type: 'cast' });
         sfx('trap');
         addLog('n', p.invis ? '🔮 Невидимая фигура наступает на ловушку и получает предсказание' : `🔮 ${pieceSym(p)} наступает на ловушку на ${sqName(o.r, o.c)} и получает предсказание`);
@@ -2565,7 +2578,7 @@ function abilityCellsRaw(key, col, t, first) {
     } else if (key === 'prediction' || key === 'charlatan') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (!p || p.c !== enemy || kSafe(p) || p.pred || hiddenFor(p, col)) continue;
+            if (!p || p.c !== enemy || kSafe(p) || hiddenFor(p, col)) continue;
             if (p.ghost) { cells.push([r, c]); continue; }
             if (magicProof(b, r, c, col)) continue;
             cells.push([r, c]);
@@ -3177,7 +3190,7 @@ function endTurn() {
         if (p.c === c && p.frozen > 0) p.frozen--;
         if (p.c === c && p.snared > 0) { p.snared--; if (!p.snared) delete p.shock; }
         if (p.c === c && p.altruist > 0) { p.altruist--; if (!p.altruist) delete p.altruist; }
-        if (p.pred && p.pred.by === c) p.pred = { ...p.pred, left: p.pred.left - 1 };      // срок предсказания идёт по ходам Гадалки
+        if (p.preds && p.preds.some(x => x.by === c)) p.preds = p.preds.map(x => (x.by === c ? { ...x, left: x.left - 1 } : x));      // срок каждого предсказания идёт по ходам его автора
         if (p.c === c && p.warded > 0) { p.warded--; if (!p.warded) delete p.warded; }
         if (p.c === c && p.scaredT > 0) {
             p.scaredT--;
@@ -3667,7 +3680,7 @@ function useAbility(key, r, c, ref) {
         if (target.chg) addLog('n', `🔋 Очищение снимает заряд с робота на ${sqName(r, c)}`);
         if (target.hypno && target.orig) target.c = target.orig;            // гипноз тоже снимается
         if (target.cap > 0) addLog('n', `🤡 Колпак слетел с ${pieceSym(target)} на ${sqName(r, c)} (Очищение)`);
-        ['cap', 'capBy', 'betray', 'scared', 'scaredT', 'zombie', 'shield', 'altruist', 'pred', 'sup', 'lure', 'hypno', 'orig', 'fresh', 'bomb', 'bombBy', 'invis', 'phase', 'x', 'chg', 'onChg', 'warded'].forEach(f => { delete target[f]; });
+        ['cap', 'capBy', 'betray', 'scared', 'scaredT', 'zombie', 'shield', 'altruist', 'preds', 'sup', 'lure', 'hypno', 'orig', 'fresh', 'bomb', 'bombBy', 'invis', 'phase', 'x', 'chg', 'onChg', 'warded'].forEach(f => { delete target[f]; });
         target.frozen = 0; target.snared = 0; target.shield = false;
         if (target.soul) { delete target.soul; G.soulList = G.soulList.filter(e => e.p !== target); }
         target.warded = CONFIG.wardTurns + 1;
@@ -3726,14 +3739,14 @@ function useAbility(key, r, c, ref) {
         G.fx.push({ r, c, type: 'revive' });
         sfx('revive');
     } else if (key === 'prediction' || key === 'charlatan') {
-        target.pred = { by: col, left: CONFIG.predTurns + 1, real: key === 'prediction' };      // +1: в конце этого же хода счётчик уменьшится
+        target.preds = (target.preds || []).concat([{ by: col, left: CONFIG.predTurns + 1, real: key === 'prediction' }]);      // +1: в конце этого же хода счётчик уменьшится; предсказания стакаются
         text = `🔮 Предсказание: ${pieceSym(target)} ${sqName(r, c)} получает предсказание`;
         G.fx.push({ r, c, type: 'cast' });
         sfx('cast');
     } else if (key === 'unlucky' || key === 'badomen') {
         G.omens = G.omens.filter(x => !(x.r === r && x.c === c));
         G.omens.push({ r, c, owner: col, left: key === 'unlucky' ? CONFIG.unluckyTurns : CONFIG.omenTurns, real: key === 'unlucky' });
-        text = '🍂 Ловушка Гадалки установлена (место скрыто)';
+        text = '👁 Ловушка Гадалки установлена (место скрыто)';
         sfx('trap');
     } else if (key === 'trap') {
         G.traps = G.traps.filter(x => !(x.r === r && x.c === c));      // одинаковые ловушки: действует та, что поставлена последней
@@ -4628,7 +4641,7 @@ function renderBoard() {
     const km = G.mode && G.mode.type === 'kghost' ? G.mode : null;   // король-иллюзия: пока не выбрана клетка, король стоит на старом месте
     const targets = new Map();
     const actor = isActor();                       // подсказки выбора видит только тот, кто ходит
-    const peek = !!(NET.on && !actor && !G.over && G.hero[NET.me] === 'fortune');      // пассивка Гадалки «Как открытая книга»: видит выбор врага
+    const peek = !!(PEEK_ON && NET.on && !actor && !G.over && G.hero[NET.me] === 'fortune');      // пассивка Гадалки «Как открытая книга»: видит выбор врага
     const show = actor || peek;
     const flip = NET.on && NET.me === 'b';         // чёрные видят доску со своей стороны
     $('#app').classList.toggle('flipped', flip);
@@ -4681,7 +4694,7 @@ function renderBoard() {
                 : `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me || x.owner === 'n'))) html += '<div class="trap-mark">🪤</div>';
-            if (showTraps && G.omens && G.omens.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me))) html += '<div class="trap-mark">🍂</div>';
+            { const om = showTraps && G.omens && G.omens.find(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me)); if (om) html += `<div class="omen-mark${om.real ? '' : ' fake'}">👁</div>`; }
             {
                 const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
                 if (bn && (bn.owner === 'n' || jesterSees(bn.owner))) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
@@ -4722,6 +4735,7 @@ function renderBoard() {
                 if (p.phase || isPhase(p) || ritualAt(r, c)) pc += ' phase';
                 if (auraProtected(G.board, r, c)) pc += ' aura';
                 if (must.has(r + ',' + c)) pc += ' must';
+                if (p.preds && p.preds.some(x => x.real && (NET.on ? x.by === NET.me : G.turn === x.by))) pc += ' pred-real';      // фиолетовое свечение: настоящее предсказание видит только наложившая его
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'land')) pc += ' pop';
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'heaven')) pc += ' from-sky';      // фигура спускается с небес
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'raise')) pc += ' crawl';      // зомби выкарабкивается из-под земли
@@ -4738,7 +4752,7 @@ function renderBoard() {
                 if (p.scared) html += `<span class="sc">😱${p.scaredT || ''}</span>`;
                 if (p.sup) html += '<span class="sp">⚛</span>';
                 if (p.altruist > 0) html += `<span class="al">👼${p.altruist}</span>`;
-                if (p.pred) html += `<span class="pr">🔮${Math.max(1, Math.min(p.pred.left, CONFIG.predTurns))}</span>`;      // настоящее оно или нет, не видно никому, кроме Гадалки по её памяти
+                if (p.preds) html += `<span class="pr">🔮${p.preds.map(x => Math.max(1, Math.min(x.left, CONFIG.predTurns))).join('·')}</span>`;      // настоящее оно или нет, не видно никому, кроме Гадалки по её памяти
                 if (G.guess && p.uid && p.uid === G.guess.uid && (!NET.on || G.guess.by === NET.me)) html += '<span class="pr gs">📖</span>';
                 if (p.t === 'j') html += `<span class="jl">${Number.isFinite(p.life) ? '⏳' + p.life : '∞'}</span>`;
                 if (p.t === 'x' && p.rob) html += `<span class="rb">${p.rob.kind === 'wing' ? '🪽' : '👢'}</span>`;
@@ -4824,7 +4838,7 @@ function panelHTML(col) {
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
     <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div>${panelNick(col)}${rematchBadge(col)}</div>
     ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}${hero.plain ? '' : '<button class="pn-info" data-info title="Описание способностей">i</button>'}</div>`;
-    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Особая сила: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (' + L('КД ', 'CD ') + eurekaLeft(col) + ')' : ''}</div><div class="abilities">`;
+    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Особая сила: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (' + L('КД ', 'CD ') + eurekaLeft(col) + ')' : ''}</div>${hero.passive === 'openbook' && NET.on && col === NET.me ? `<button class="peek-toggle${PEEK_ON ? ' on' : ''}" data-peek title="Показывать ли вам, как враг выбирает фигуры и способности">👁 Намерения врага: ${PEEK_ON ? 'вкл' : 'выкл'}</button>` : ''}<div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
     const tomMode = !G.over && G.mode && G.mode.type === 'tomato' && col !== G.turn && isActor();
@@ -4849,7 +4863,7 @@ function panelHTML(col) {
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${secret ? '?' : ''} → +2</span>${(!secret && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
             return;
         }
-        const peekPanel = !!(NET.on && col === G.turn && col !== NET.me && !G.over && G.hero[NET.me] === 'fortune');      // Гадалка видит, какой способностью враг целится
+        const peekPanel = !!(PEEK_ON && NET.on && col === G.turn && col !== NET.me && !G.over && G.hero[NET.me] === 'fortune');      // Гадалка видит, какой способностью враг целится
         const on = (active || peekPanel) && G.mode && (G.mode.via ? 'copy' : G.mode.type) === k;
         const can = active && !lock && abilityAvailable(col, k);
         const eu = active && !lock && !G.mode && !G.bonus && cd > 0 && !offT && !hideCd && eurekaReady(col);      // Эврика: можно обнулить перезарядку
@@ -5009,7 +5023,7 @@ function renderStatus() {
     if (NET.on && G.turn !== NET.me) {
         const tm = G.mode && ENG_TAB_MODES.includes(G.mode.type) && G.mode.stage !== 'spawn' && G.mode.stage !== 'piece';      // соперник сидит в планшете Инженера
         h = NET.lost ? 'Соединение потеряно.' : tm ? '🔧 Враг мастерит...' : '⏳ Ход соперника...';
-        if (!NET.lost && !tm && !G.over && G.hero[NET.me] === 'fortune' && G.mode) { const A0 = G.mode.via ? { name: 'Зеркало' } : (ABILITIES[G.mode.type] || PASSIVES[G.mode.type]); if (A0) h += ' · 📖 целится: ' + A0.name; }
+        if (!NET.lost && !tm && !G.over && PEEK_ON && G.hero[NET.me] === 'fortune' && G.mode) { const A0 = G.mode.via ? { name: 'Зеркало' } : (ABILITIES[G.mode.type] || PASSIVES[G.mode.type]); if (A0) h += ' · 📖 целится: ' + A0.name; }
     }
     hi.textContent = h;
     renderChat();
@@ -6611,6 +6625,60 @@ Object.assign(EN, {
     "Турель на": "Turret on",
     "перенастроена": "reconfigured",
     "перенастроен": "reconfigured"
+});
+
+// Гадалка: английский перевод
+Object.assign(EN, {
+    "Гадалка": "Fortune Teller",
+    "Предсказания и гадания": "Predictions and fortune-telling",
+    [PASSIVES.openbook.name]: "Open Book",
+    [PASSIVES.openbook.desc]: "You see when the enemy clicks on their pieces: the piece's moves are highlighted, and you see which ability they are aiming (but not the exact target until they use it). Once every " + CONFIG.cooldown.openbook + " turns you can secretly pick an enemy piece that, in your opinion, the enemy will move next turn. If you guessed right, all your abilities get −1 cooldown. Choosing does not use your move.",
+    "Предсказание": "Prediction",
+    [ABILITIES.prediction.desc]: "An enemy piece (not a king) gets a prediction: if it is not moved during your next " + CONFIG.predTurns + " turns, it dies on the enemy's turn. The enemy sees the prediction but does not know whether it is real. The cooldown is hidden. Does not use your move.",
+    "Шарлатанство": "Quackery",
+    [ABILITIES.charlatan.desc]: "A fake prediction: it looks exactly like a real one, but nothing happens when the counter runs out. The cooldown is hidden. Does not use your move.",
+    "Невезучий ход": "Unlucky Move",
+    [ABILITIES.unlucky.desc]: "A trap invisible to the enemy that lasts " + CONFIG.unluckyTurns + " enemy turns: a piece that steps on it gets a real prediction. The cooldown is hidden. Does not use your move.",
+    "Плохая примета": "Bad Omen",
+    [ABILITIES.badomen.desc]: "The same as Unlucky Move, but the prediction is fake and the trap lasts " + CONFIG.omenTurns + " enemy turns. The cooldown is hidden. Does not use your move.",
+    "👁 Намерения врага: вкл": "👁 Enemy intentions: on",
+    "👁 Намерения врага: выкл": "👁 Enemy intentions: off",
+    "Показывать ли вам, как враг выбирает фигуры и способности": "Whether you see how the enemy picks pieces and abilities",
+    ["🔮 Выберите вражескую фигуру (не короля): она получит предсказание на " + CONFIG.predTurns + " ваших хода. Враг видит его, но не знает, настоящее оно или нет. Ход не тратится."]: "🔮 Choose an enemy piece (not a king): it gets a prediction for " + CONFIG.predTurns + " of your turns. The enemy sees it but does not know whether it is real. Does not use your move.",
+    "🍂 Выберите свободную клетку для невидимой ловушки: фигура, вставшая на неё, получит предсказание. Ход не тратится.": "🍂 Choose a free square for an invisible trap: a piece that steps on it gets a prediction. Does not use your move.",
+    "📖 Выберите вражескую фигуру, которой, по-вашему, враг походит следующим ходом. Это тайно и не тратит ход.": "📖 Choose the enemy piece you think the enemy will move next turn. This is secret and does not use your move.",
+    "· 📖 целится:": "· 📖 aiming:",
+    "🔮 Предсказание:": "🔮 Prediction:",
+    "получает предсказание": "gets a prediction",
+    "👁 Ловушка Гадалки установлена (место скрыто)": "👁 A Fortune Teller trap is set (location hidden)",
+    "Предсказание на": "The prediction on",
+    "рассеялось: оно было фальшивым": "faded: it was fake",
+    "цель неуязвима для магии": "the target is immune to magic",
+    "Предсказание сбылось:": "The prediction came true:",
+    "погибает": "dies",
+    "✴ Фигура под защитой от магии уничтожает ловушку": "✴ A piece protected from magic destroys the trap",
+    "🔮 Невидимая фигура наступает на ловушку и получает предсказание": "🔮 An invisible piece steps on a trap and gets a prediction",
+    "наступает на ловушку на": "steps on a trap on",
+    "и получает предсказание": "and gets a prediction",
+    "📖 Как открытая книга: догадка сделана втайне (ход не потрачен)": "📖 Open Book: the guess is made in secret (move not used)",
+    "📖 Догадка верна: перезарядка всех способностей −1": "📖 The guess is right: all ability cooldowns −1",
+    "📖 Догадка не оправдалась": "📖 The guess was wrong",
+    "🔎 На": "🔎 On",
+    "оказалась фигура": "there turned out to be a piece",
+    "туда попытались поставить плитку или ловушку": "you tried to place a tile or a trap there",
+    "туда попытались встать": "you tried to place a piece there",
+    "туда попытались положить банановую кожуру": "you tried to put a banana peel there",
+    "Попытка не удалась, невидимость сохраняется": "The attempt failed, the invisibility stays"
+});
+
+let PEEK_ON = true;      // кнопка Гадалки: видеть намерения врага или нет
+try { PEEK_ON = localStorage.getItem('spellschess-peek') !== '0'; } catch (e) { /* по умолчанию включено */ }
+document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-peek]');
+    if (!b) return;
+    PEEK_ON = !PEEK_ON;
+    try { localStorage.setItem('spellschess-peek', PEEK_ON ? '1' : '0'); } catch (err) { /* без сохранения */ }
+    if (G) render();
 });
 
 let LANG = 'ru';
@@ -8526,9 +8594,10 @@ function engPickRepro(r, c) {
    АНИМАЦИИ СПОСОБНОСТЕЙ
    ===================================================================== */
 // Полоска с названием способности: быстро влетает слева в центр доски, медленно плывёт, быстро улетает вправо
-const BANNER_SKIP = ['lie', 'unlucky', 'badomen'];      // секретные способности не показываем, чтобы не выдавать их применение
+const BANNER_SKIP = ['lie'];      // секретные способности не показываем, чтобы не выдавать их применение
 function abilityBanner(key) {
-    if (key === 'charlatan') key = 'prediction';      // фальшивое предсказание выглядит так же, как настоящее
+    let bannerName = null;
+    if (FORTUNE_KEYS.includes(key)) { key = mirrorShown(key); bannerName = ABILITIES[key].name + '?'; }      // настоящая и фальшивая версии показываются одинаково: «Предсказание?» и «Невезучий ход?»
     if (REPLAY_REC && !BANNER_SKIP.includes(key)) { REPLAY_REC.push({ k: 'banner', key }); return; }
     try {
         if (typeof document === 'undefined' || !ANIM.banner || BANNER_SKIP.includes(key)) return;
@@ -8541,7 +8610,7 @@ function abilityBanner(key) {
         box.style.cssText = `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
         const strip = document.createElement('div');
         strip.className = 'ab-banner';
-        strip.innerHTML = `<span class="abb-icon">${A.icon}</span><span class="abb-name">${A.name}</span>`;
+        strip.innerHTML = `<span class="abb-icon">${A.icon}</span><span class="abb-name">${bannerName || A.name}</span>`;
         box.appendChild(strip);
         document.body.appendChild(box);
         const anim = strip.animate([

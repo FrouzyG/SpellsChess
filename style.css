@@ -8534,28 +8534,60 @@ body.piece-drag {
     box-shadow: inset 0 0 0 2px #4682ff;
 }
 
-/* ===== Гадалка ===== */
-.cell.t-prediction::after, .cell.t-charlatan::after {
-    inset: 3%;
-    border: 3px solid #b86bff;
-    border-radius: 50%;
-    background: rgba(184, 107, 255, 0.28);
+/* ===== Гадалка: тёмно-фиолетовый акцент ===== */
+.panel.h-fortune, .hero-card[data-hero="fortune"] {
+    --hc: #7b2cbf;
+    border-color: #7b2cbf;
 }
 
-.cell.t-unlucky::after, .cell.t-badomen::after {
+    .hero-card[data-hero="fortune"].chosen {
+        box-shadow: 0 0 16px #7b2cbf, 0 0 0 1px #7b2cbf;
+    }
+
+    .panel.h-fortune .ab, .panel.h-fortune .ab.on, .panel.h-fortune .passive-btn {
+        border-color: #7b2cbf;
+    }
+
+        .panel.h-fortune .ab.on {
+            background: rgba(123, 44, 191, 0.38);
+        }
+
+    .panel.h-fortune .passive b, .panel.h-fortune .hname {
+        color: #a45df0;
+    }
+
+    .panel.h-fortune .passive-btn {
+        background: rgba(123, 44, 191, 0.18);
+    }
+
+/* круги выбора клеток для способностей Гадалки */
+.cell.t-prediction::after, .cell.t-charlatan::after, .cell.t-unlucky::after, .cell.t-badomen::after, .cell.t-openbook::after {
     inset: 3%;
-    border: 3px dashed #c9a24a;
+    border: 3px solid #7b2cbf;
+    border-radius: 50%;
+    background: rgba(123, 44, 191, 0.34);
+}
+
+/* кнопка «Намерения врага» */
+.peek-toggle {
+    width: 100%;
+    margin: 4px 0 6px;
+    padding: 5px 8px;
+    font: inherit;
+    font-size: 12px;
+    color: #e6d3ff;
+    background: rgba(123, 44, 191, 0.16);
+    border: 1px solid #7b2cbf;
     border-radius: 8px;
-    background: rgba(201, 162, 74, 0.28);
+    cursor: pointer;
 }
 
-.cell.t-openbook::after {
-    inset: 3%;
-    border: 3px solid #ffd86b;
-    border-radius: 50%;
-    background: rgba(255, 216, 107, 0.25);
-}
+    .peek-toggle.on {
+        background: rgba(123, 44, 191, 0.42);
+        box-shadow: 0 0 8px rgba(123, 44, 191, 0.6);
+    }
 
+/* значки предсказаний */
 .pr {
     position: absolute;
     z-index: 5;
@@ -8571,4 +8603,29 @@ body.piece-drag {
     .pr.gs {
         bottom: auto;
         top: 4%;
+    }
+
+/* настоящее предсказание: фиолетовое свечение, его видит только Гадалка, наложившая его */
+.piece.pred-real {
+    filter: drop-shadow(0 0 5px #8a2be2) drop-shadow(0 0 9px rgba(123, 44, 191, 0.9));
+}
+
+/* ловушка Гадалки на плитке: фиолетовый глаз, фальшивая прозрачнее настоящей на 60% */
+.omen-mark {
+    position: absolute;
+    inset: 14%;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(var(--cell) * 0.46);
+    line-height: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(138, 43, 226, 0.75), rgba(75, 0, 130, 0.35) 70%, transparent 100%);
+    box-shadow: 0 0 10px rgba(138, 43, 226, 0.7);
+    pointer-events: none;
+}
+
+    .omen-mark.fake {
+        opacity: 0.4;
     }
