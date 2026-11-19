@@ -2578,8 +2578,8 @@ function abilityCellsRaw(key, col, t, first) {
     } else if (key === 'prediction' || key === 'charlatan') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (!p || p.c !== enemy || kSafe(p) || hiddenFor(p, col)) continue;
-            if (p.ghost) { cells.push([r, c]); continue; }
+            if (!p || kSafe(p) || hiddenFor(p, col)) continue;      // предсказание можно наложить и на свою фигуру
+            if (p.ghost) { if (p.c === enemy) cells.push([r, c]); continue; }
             if (magicProof(b, r, c, col)) continue;
             cells.push([r, c]);
         }
@@ -2591,8 +2591,7 @@ function abilityCellsRaw(key, col, t, first) {
     } else if (key === 'unlucky' || key === 'badomen') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);
-        }
-    } else if (key === 'trap') {
+        }    } else if (key === 'trap') {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
@@ -3747,8 +3746,7 @@ function useAbility(key, r, c, ref) {
         G.omens = G.omens.filter(x => !(x.r === r && x.c === c));
         G.omens.push({ r, c, owner: col, left: key === 'unlucky' ? CONFIG.unluckyTurns : CONFIG.omenTurns, real: key === 'unlucky' });
         text = '👁 Ловушка Гадалки установлена (место скрыто)';
-        sfx('trap');
-    } else if (key === 'trap') {
+        sfx('trap');    } else if (key === 'trap') {
         G.traps = G.traps.filter(x => !(x.r === r && x.c === c));      // одинаковые ловушки: действует та, что поставлена последней
         G.traps.push({ r, c, owner: col });
         text = `${A.icon} ${A.name}: капкан установлен (место скрыто)`;
@@ -4696,7 +4694,7 @@ function renderBoard() {
                 : `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
             if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me || x.owner === 'n'))) html += '<div class="trap-mark">🪤</div>';
-            { const om = showTraps && G.omens && G.omens.find(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me)); if (om) html += `<div class="omen-mark${om.real ? '' : ' fake'}">👁</div>`; }
+            { const om = showTraps && G.omens && G.omens.find(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me)); if (om) html += `<div class="omen-mark${om.real ? '' : ' fake'}"><span>👁</span><i class="om-t${om.left === 1 ? ' warn' : ''}">${om.left}</i></div>`; }
             {
                 const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
                 if (bn && (bn.owner === 'n' || jesterSees(bn.owner))) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
@@ -4990,7 +4988,7 @@ function renderStatus() {
         else if (t === 'blunder') h = 'Выберите свою фигуру (не короля): на неё наденется шутовской колпак. Враг не узнает, на какую.';
         else if (t === 'banana') h = m.stage === 'dir' ? 'Выберите соседнюю клетку: в эту сторону поскользнётся фигура. Ход не тратится.' : 'Выберите свободную клетку для невидимой банановой кожуры. Ход не тратится.';
         else if (t === 'jaws') h = 'Выберите свободную клетку на первых трёх горизонталях вашей стороны: там появятся заводные челюсти.';
-        else if (t === 'prediction' || t === 'charlatan') h = '🔮 Выберите вражескую фигуру (не короля): она получит предсказание на ' + CONFIG.predTurns + ' ваших хода. Враг видит его, но не знает, настоящее оно или нет. Ход не тратится.';
+        else if (t === 'prediction' || t === 'charlatan') h = '🔮 Выберите фигуру (не короля): она получит предсказание на ' + CONFIG.predTurns + ' ' + plural(CONFIG.predTurns) + '. Враг видит его, но не знает, настоящее оно или нет. Ход не тратится.';
         else if (t === 'unlucky' || t === 'badomen') h = '🍂 Выберите свободную клетку для невидимой ловушки: фигура, вставшая на неё, получит предсказание. Ход не тратится.';
         else if (t === 'openbook') h = '📖 Выберите вражескую фигуру, которой, по-вашему, враг походит следующим ходом. Это тайно и не тратит ход.';
         else if (t === 'tomato') h = '🍅 Нажмите на способность врага в его панели: она отключится на ' + CONFIG.tomatoTurns + ' ходов. Ход не тратится.';
@@ -6672,6 +6670,91 @@ Object.assign(EN, {
     "туда попытались положить банановую кожуру": "you tried to put a banana peel there",
     "Попытка не удалась, невидимость сохраняется": "The attempt failed, the invisibility stays"
 });
+
+// Краткие описания: оставлена только суть самой способности. Здесь же английский перевод
+(function () {
+    const pl = n => plural(n);
+    const en = n => (n === 1 ? 'turn' : 'turns');
+    const ord = n => n + (['st', 'nd', 'rd'][n - 1] || 'th');
+    const C = CONFIG;
+    const SHORT = {
+        doubleVision: ['Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит вместе с королём.',
+            'A king that escapes check leaves an illusion on another square it could have gone to. It then moves together with the king.'],
+        timeslow: ['Кнопка или второй клик по королю, затем способность врага: её перезарядка +2 сейчас и +1 до конца партии, у остальных перезаряжающихся +1 сейчас. ' + (C.timePassiveCostsTurn ? 'Тратит ход.' : 'Ход не тратится.'),
+            'A button or a second click on the king, then an enemy ability: its cooldown +2 now and +1 for the rest of the game, other abilities on cooldown +1 now. ' + (C.timePassiveCostsTurn ? 'Uses your move.' : 'Does not use your move.')],
+        pretense: ['Тайно выберите вражеского слона или коня. После ' + C.betrayAfter + '-го хода врага можно потратить ход, и она навсегда перейдёт к вам.',
+            'Secretly choose an enemy bishop or knight. After the enemy\'s ' + ord(C.betrayAfter) + ' move you can spend a move and it becomes yours for good.'],
+        sawing: ['Левый и правый край доски соединены для ваших фигур (кроме короля). После прохода сквозь край пассивка отключается у всех ваших фигур на ' + C.sawingCooldown + ' ' + pl(C.sawingCooldown) + '.',
+            'The left and right edges of the board are connected for your pieces (except the king). After a piece passes through an edge, the passive is disabled for all your pieces for ' + C.sawingCooldown + ' ' + en(C.sawingCooldown) + '.'],
+        eureka: ['Можно обнулить перезарядку любой своей способности: нажмите на неё и подтвердите. Сама Эврика перезаряжается 30 ходов.',
+            'You can reset the cooldown of any of your abilities: press it and confirm. Eureka itself then recharges for 30 turns.'],
+        openbook: ['Видно, как враг выбирает фигуры и способности (цель не видно). Раз в ' + C.cooldown.openbook + ' хода тайно выберите фигуру, которой враг, по-вашему, походит дальше: угадали, и перезарядка ваших способностей −1. Ход не тратится.',
+            'You see how the enemy picks pieces and abilities (not the target). Once every ' + C.cooldown.openbook + ' turns, secretly choose the piece you think the enemy will move next: if you are right, all your cooldowns drop by 1. Does not use your move.'],
+        illusion: ['Создаёт двойника фигуры: они ходят только вместе, двойник не рубит. Рассеивается при шахе, при угрозе вражеской пешки, а также если враг пройдёт сквозь двойника или встанет на его клетку.',
+            'Creates a double of a piece: they move only together, and the double cannot capture. It dissolves on check, when an enemy pawn threatens it, or when an enemy passes through it or steps on its square.'],
+        raise: ['Поднимает фигуру из любого сброса как зомби на вашей первой горизонтали (пешку на любую из первых четырёх). Зомби обязаны рубить, если могут.',
+            'Raises a piece from either graveyard as a zombie on your first rank (a pawn on any of the first four). Zombies must capture if they can.'],
+        scream: ['Вражеская фигура (не король) ходит только на 1 клетку (конь как слон, пешка без рубки). Страх спадает после её хода, у пешки через ' + C.scaredPawnTurns + ' ' + pl(C.scaredPawnTurns) + '. Затем нужно применить другую способность.',
+            'An enemy piece (not a king) can move only 1 square (a knight like a bishop, a pawn cannot capture). The fear fades after its move, for a pawn after ' + C.scaredPawnTurns + ' ' + en(C.scaredPawnTurns) + '. Then you must use another ability.'],
+        fukashi: ['Невидима для врага, но блокирует ходы. Раскрывается, если рубит, даёт шах, ей грозит пешка или враг упирается в неё (ход врага не тратится).',
+            'Invisible to the enemy, but it blocks moves. It is revealed when it captures, gives check, is threatened by a pawn, or the enemy runs into it (the enemy\'s move is not used).'],
+        portals: ['Две связанные плитки: вставшая на портал фигура переносится на второй, а ход через портал продолжается из второго. Одновременно действуют две пары.',
+            'Two linked tiles: a piece that steps on a portal is carried to the other one, and a move through a portal continues from the other. Two pairs can exist at once.'],
+        ritual: ['Призрачная плитка: стоящая на ней фигура (своя или вражеская) прозрачна для ваших фигур: сквозь неё можно проходить и можно её рубить.',
+            'A ghost tile: a piece standing on it (yours or the enemy\'s) is transparent to your pieces: they can pass through it and capture it.'],
+        bumpuku: ['Бомба на союзной фигуре (не короле): на вашем ' + C.bumpukuTurns + '-м ходе после применения убивает всех в 3×3. Если фигуру срубят, бомба не взрывается. Ход не тратится.',
+            'A bomb on an allied piece (not the king): on your ' + ord(C.bumpukuTurns) + ' turn after use it kills everything in 3×3. If the piece is captured, the bomb does not explode. Does not use your move.'],
+        generator: ['Плитки плюс и минус (сначала плюс, потом минус). Фигуры, стоящие и на плюсе, и на минусе, убивает разряд.',
+            'Plus and minus tiles (plus first, then minus). Pieces standing on both a plus and a minus are killed by a discharge.'],
+        groundhog: ['Одноразовая ловушка: вставшая фигура (не король) возвращается, откуда пришла. На пустой клетке скрыта и ход не тратит, на фигуре видна и тратит ход.',
+            'A one-time trap: a piece (not a king) that steps on it returns to where it came from. On an empty square it is hidden and does not use your move; on a piece it is visible and uses your move.'],
+        superposition: ['Одноразово: на клетку фигуры (не короля) можно встать, а она вернётся на клетку своего прошлого хода. Если там уже стоит другая фигура, её рубят.',
+            'One-time: you can step onto the square of a piece (not a king), and it returns to the square of its previous move. If another piece is standing there, it is captured.'],
+        banana: ['Скрытая кожура на свободной клетке с направлением: вставшая фигура (не король) съезжает на соседнюю клетку в эту сторону. Ход не тратится.',
+            'A hidden peel on a free square with a direction: a piece (not a king) that steps on it slides to the neighboring square in that direction. Does not use your move.'],
+        fog: ['Дым 3×3 вокруг выбранной клетки на ' + C.fogTurns + ' ваших ' + pl(C.fogTurns) + ': фигуры (не короли) в нём невидимы для врага. Ход не тратится.',
+            'Smoke 3×3 around the chosen square for ' + C.fogTurns + ' of your ' + en(C.fogTurns) + ': pieces (not kings) in it are invisible to the enemy. Does not use your move.'],
+        hatch: ['Люки на свободных клетках (первый раз сразу два, дальше по одному). Вставшая на люк фигура (не король) вылезает из другого люка на выбор ходящего.',
+            'Hatches on free squares (two the first time, then one at a time). A piece (not a king) that steps on a hatch climbs out of another hatch of the mover\'s choice.'],
+        hocus: ['Меняет местами две любые фигуры (кроме королей) в квадрате 5×5 вокруг первой. Ваш король не должен остаться под шахом.',
+            'Swaps any two pieces (except kings) within a 5×5 square around the first one. Your king must not be left in check.'],
+        assistant: ['Превращает фигуру (не короля) в зайца на ' + C.hareTurns + ' ' + pl(C.hareTurns) + ' её владельца. Заяц не рубит и ходит как ферзь, потом фигура возвращается.',
+            'Turns a piece (not a king) into a hare for ' + C.hareTurns + ' of its owner\'s ' + en(C.hareTurns) + '. The hare cannot capture and moves like a queen, then the piece returns.'],
+        assemble: ['Собираете робота на планшете; он появится на свободной клетке ваших первых двух горизонталей. Двойной клик по роботу покажет, как он ходит.',
+            'You build a robot on the tablet; it appears on a free square of your first two ranks. Double-click a robot to see how it moves.'],
+        charger: ['Плитка-зарядка: вставшая обычная фигура (не король) оглушается и пропускает ход. Робот получает заряд на один бесплатный ход (без шаха).',
+            'A charger tile: an ordinary piece (not a king) that steps on it is stunned and skips a turn. A robot gets a charge for one free move (no check).'],
+        turret: ['Собираете неподвижную турель на планшете; она появится на свободной клетке ваших первых трёх горизонталей. Двойной клик по турели покажет, как она стреляет.',
+            'You build a stationary turret on the tablet; it appears on a free square of your first three ranks. Double-click a turret to see how it shoots.'],
+        reprogram: ['Тратит ход. Перестраивает робота или радиус турели на планшете. Новые клетки и направления увеличивают перезарядку, убранные уменьшают (ниже базовой не опускается).',
+            'Uses your move. Rebuilds a robot or a turret\'s radius on the tablet. New squares and directions raise the cooldown, removed ones lower it (never below the base).'],
+        freeze: ['Любая фигура (кроме короля) на ' + C.freezeTurns + ' ' + pl(C.freezeTurns) + ' не ходит, её нельзя срубить, и магия на неё не действует.',
+            'Any piece (except a king) cannot move for ' + C.freezeTurns + ' ' + en(C.freezeTurns) + ', cannot be captured, and magic does not affect it.'],
+        jaws: ['Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт ' + C.jawsTurns + ' ваших ходов.',
+            'A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for ' + C.jawsTurns + ' of your turns.'],
+        blunder: ['Тайный колпак на вашей фигуре: ' + C.capTurns + ' ' + pl(C.capTurns) + ' врага она не рубит и не даёт шах. Срубивший её погибает.',
+            'A secret hat on your piece: for ' + C.capTurns + ' enemy ' + en(C.capTurns) + ' it cannot capture or give check. Whoever captures it dies.'],
+        prediction: ['Фигура (не король) получает предсказание: если ею не походят за ваши ' + C.predTurns + ' следующих ' + pl(C.predTurns) + ', она погибнет на ходе врага. Видно предсказание, но не видно, настоящее ли оно. Перезарядка скрыта. Ход не тратится.',
+            'A piece (not a king) gets a prediction: if it is not moved during your next ' + C.predTurns + ' ' + en(C.predTurns) + ', it dies on the enemy\'s turn. The prediction is visible, but whether it is real is not. The cooldown is hidden. Does not use your move.'],
+        charlatan: ['Фальшивое предсказание: выглядит как настоящее, но в конце ничего не происходит. Перезарядка скрыта. Ход не тратится.',
+            'A fake prediction: it looks like a real one, but nothing happens at the end. The cooldown is hidden. Does not use your move.'],
+        unlucky: ['Невидимая для врага ловушка на ' + C.unluckyTurns + ' ' + pl(C.unluckyTurns) + ' врага: вставшая на неё фигура получает настоящее предсказание. Перезарядка скрыта. Ход не тратится.',
+            'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. The cooldown is hidden. Does not use your move.'],
+        badomen: ['То же, что Невезучий ход, но предсказание фальшивое. Перезарядка скрыта. Ход не тратится.',
+            'The same as Unlucky Move, but the prediction is fake. The cooldown is hidden. Does not use your move.']
+    };
+    const add = {};
+    Object.keys(SHORT).forEach(k => {
+        const o = PASSIVES[k] || ABILITIES[k];
+        if (!o) return;
+        o.desc = SHORT[k][0];
+        add[o.desc] = SHORT[k][1];
+    });
+    // подсказка при выборе цели для предсказания (теперь можно и на свою фигуру)
+    add['🔮 Выберите фигуру (не короля): она получит предсказание на ' + C.predTurns + ' ' + pl(C.predTurns) + '. Враг видит его, но не знает, настоящее оно или нет. Ход не тратится.'] =
+        '🔮 Choose a piece (not a king): it gets a prediction for ' + C.predTurns + ' ' + en(C.predTurns) + '. The enemy sees it but does not know whether it is real. Does not use your move.';
+    Object.assign(EN, add);
+})();
 
 let PEEK_ON = true;      // кнопка Гадалки: видеть намерения врага или нет
 try { PEEK_ON = localStorage.getItem('spellschess-peek') !== '0'; } catch (e) { /* по умолчанию включено */ }

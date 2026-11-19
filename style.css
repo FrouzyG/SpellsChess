@@ -8544,21 +8544,21 @@ body.piece-drag {
         box-shadow: 0 0 16px #7b2cbf, 0 0 0 1px #7b2cbf;
     }
 
-    .panel.h-fortune .ab, .panel.h-fortune .ab.on, .panel.h-fortune .passive-btn {
-        border-color: #7b2cbf;
+.panel.h-fortune .ab, .panel.h-fortune .ab.on, .panel.h-fortune .passive-btn {
+    border-color: #7b2cbf;
+}
+
+    .panel.h-fortune .ab.on {
+        background: rgba(123, 44, 191, 0.38);
     }
 
-        .panel.h-fortune .ab.on {
-            background: rgba(123, 44, 191, 0.38);
-        }
+.panel.h-fortune .passive b, .panel.h-fortune .hname {
+    color: #a45df0;
+}
 
-    .panel.h-fortune .passive b, .panel.h-fortune .hname {
-        color: #a45df0;
-    }
-
-    .panel.h-fortune .passive-btn {
-        background: rgba(123, 44, 191, 0.18);
-    }
+.panel.h-fortune .passive-btn {
+    background: rgba(123, 44, 191, 0.18);
+}
 
 /* круги выбора клеток для способностей Гадалки */
 .cell.t-prediction::after, .cell.t-charlatan::after, .cell.t-unlucky::after, .cell.t-badomen::after, .cell.t-openbook::after {
@@ -8627,7 +8627,24 @@ body.piece-drag {
 }
 
     .omen-mark.fake {
-        opacity: 0.4;
+        background: radial-gradient(circle, rgba(138, 43, 226, 0.3), rgba(75, 0, 130, 0.14) 70%, transparent 100%);
+        box-shadow: 0 0 10px rgba(138, 43, 226, 0.28);
+    }
+
+        .omen-mark.fake > span {
+            opacity: 0.4;
+        }
+
+    .omen-mark .om-t {
+        position: absolute;
+        right: -2px;
+        bottom: -3px;
+        font-style: normal;
+        font-weight: 700;
+        font-size: calc(var(--cell) * 0.2);
+        line-height: 1;
+        color: #fff;
+        text-shadow: 0 0 3px #000;
     }
 
 /* ===== Предупреждение: последний ход таймера ===== */
