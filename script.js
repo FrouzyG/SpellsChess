@@ -4635,6 +4635,8 @@ function updateEndBtn() {
     b.disabled = !(!G.over && G.hero[G.turn] === 'architect' && G.archUsed && !G.check && !G.pendingPromo && !G.pairStep && !(G.mode && G.mode.locked));
 }
 
+// Число таймера; если это последний ход эффекта (после него он пропадёт или сработает), число пульсирует красным
+const tn = (v, last) => `<i class="tn${last ? ' warn' : ''}">${v}</i>`;
 function renderBoard() {
     const el = $('#board');
     el.dataset.turn = G.over ? '' : G.turn;
@@ -4677,7 +4679,7 @@ function renderBoard() {
             if (wallAt(r, c)) html += '<div class="wall-mark"></div>';
             if (sharpAt(r, c)) html += '<div class="sharp-mark"></div>';
             const bt = burnAt(r, c);
-            if (bt) html += `<div class="burn-mark"><span>🔥</span><i>${Number.isFinite(bt.life) ? bt.life : '∞'}</i></div>`;
+            if (bt) html += `<div class="burn-mark"><span>🔥</span><i${bt.life === 1 ? ' class="warn"' : ''}>${Number.isFinite(bt.life) ? bt.life : '∞'}</i></div>`;
             G.fire.filter(x => x.kind === 'shomen' && x.c === c).forEach(f => { html += `<div class="shomen-mark ${f.owner}"></div>`; });
             G.fire.filter(x => x.r === r && x.c === c).forEach(f => {
                 html += f.kind === 'arrow'
@@ -4700,7 +4702,7 @@ function renderBoard() {
                 if (bn && (bn.owner === 'n' || jesterSees(bn.owner))) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
                 else if (bn && bn.revealed) html += '<div class="tile-mark banana-mark">🍌</div>';      // раскрытая врагом кожура: видно, где она лежит, но не куда откидывает
             }
-            if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t">${Number.isFinite(vn.left) ? vn.left : '∞'}</i></div>`; }
+            if (G.vines.some(x => x.r === r && x.c === c)) { const vn = G.vines.find(x => x.r === r && x.c === c); html += `<div class="tile-mark vine-mark">🌿<i class="vine-t${vn.left === 1 ? ' warn' : ''}">${Number.isFinite(vn.left) ? vn.left : '∞'}</i></div>`; }
             if (G.virus.some(x => x.r === r && x.c === c)) html += '<div class="tile-mark virus-mark">☣️</div>';
             {
                 const rt = G.rituals.find(x => x.r === r && x.c === c);
@@ -4742,27 +4744,27 @@ function renderBoard() {
                 if (ANIM_HIDE.some(h => h.r === r && h.c === c && h.until > Date.now())) pc += ' anim-hide';
                 html += `<div class="${pc}">${GLYPH[p.t]}`;
                 if (p.x && p.x.length) html += `<span class="xs">${p.x.map(t => pImg(p.c, t)).join('')}</span>`;
-                if (p.shield) html += THORNS + `<span class="shn">${p.shield}</span>`;
+                if (p.shield) html += THORNS + `<span class="shn">${tn(p.shield, p.shield === 1)}</span>`;
                 if (p.zombie) html += '<span class="zb">☠</span>';
-                if (p.hypno) html += `<span class="hy">👁${p.hypno}</span>`;
-                if (p.frozen > 0) html += `<span class="fz">❄${p.frozen}</span>`;
+                if (p.hypno) html += `<span class="hy">👁${tn(p.hypno, p.hypno === 1 && !p.fresh)}</span>`;
+                if (p.frozen > 0) html += `<span class="fz">❄${tn(p.frozen, p.frozen === 1)}</span>`;
                 if (p.snared > 0) html += `<span class="sn">${p.shock ? '⚡' : '🪤'}</span>`;
                 if (p.lure) html += '<span class="lr">🎣</span>';
                 if (p.soul) html += '<span class="so">🔗</span>';
-                if (p.scared) html += `<span class="sc">😱${p.scaredT || ''}</span>`;
+                if (p.scared) html += `<span class="sc">😱${p.scaredT ? tn(p.scaredT, p.scaredT === 1) : ''}</span>`;
                 if (p.sup) html += '<span class="sp">⚛</span>';
-                if (p.altruist > 0) html += `<span class="al">👼${p.altruist}</span>`;
-                if (p.preds) html += `<span class="pr">🔮${p.preds.map(x => Math.max(1, Math.min(x.left, CONFIG.predTurns))).join('·')}</span>`;      // настоящее оно или нет, не видно никому, кроме Гадалки по её памяти
+                if (p.altruist > 0) html += `<span class="al">👼${tn(p.altruist, p.altruist === 1)}</span>`;
+                if (p.preds) html += `<span class="pr">🔮${p.preds.map(x => tn(Math.max(1, Math.min(x.left, CONFIG.predTurns)), x.left <= 1)).join('·')}</span>`;      // настоящее оно или нет, не видно никому, кроме Гадалки по её памяти
                 if (G.guess && p.uid && p.uid === G.guess.uid && (!NET.on || G.guess.by === NET.me)) html += '<span class="pr gs">📖</span>';
-                if (p.t === 'j') html += `<span class="jl">${Number.isFinite(p.life) ? '⏳' + p.life : '∞'}</span>`;
+                if (p.t === 'j') html += `<span class="jl">${Number.isFinite(p.life) ? '⏳' + tn(p.life, p.life === 1) : '∞'}</span>`;
                 if (p.t === 'x' && p.rob) html += `<span class="rb">${p.rob.kind === 'wing' ? '🪽' : '👢'}</span>`;
                 if (p.t === 'x' && p.chg > 0) html += '<span class="chg">🔋</span>';
                 if (p.t === 'u' && p.tur) html += `<span class="rb">${p.tur.kind === 'instant' ? '⚡' : '🎯'}</span>`;
-                if (p.hare) html += `<span class="jl">🐇${Number.isFinite(p.hare.left) ? p.hare.left : '∞'}</span>`;
-                if (p.cap > 0 && jesterSees(p.capBy)) html += `<span class="cp">🤡${p.cap}</span>`;
+                if (p.hare) html += `<span class="jl">🐇${Number.isFinite(p.hare.left) ? tn(p.hare.left, p.hare.left === 1) : '∞'}</span>`;
+                if (p.cap > 0 && jesterSees(p.capBy)) html += `<span class="cp">🤡${tn(p.cap, p.cap <= 1)}</span>`;
                 if (p.betray && jesterSees(p.betray)) html += '<span class="bt">🃏</span>';
-                if (p.warded > 0) html += `<span class="wd">✴${p.warded}</span>`;
-                if (p.bomb) html += `<span class="bm">💣${p.bomb}</span>`;
+                if (p.warded > 0) html += `<span class="wd">✴${tn(p.warded, p.warded === 1)}</span>`;
+                if (p.bomb) html += `<span class="bm">💣${tn(p.bomb, p.bomb === 1)}</span>`;
                 if (p.t === 'p' && brotherImmune(G.board, r, c)) html += '<span class="br">⚜</span>';
                 html += '</div>';
             }
@@ -4878,7 +4880,7 @@ function panelHTML(col) {
         if (hideCd) sub = 'скрыто';      // применение не должно быть видно по перезарядке
         if (eu) sub = '💡 Эврика?';
         h += `<button class="ab ${on ? 'on' : ''}${offT ? ' tomatoed' : ''}${eu ? ' eureka-ready' : ''}" ${eu ? `data-eureka="${k}"` : `data-ab="${k}" ${can || on ? '' : 'disabled'}`} title="${abilityDesc(k)}">
-      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}${offT ? `<span class="tm-badge">🍅${offT}</span>` : ''}</button>`;
+      <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}${offT ? `<span class="tm-badge">🍅${tn(offT, offT === 1)}</span>` : ''}</button>`;
     });
 
     // Кнопка пассивки (Меткий глаз / Кагэватари): то же, что второй клик по королю

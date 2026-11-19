@@ -8629,3 +8629,21 @@ body.piece-drag {
     .omen-mark.fake {
         opacity: 0.4;
     }
+
+/* ===== Предупреждение: последний ход таймера ===== */
+.tn {
+    display: inline-block;
+    font-style: normal;
+}
+
+.warn {
+    animation: warnPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes warnPulse {
+    50% {
+        scale: 1.5;
+        color: #ff3b3b;
+        text-shadow: 0 0 5px #ff0000, 0 0 11px rgba(255, 0, 0, 0.85);
+    }
+}
