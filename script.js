@@ -1596,14 +1596,23 @@ function safeAfter(nb, col) {
     return kingSafe(nb, col, G.fire, true);
 }
 
-// Шут знает свои банановые кожуры: фигура, вставшая на неё, съедет на соседнюю клетку (для проверки шаха)
+// Шут знает свои банановые кожуры: фигура, вставшая на неё, съедет на соседнюю клетку (для проверки шаха).
+// Кожуры могут идти цепочкой: если фигура съехала на клетку с другой кожурой, она съезжает и с неё, и так до конца.
+// Возвращает список кожур, на которых фигура побывала.
 function bananaSlideOnBoard(nb, r, c, col, any) {
-    if (typeof G === 'undefined' || !G || !G.bananas || !G.bananas.length) return;
-    const bn = G.bananas.find(x => x.r === r && x.c === c && (any || x.revealed || x.owner === col || x.owner === 'n'));
-    const q = nb[r][c];
-    if (!bn || !q || q.c !== col || kSafe(q) || q.ghost || auraProtected(nb, r, c)) return;      // защита от магии (Очищение и барьер) от кожуры не скользит
-    const tr = r + bn.dir[0], tc = c + bn.dir[1];
-    if (inb(tr, tc) && !nb[tr][tc] && !wallAt(tr, tc)) { nb[tr][tc] = q; nb[r][c] = null; }
+    const used = [];
+    if (typeof G === 'undefined' || !G || !G.bananas || !G.bananas.length) return used;
+    for (let step = 0; step < 32; step++) {
+        const bn = G.bananas.find(x => !used.includes(x) && x.r === r && x.c === c && (any || x.revealed || x.owner === col || x.owner === 'n'));
+        const q = nb[r][c];
+        if (!bn || !q || q.c !== col || kSafe(q) || q.ghost || auraProtected(nb, r, c)) return used;      // защита от магии (Очищение и барьер) от кожуры не скользит
+        used.push(bn);
+        const tr = r + bn.dir[0], tc = c + bn.dir[1];
+        if (!(inb(tr, tc) && !nb[tr][tc] && !wallAt(tr, tc))) return used;
+        nb[tr][tc] = q; nb[r][c] = null;
+        r = tr; c = tc;
+    }
+    return used;
 }
 
 // Ход сурка: фигура, вставшая на ловушку, вернётся на прежнюю клетку (для проверки шаха). any: учитывать и скрытые ловушки
@@ -3278,17 +3287,15 @@ function bananaCheckTrap(mv) {
     const p = G.board[mv.fr][mv.fc];
     if (!p) return false;
     const col = p.c;
-    const bn = G.bananas.find(x => x.r === mv.tr && x.c === mv.tc && x.owner !== col && x.owner !== 'n' && !x.revealed);
-    if (!bn) return false;
     const nb = cloneBoard(G.board);
     applyMove(nb, mv, 'q');
-    const q = nb[mv.tr][mv.tc];
-    bananaSlideOnBoard(nb, mv.tr, mv.tc, col, true);
-    if (nb[mv.tr][mv.tc] === q) return false;      // фигура не съехала (давит кожуру без последствий): обычный ход
+    const used = bananaSlideOnBoard(nb, mv.tr, mv.tc, col, true);      // вся цепочка кожур, и скрытых тоже
+    const hidden = used.filter(x => x.owner !== col && x.owner !== 'n' && !x.revealed);
+    if (!hidden.length) return false;      // скрытых кожур в цепочке нет: обычный ход
     if (safeAfter(nb, col)) return false;          // после съезжания король в безопасности: обычный ход
-    bn.revealed = true;
+    hidden.forEach(x => { x.revealed = true; });
     sfx('trap');
-    addLog('n', L(`🍌 На ${sqName(mv.tr, mv.tc)} была спрятана банановая кожура: ход невозможен (король остался бы под шахом), кожура раскрыта`, `🍌 A banana peel was hidden on ${sqName(mv.tr, mv.tc)}: that move is impossible (the king would stay in check), the peel is revealed`));
+    addLog('n', L(`🍌 На пути с ${sqName(mv.tr, mv.tc)} была спрятана банановая кожура: ход невозможен (король остался бы под шахом), кожура раскрыта`, `🍌 A banana peel was hidden on the way from ${sqName(mv.tr, mv.tc)}: that move is impossible (the king would be left in check), the peel is revealed`));
     return true;
 }
 
@@ -4543,9 +4550,14 @@ function onGrave(i, gcol) {
 function netDo(msg) {
     if (REPLAY.on) return;
     if (NET.on && (NET.lost || !isActor())) return;
+    if (BOT.on && !NET.on && G && G.turn === BOT.side) return;      // пока думает бот, нажимать нельзя
     lastPick = null;
+    // свои часы по моему устройству отправляются вместе с действием (до применения хода, пока добавка за ход не прибавлена):
+    // у соперника на экране мои часы исправляются на точное значение, и расхождение из-за задержки сети не копится
+    let ck = null, ckp = null;
+    if (NET.on && typeof CLOCK !== 'undefined' && CLOCK && CLOCK.on && CLOCK.left) { const op = inOpening(NET.me); ck = Math.round((op ? CLOCK.open : CLOCK.left)[NET.me] * 1000) / 1000; ckp = op ? 'o' : 'l'; }
     applyInput(msg);
-    if (NET.on) netSend({ t: 'in', m: { ...msg, pick: lastPick } });
+    if (NET.on) netSend({ t: 'in', m: { ...msg, pick: lastPick }, ck, ckp });
 }
 
 function applyInput(m) {
@@ -5026,6 +5038,7 @@ function renderStatus() {
     } else if (G.check) {
         h = 'Королю угрожает опасность: нужно защититься.';
     }
+    if (BOT.on && !NET.on && !G.over && G.turn === BOT.side) h = '🤖 Бот думает...';
     if (NET.on && G.turn !== NET.me) {
         const tm = G.mode && ENG_TAB_MODES.includes(G.mode.type) && G.mode.stage !== 'spawn' && G.mode.stage !== 'piece';      // соперник сидит в планшете Инженера
         h = NET.lost ? 'Соединение потеряно.' : tm ? '🔧 Враг мастерит...' : '⏳ Ход соперника...';
@@ -5722,7 +5735,10 @@ function netRecv(m) {
             if (!NET.muted && typeof m.text === 'string') { chatMsgs.push({ me: false, text: m.text.slice(0, 300) }); renderChat(); if (!$('#app').classList.contains('sheet-open')) setChatUnread(true); }
             break;
         case 'in':
-            if (G && !G.over && G.turn !== NET.me) applyInput(m.m);
+            if (G && !G.over && G.turn !== NET.me) {
+                if (typeof m.ck === 'number' && CLOCK && CLOCK.on && CLOCK.left) (m.ckp === 'o' ? CLOCK.open : CLOCK.left)[other(NET.me)] = Math.max(0, m.ck);      // часы соперника: его точное значение
+                applyInput(m.m);
+            }
             break;
         case 'resign': resignSide(other(NET.me)); break;
         case 'draw':
@@ -7483,12 +7499,15 @@ function placeBanana(from, to) {
 // Фигура (не король), вставшая на кожуру, съезжает на соседнюю клетку и кожура исчезает
 function sweepBananas() {
     if (!G.bananas || !G.bananas.length) return;
-    G.bananas = G.bananas.filter(bn => {
+    const gone = new Set();
+    const fire = bn => {
+        if (gone.has(bn)) return;
         const p = G.board[bn.r][bn.c];
-        if (!p || kSafe(p) || p.ghost) return true;
+        if (!p || kSafe(p) || p.ghost) return;
+        gone.add(bn);
         if (p.warded > 0) {      // Очищение: фигура давит кожуру без последствий
             addLog('n', p.invis ? '✴ Невидимая фигура под Очищением уничтожает банановую кожуру' : `✴ ${pieceSym(p)} под Очищением уничтожает кожуру на ${sqName(bn.r, bn.c)}`);
-            return false;
+            return;
         }
         const tr = bn.r + bn.dir[0], tc = bn.c + bn.dir[1];
         const sq = sqName(bn.r, bn.c);
@@ -7500,11 +7519,14 @@ function sweepBananas() {
             if (!p.invis) G.fx.push({ r: tr, c: tc, type: 'land' });
             queueAnim({ k: 'slide', from: [bn.r, bn.c], to: [tr, tc] });
             addLog('n', p.invis ? '🍌 Невидимая фигура поскальзывается на банановой кожуре' : `🍌 ${pieceSym(p)} поскальзывается на кожуре на ${sq} и съезжает на ${sqName(tr, tc)}`);
+            const next = G.bananas.find(x => !gone.has(x) && x.r === tr && x.c === tc);      // цепочка: на новой клетке тоже кожура
+            if (next) fire(next);
         } else {
             addLog('n', p.invis ? '🍌 Невидимая фигура наступает на банановую кожуру' : `🍌 ${pieceSym(p)} наступает на кожуру на ${sq}, но съехать некуда`);
         }
-        return false;
-    });
+    };
+    G.bananas.forEach(bn => fire(bn));
+    G.bananas = G.bananas.filter(bn => !gone.has(bn));
 }
 
 // =====================================================================
@@ -9613,12 +9635,15 @@ $('#quickModes').addEventListener('click', e => {
 });
 
 // ----- игра на одном экране -----
-$('#lobbyLocal').addEventListener('click', () => { timePicker($('#localTimePick'), LOCALSET, saveTimes); boardPicker($('#localBoardPick'), LOCALBOARD, true); $('#localMsg').textContent = ''; $('#local').classList.remove('hidden'); });
-$('#localClose').addEventListener('click', () => $('#local').classList.add('hidden'));
+$('#lobbyLocal').addEventListener('click', () => { BOT.want = false; BOT.on = false; $('#local h2').textContent = 'Игра на одном экране'; timePicker($('#localTimePick'), LOCALSET, saveTimes); boardPicker($('#localBoardPick'), LOCALBOARD, true); $('#localMsg').textContent = ''; $('#local').classList.remove('hidden'); });
+$('#lobbyBot').addEventListener('click', () => { BOT.want = true; $('#local h2').textContent = 'Игра с ботом'; timePicker($('#localTimePick'), LOCALSET, saveTimes); boardPicker($('#localBoardPick'), LOCALBOARD, true); $('#localMsg').textContent = ''; $('#local').classList.remove('hidden'); });
+$('#localClose').addEventListener('click', () => { BOT.want = false; $('#local').classList.add('hidden'); });
 $('#localStart').addEventListener('click', () => {
     if (LOCALBOARD.mode === 'custom' && !LOCALBOARD.cfg) { $('#localMsg').textContent = L('Сначала выберите доску в редакторе.', 'First choose a board in the editor.'); return; }
     CUSTOM = LOCALBOARD.mode === 'custom' ? LOCALBOARD.cfg : null;
     NET.custom = false;
+    BOT.on = BOT.want; BOT.want = false;      // игра с ботом: бот ходит Чёрными
+    const bh = document.querySelector('.side-pick[data-side="b"] h2'); if (bh) bh.textContent = BOT.on ? 'Чёрные: бот 🤖' : 'Чёрные';
     saveTimes(); $('#local').classList.add('hidden'); $('#lobby').classList.add('hidden');
 });
 
@@ -10884,6 +10909,194 @@ Object.assign(EN, {
     "Закрыть": "Close",
     "Выйти": "Exit",
     "В меню": "To menu",
-    "🚪 Соперник вышел из партии": "🚪 The opponent left the game"
+    "🚪 Соперник вышел из партии": "🚪 The opponent left the game",
+    "Игра с ботом": "Game against the bot",
+    "Игра на одном экране": "Game on one screen",
+    "🤖 Играть с ботом": "🤖 Play against the bot",
+    "против бота": "against the bot",
+    "Чёрные: бот 🤖": "Black: bot 🤖",
+    "🤖 Бот думает...": "🤖 The bot is thinking...",
+    "🤖 Бот запутался и сдаётся": "🤖 The bot got confused and resigns"
 });
+// =====================================================================
+//  БОТ, версия 1: играет Чёрными против человека за одним экраном.
+//  Ходит по правилам игры, видит угрозы на 2 хода вперёд и иногда применяет способности.
+//  Уровни сложности добавляются через BOT_LEVELS.
+// =====================================================================
+const BOT = { on: false, want: false, side: 'b', level: 1, turnKey: '', tried: new Set(), idle: 0, busy: false };
+const BOT_LEVELS = {
+    1: { name: 'Обычный', noise: 0.18, abilityMul: 1, thinkMs: 650 }
+};
+const BOT_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+const botVal = p => (p ? (BOT_VAL[p.t] !== undefined ? BOT_VAL[p.t] : 2) : 0);
+
+// Какие способности бот умеет применять: кого выбирать целью и как часто пробовать
+// pick: enemy (вражеская фигура), own (своя фигура), place (свободная клетка на стороне врага)
+const BOT_AB = {
+    shield: { pick: 'own', p: 0.45 },
+    guardian: { pick: 'own', p: 0.5 },
+    purify: { pick: 'own', p: 0.25 },
+    freeze: { pick: 'enemy', p: 0.3 },
+    prediction: { pick: 'enemy', p: 0.5 },
+    charlatan: { pick: 'enemy', p: 0.25 },
+    unlucky: { pick: 'place', p: 0.4 },
+    badomen: { pick: 'place', p: 0.3 },
+    trap: { pick: 'place', p: 0.3 },
+    vine: { pick: 'place', p: 0.25 },
+    virus: { pick: 'place', p: 0.5 }
+};
+
+function botPickCell(k, cells) {
+    const side = BOT.side, opp = other(side), pol = BOT_AB[k];
+    const b = G.board;
+    const fwd = r => (side === 'b' ? r : N - 1 - r);      // насколько клетка далеко от нашей стороны
+    let best = null, bestS = -1e9;
+    cells.forEach(([r, c]) => {
+        const p = b[r][c];
+        let s = null;
+        if (pol.pick === 'enemy') { if (p && p.c === opp && p.t !== 'k') s = botVal(p); }
+        else if (pol.pick === 'own') { if (p && p.c === side && p.t !== 'k') s = botVal(p) + (isAttacked(b, r, c, opp) ? 3 : 0); }
+        else if (!p) s = (fwd(r) >= 3 ? 2 : 0) + (fwd(r) >= 2 && fwd(r) <= 5 ? 1 : 0);      // ловушки ставим ближе к середине и к стороне врага
+        if (s === null) return;
+        s += Math.random() * 0.6;
+        if (s > bestS) { bestS = s; best = [r, c]; }
+    });
+    return best;
+}
+
+// Попытка применить способность. Возвращает true, если способность сработала
+function botTryAbility(k) {
+    const side = BOT.side, turnBefore = G.turn;
+    BOT.tried.add(k);
+    const cdBefore = G.cd[side][k];
+    applyInput({ t: 'ab', k });
+    if (!G.mode || !G.mode.cells || !G.mode.cells.length) { if (G.mode) cancelAbilityMode(); return false; }
+    const cell = botPickCell(k, G.mode.cells);
+    if (!cell) { cancelAbilityMode(); return false; }
+    applyInput({ t: 'cell', r: cell[0], c: cell[1] });
+    if (G.mode) { cancelAbilityMode(); return false; }      // нужен ещё выбор: такие способности бот пока не умеет
+    return G.turn !== turnBefore || G.cd[side][k] !== cdBefore;
+}
+
+// Оценка хода: выигрыш материала, расположение, шах и ответ соперника на 1 ход вперёд
+function botScoreMove(mv, noise) {
+    const side = BOT.side, opp = other(side);
+    const piece = G.board[mv.fr][mv.fc];
+    const nb = cloneBoard(G.board);
+    const res = applyMove(nb, mv, 'q');
+    let score = 0;
+    res.dead.forEach(d => { score += d.c === opp ? botVal(d) : -botVal(d); });
+    if (mv.promo) score += 8;
+    // расположение
+    const cr = Math.abs(3.5 - mv.tr) + Math.abs(3.5 - mv.tc);
+    if (piece.t === 'n' || piece.t === 'b') score += (6 - cr) * 0.05 + (piece.moved ? 0 : 0.2);
+    if (piece.t === 'p') { const adv = side === 'b' ? mv.tr : N - 1 - mv.tr; score += adv * 0.04 + (mv.tc >= 2 && mv.tc <= N - 3 ? 0.05 : 0); }
+    if (piece.t === 'k') score += mv.castle ? 0.7 : -0.35;
+    if (piece.t === 'q' && !piece.moved && (G.done ? G.done[side] : 0) < 4) score -= 0.25;      // ферзём в самом начале лучше не бегать
+    if (!safeAfter(nb, opp)) score += 0.4;      // шах
+    // ответы соперника
+    let worst = 0, replies = 0;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const q = nb[r][c];
+        if (!q || q.c !== opp) continue;
+        for (const m of legalMovesAt(nb, r, c)) {
+            replies++;
+            const t = nb[m.tr][m.tc];
+            let g = t && t.c === side ? botVal(t) : 0;
+            if (g > 0 && isAttacked(nb, m.tr, m.tc, side)) g -= botVal(q);      // нашу фигуру там защищают
+            if (g > worst) worst = g;
+        }
+    }
+    if (!replies) score += !safeAfter(nb, opp) ? 1000 : -30;      // мат или пат
+    score -= worst;
+    return score + Math.random() * noise;
+}
+
+function botAllMoves() {
+    const side = BOT.side, list = [];
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const p = G.board[r][c];
+        if (!p || p.c !== side) continue;
+        selectableMoves(r, c).forEach(m => { if (!m.decoy && !m.ghostBump) list.push(m); });
+    }
+    return list;
+}
+
+// Один шаг бота: вызывается по таймеру, пока ход Чёрных
+function botStep() {
+    const side = BOT.side, lv = BOT_LEVELS[BOT.level] || BOT_LEVELS[1];
+    const key = (G.turnNo || 0) + ':' + G.turn + ':' + (G.done ? G.done.w + G.done.b : 0);
+    if (key !== BOT.turnKey) { BOT.turnKey = key; BOT.tried = new Set(); BOT.idle = 0; }
+    BOT.idle++;
+    if (G.pendingPromo) { applyInput({ t: 'promo', p: 'q' }); return; }
+    if (G.mode && G.mode.locked) {      // обязательный выбор (Притворство Шута и т. п.)
+        const cells = G.mode.cells || [];
+        if (cells.length) { const c = cells[(Math.random() * cells.length) | 0]; applyInput({ t: 'cell', r: c[0], c: c[1] }); return; }
+    }
+    if (G.mode) { cancelAbilityMode(); return; }
+    if (G.archUsed && !G.check && !G.pendingPromo) { applyInput({ t: 'end' }); return; }      // способность без хода уже применена: закончить ход
+    if (G.pairStep) {      // иллюзия Экстрасенса: нужно сходить второй фигурой пары
+        const ps = G.pairStep;
+        applyInput({ t: 'cell', r: ps.r, c: ps.c });
+        const mvs = (G.moves || []).filter(m => !m.decoy);
+        if (mvs.length) { const m = mvs[(Math.random() * mvs.length) | 0]; applyInput({ t: 'cell', r: m.tr, c: m.tc }); }
+        return;
+    }
+    const hero = HEROES[G.hero[side]];
+    // 1. бесплатные способности: ход не тратится, пробуем по одной
+    if (!G.bonus && !G.archUsed) {
+        for (const k of hero.abilities) {
+            const pol = BOT_AB[k];
+            if (!pol || !ABILITIES[k].free || BOT.tried.has(k)) continue;
+            if (Math.random() > pol.p * lv.abilityMul) { BOT.tried.add(k); continue; }
+            if (!abilityAvailable(side, k)) { BOT.tried.add(k); continue; }
+            botTryAbility(k);
+            return;      // следующим шагом продолжим
+        }
+    }
+    // 2. выбираем ход
+    const moves = botAllMoves();
+    let best = null, bestS = -1e9;
+    const t0 = performance.now();
+    for (const m of moves) {
+        const s = botScoreMove(m, lv.noise);
+        if (s > bestS) { bestS = s; best = m; }
+        if (performance.now() - t0 > 2500) break;
+    }
+    // 3. способность, тратящая ход: только если ничего выгодного на доске нет
+    if (!G.bonus && !G.archUsed && (!best || bestS < 0.8)) {
+        for (const k of hero.abilities) {
+            const pol = BOT_AB[k];
+            if (!pol || ABILITIES[k].free || BOT.tried.has(k)) continue;
+            BOT.tried.add(k);
+            if (Math.random() > pol.p * lv.abilityMul || !abilityAvailable(side, k)) continue;
+            if (botTryAbility(k)) return;
+        }
+    }
+    if (best) {
+        applyInput({ t: 'cell', r: best.fr, c: best.fc });
+        applyInput({ t: 'cell', r: best.tr, c: best.tc });
+        return;
+    }
+    // ходов нет, а партия не закончилась: пробуем любую доступную способность
+    for (const k of hero.abilities) {
+        if (BOT.tried.has(k) || !BOT_AB[k]) continue;
+        BOT.tried.add(k);
+        if (abilityAvailable(side, k) && botTryAbility(k)) return;
+    }
+}
+
+setInterval(() => {
+    if (!BOT.on || NET.on || BOT.busy || !G || G.over || REPLAY.on || INTRO.on) return;
+    if (G.turn !== BOT.side || $('#app').classList.contains('hidden')) return;
+    BOT.busy = true;
+    try { botStep(); } catch (e) { console.error('bot', e); BOT.idle += 5; }
+    BOT.busy = false;
+    if (BOT.idle > 40 && G && !G.over && G.turn === BOT.side) {      // застрял: чтобы партия не зависла, бот сдаётся
+        BOT.on = false;
+        addLog('n', '🤖 Бот запутался и сдаётся');
+        resignSide(BOT.side);
+    }
+}, 650);
+
 tryResume();
