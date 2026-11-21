@@ -236,6 +236,12 @@
             <h2>Игра на одном экране</h2>
             <div id="localTimePick"></div>
             <div id="localBoardPick"></div>
+            <div id="localBotBox" class="hidden">
+                <div class="lobby-sep">Ваш цвет</div>
+                <div id="localBotColor" class="bot-pick"><button data-bc="w">⚪ Белые</button><button data-bc="b">⚫ Чёрные</button><button data-bc="r">🎲 Случайно</button></div>
+                <div class="lobby-sep">Сложность бота</div>
+                <div id="localBotLevel" class="bot-pick"><button data-bl="1">Обычный</button><button data-bl="2">Сильный</button></div>
+            </div>
             <p id="localMsg" class="auth-msg"></p>
             <button id="localStart" class="big-btn">Начать</button>
             <button id="localClose" class="small-btn">Отмена</button>

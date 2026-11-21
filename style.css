@@ -8664,3 +8664,27 @@ body.piece-drag {
         text-shadow: 0 0 5px #ff0000, 0 0 11px rgba(255, 0, 0, 0.85);
     }
 }
+
+/* ===== Выбор цвета и сложности бота ===== */
+.bot-pick {
+    display: flex;
+    gap: 8px;
+    margin: 6px 0 10px;
+}
+
+    .bot-pick button {
+        flex: 1;
+        padding: 9px 6px;
+        font: inherit;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 10px;
+        cursor: pointer;
+    }
+
+        .bot-pick button.on {
+            background: rgba(123, 44, 191, 0.45);
+            border-color: #a45df0;
+            box-shadow: 0 0 8px rgba(123, 44, 191, 0.6);
+        }
