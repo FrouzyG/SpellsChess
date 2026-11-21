@@ -75,6 +75,7 @@
             <button id="lobbyLocal" class="big-btn">Вдвоём за одним экраном</button>
             <div class="lobby-sep">против бота</div>
             <button id="lobbyBot" class="big-btn">🤖 Играть с ботом</button>
+            <button id="lobbyBotRep" class="big-btn">📼 Повторы с ботом</button>
             <p id="lobbyStatus" class="sub"></p>
             <a id="donateLobby" class="donate hidden" target="_blank" rel="noopener">☕ Поддержать проект</a>
             <div class="credit">Автор проекта: FrouzyG · <a href="mailto:eriksonfg510@gmail.com">eriksonfg510@gmail.com</a> · <a href="https://t.me/SpellsChess" target="_blank" rel="noopener">Telegram-канал</a> · <a href="https://discord.gg/N4J6z9N6H" target="_blank" rel="noopener">Discord</a> · <a href="privacy.html" target="_blank" rel="noopener">Конфиденциальность</a></div>
@@ -230,6 +231,15 @@
         </div>
     </div>
 
+    <!-- Повторы игр с ботом -->
+    <div id="botRep" class="overlay hidden">
+        <div class="small-card rooms-card">
+            <h2>Повторы игр с ботом</h2>
+            <div id="botRepList" class="botrep-list"></div>
+            <button id="botRepClose" class="small-btn">Закрыть</button>
+        </div>
+    </div>
+
     <!-- Настройки времени для игры на одном экране -->
     <div id="local" class="overlay hidden">
         <div class="small-card rooms-card">
@@ -240,7 +250,7 @@
                 <div class="lobby-sep">Ваш цвет</div>
                 <div id="localBotColor" class="bot-pick"><button data-bc="w">⚪ Белые</button><button data-bc="b">⚫ Чёрные</button><button data-bc="r">🎲 Случайно</button></div>
                 <div class="lobby-sep">Сложность бота</div>
-                <div id="localBotLevel" class="bot-pick"><button data-bl="1">Обычный</button><button data-bl="2">Сильный</button></div>
+                <div id="localBotLevel" class="bot-pick"><button data-bl="1">Лёгкий</button><button data-bl="2">Нормальный</button><button data-bl="3">Сложный</button></div>
             </div>
             <p id="localMsg" class="auth-msg"></p>
             <button id="localStart" class="big-btn">Начать</button>

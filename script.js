@@ -574,7 +574,10 @@ const sameMove = (a, b) => a.fr === b.fr && a.fc === b.fc && a.tr === b.tr && a.
 const NET = { againMe: false, againOpp: false, on: false, me: null, host: false, conn: null, peer: null, lost: false, ready: false, oppReady: false, oppHero: null, muted: false };
 let pickOverride = null, lastPick = null;    // выбор «рокировка или вселение» передаётся сопернику
 const netSend = m => { if (NET.on && NET.conn && NET.conn.open) NET.conn.send(m); };
-const isActor = () => !NET.on || (!!G && G.turn === NET.me);   // можно ли этому игроку сейчас ходить
+const isActor = () => !NET.on || (!!G && G.turn === NET.me);
+// Чьими глазами игрок смотрит на доску: онлайн это он сам, в игре с ботом это человек (бот не видит секреты глазами человека и наоборот), на одном экране null
+const viewerSide = () => (NET.on ? NET.me : (BOT.on ? other(BOT.side) : null));
+const seesSecret = owner => { const v = viewerSide(); return v ? owner === v : true; };   // можно ли этому игроку сейчас ходить
 
 let showGhosts = true;   // подсвечивать иллюзии (для честной игры за одним экраном можно выключить)
 let showTraps = true;
@@ -587,6 +590,24 @@ function plural(n) {
     return 'ходов';
 }
 const abilityDesc = k => ABILITIES[k].desc;
+// Описание с перезарядкой для партии (в карточках героев перезарядка и так показана значком).
+// У способностей со скрытой перезарядкой (Гадалка, «Ход — это ложь») чужую перезарядку не показываем
+const passiveDescCd = (pk, col) => {
+    const ps = PASSIVES[pk], n = CONFIG.cooldown[pk];
+    if (n === undefined) return ps.desc;
+    const cd = col ? cdOf(col, pk) : n;
+    return ps.desc + ' ' + L('Перезарядка: ' + cd + ' ' + plural(cd) + '.', 'Cooldown: ' + cd + ' ' + (cd === 1 ? 'turn' : 'turns') + '.');
+};
+const abilityDescCd = (k, col) => {
+    const base = abilityDesc(k);
+    const n = CONFIG.cooldown[k];
+    if (n === undefined || !G) return base;
+    const secretKey = k === 'lie' || FORTUNE_KEYS.includes(k);
+    const v = viewerSide();
+    if (secretKey && col && v && col !== v) return base;
+    const cd = col ? cdOf(col, k) : n;
+    return base + ' ' + L('Перезарядка: ' + cd + ' ' + plural(cd) + '.', 'Cooldown: ' + cd + ' ' + (cd === 1 ? 'turn' : 'turns') + '.');
+};
 const cdBadgeHTML = n => (n > 0 ? `<span class="cd-badge">⏳${n}</span>` : '');
 
 /* =====================================================================
@@ -2606,7 +2627,8 @@ function abilityCellsRaw(key, col, t, first) {
     } else if (key === 'unlucky' || key === 'badomen') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);
-        }    } else if (key === 'trap') {
+        }
+    } else if (key === 'trap') {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
@@ -3759,7 +3781,8 @@ function useAbility(key, r, c, ref) {
         const life = key === 'unlucky' ? CONFIG.unluckyTurns : CONFIG.omenTurns;
         G.omens.push({ r, c, owner: col, left: life, total: life, key, real: key === 'unlucky' });
         text = '👁 Ловушка Гадалки установлена (место скрыто)';
-        sfx('trap');    } else if (key === 'trap') {
+        sfx('trap');
+    } else if (key === 'trap') {
         G.traps = G.traps.filter(x => !(x.r === r && x.c === c));      // одинаковые ловушки: действует та, что поставлена последней
         G.traps.push({ r, c, owner: col });
         text = `${A.icon} ${A.name}: капкан установлен (место скрыто)`;
@@ -4711,8 +4734,8 @@ function renderBoard() {
                 ? portalMarkHtml(ptm.id, [...new Set(G.portals.filter(x => x.owner === 'n').map(x => x.id))].sort((a, b) => a - b).indexOf(ptm.id) + 1)
                 : `<div class="portal-mark pm${(G.hero[ptm.owner] === 'architect' ? 0 : 2) + ptm.id % 2}"><span>⇄</span></div>`;
             if (G.lureCells.some(x => x.r === r && x.c === c)) html += '<div class="lure-mark">🎣</div>';
-            if (showTraps && G.traps.some(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me || x.owner === 'n'))) html += '<div class="trap-mark">🪤</div>';
-            { const om = showTraps && G.omens && G.omens.find(x => x.r === r && x.c === c && (!NET.on || x.owner === NET.me)); if (om) html += `<div class="omen-mark${om.real ? '' : ' fake'}"><span>👁</span><i class="om-t${om.left === 1 ? ' warn' : ''}">${om.left}</i></div>`; }
+            if (showTraps && G.traps.some(x => x.r === r && x.c === c && (seesSecret(x.owner) || x.owner === 'n'))) html += '<div class="trap-mark">🪤</div>';
+            { const om = showTraps && G.omens && G.omens.find(x => x.r === r && x.c === c && seesSecret(x.owner)); if (om) html += `<div class="omen-mark${om.real ? '' : ' fake'}"><span>👁</span><i class="om-t${om.left === 1 ? ' warn' : ''}">${om.left}</i></div>`; }
             {
                 const bn = G.bananas && G.bananas.find(x => x.r === r && x.c === c);
                 if (bn && (bn.owner === 'n' || jesterSees(bn.owner))) html += `<div class="tile-mark banana-mark">🍌<i>${{ '-1,0': '⬆', '1,0': '⬇', '0,-1': '⬅', '0,1': '➡' }[bn.dir.map(x => (flip ? -x : x)).join(',')]}</i></div>`;
@@ -4736,10 +4759,10 @@ function renderBoard() {
             const chm = (G.chargers || []).find(x => x.r === r && x.c === c);
             if (chm) html += `<div class="tile-mark charger-mark ${chm.owner}"><span>⚡</span></div>`;
             const hg = G.hogs.find(x => x.r === r && x.c === c);
-            if (hg && (hg.visible || (showTraps && (NET.on ? hg.owner === NET.me : hg.owner === G.turn)))) html += `<div class="tile-mark hog-mark ${hg.visible ? '' : 'hidden-hog'}">⏳</div>`;
+            if (hg && (hg.visible || (showTraps && (viewerSide() ? hg.owner === viewerSide() : hg.owner === G.turn)))) html += `<div class="tile-mark hog-mark ${hg.visible ? '' : 'hidden-hog'}">⏳</div>`;
 
             if (dc) html += `<div class="piece ${dc.col} t-${dc.t}${showGhosts ? ' ghost' : ''}">${GLYPH[dc.t]}${dc.x && dc.x.length ? `<span class="xs">${dc.x.map(t => pImg(dc.col, t)).join('')}</span>` : ''}</div>`;
-            if (p && !(p.invis && !(showInvis && (!NET.on || p.c === NET.me)))) {
+            if (p && !(p.invis && !(showInvis && (viewerSide() ? p.c === viewerSide() : true)))) {
                 let pc = 'piece ' + p.c + ' t-' + p.t;
                 if (p.shield) pc += ' shielded';
                 if (p.frozen > 0) pc += ' frozen';
@@ -4747,13 +4770,13 @@ function renderBoard() {
                 if (p.zombie) pc += ' zombie';
                 if (p.hypno) pc += ' hypno';
                 if (p.lure) pc += ' lured';
-                if (p.ghost && showGhosts && (!NET.on || p.c === NET.me)) pc += ' ghost';
+                if (p.ghost && showGhosts && (viewerSide() ? p.c === viewerSide() : true)) pc += ' ghost';
                 if (p.invis) pc += ' invis';
                 if (p.sup) pc += ' sup';
                 if (p.phase || isPhase(p) || ritualAt(r, c)) pc += ' phase';
                 if (auraProtected(G.board, r, c)) pc += ' aura';
                 if (must.has(r + ',' + c)) pc += ' must';
-                if (p.preds && p.preds.some(x => x.real && (NET.on ? x.by === NET.me : G.turn === x.by))) pc += ' pred-real';      // фиолетовое свечение: настоящее предсказание видит только наложившая его
+                if (p.preds && p.preds.some(x => x.real && (viewerSide() ? x.by === viewerSide() : G.turn === x.by))) pc += ' pred-real';      // фиолетовое свечение: настоящее предсказание видит только наложившая его
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'land')) pc += ' pop';
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'heaven')) pc += ' from-sky';      // фигура спускается с небес
                 if (G.fx.some(x => x.r === r && x.c === c && x.type === 'raise')) pc += ' crawl';      // зомби выкарабкивается из-под земли
@@ -4771,7 +4794,7 @@ function renderBoard() {
                 if (p.sup) html += '<span class="sp">⚛</span>';
                 if (p.altruist > 0) html += `<span class="al">👼${tn(p.altruist, p.altruist === 1)}</span>`;
                 if (p.preds) html += `<span class="pr">🔮${p.preds.map(x => tn(Math.max(1, Math.min(x.left, CONFIG.predTurns)), x.left <= 1)).join('·')}</span>`;      // настоящее оно или нет, не видно никому, кроме Гадалки по её памяти
-                if (G.guess && p.uid && p.uid === G.guess.uid && (!NET.on || G.guess.by === NET.me)) html += '<span class="pr gs">📖</span>';
+                if (G.guess && p.uid && p.uid === G.guess.uid && seesSecret(G.guess.by)) html += '<span class="pr gs">📖</span>';
                 if (p.t === 'j') html += `<span class="jl">${Number.isFinite(p.life) ? '⏳' + tn(p.life, p.life === 1) : '∞'}</span>`;
                 if (p.t === 'x' && p.rob) html += `<span class="rb">${p.rob.kind === 'wing' ? '🪽' : '👢'}</span>`;
                 if (p.t === 'x' && p.chg > 0) html += '<span class="chg">🔋</span>';
@@ -4786,7 +4809,7 @@ function renderBoard() {
             }
 
             if (G.fogs && G.fogs.some(x => x.r === r && x.c === c)) html += '<div class="fog-mark"></div>';
-            G.fx.filter(x => x.r === r && x.c === c && x.type !== 'land' && (!x.only || !NET.on || x.only === NET.me) && !fxHidden(x, r, c))
+            G.fx.filter(x => x.r === r && x.c === c && x.type !== 'land' && (!x.only || !viewerSide() || x.only === viewerSide()) && !fxHidden(x, r, c))
                 .forEach(x => {
                     if (x.delay > 0) ANIMQ.push({ k: 'lateFx', r, c, type: x.type, delay: x.delay });      // эффект появится, когда долетит снаряд
                     else if (x.type === 'raise') html += `<div class="fx fx-raise"><b class="mound"></b>${[[-0.42, -0.55, 0], [-0.3, -0.8, 40], [-0.15, -0.95, 90], [0.0, -1.0, 20], [0.15, -0.9, 120], [0.3, -0.75, 60], [0.42, -0.5, 10], [-0.22, -0.6, 170], [0.22, -0.65, 140], [0.05, -0.7, 220]].map((d, i) => `<i class="dirt" style="--dx:${d[0]};--dy:${d[1]};--dl:${d[2]}ms;--ds:${i % 3}"></i>`).join('')}</div>`;
@@ -4837,7 +4860,7 @@ function openAbInfo() {
         const ps = PASSIVES[hero.passive];
         h += `<div class="ai-hero ${col}"><h3>${hero.icon} ${hero.name} <small>· ${colorName(col)}</small></h3>`;
         h += `<div class="ai-row"><b>${ps.icon} ${ps.name}</b> <i>особая сила</i><p>${ps.desc}</p></div>`;
-        hero.abilities.forEach(k => { const a = ABILITIES[k]; h += `<div class="ai-row"><b>${a.icon} ${a.name}</b>${abFreeDot(k)}<p>${abilityDesc(k)}</p></div>`; });
+        hero.abilities.forEach(k => { const a = ABILITIES[k]; h += `<div class="ai-row"><b>${a.icon} ${a.name}</b>${abFreeDot(k)}<p>${abilityDescCd(k, col)}</p></div>`; });
         h += '</div>';
     });
     $('#abInfoBody').innerHTML = h || 'В этой партии нет героев.';
@@ -4864,20 +4887,20 @@ function panelHTML(col) {
         const a = ABILITIES[k], cd = G.cd[col][k];
         if (tomMode) {            // Красная обструкция: нажмите на способность врага
             if (G.disabled && G.disabled[col] && G.disabled[col][k] > 0) {      // уже отключённую выбрать нельзя
-                h += `<button class="ab" disabled title="${abilityDesc(k)}">
+                h += `<button class="ab" disabled title="${abilityDescCd(k, col)}">
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">🍅 уже отключена</span></button>`;
                 return;
             }
-            h += `<button class="ab slowable" data-tomato="${k}" title="${abilityDesc(k)}">
+            h += `<button class="ab slowable" data-tomato="${k}" title="${abilityDescCd(k, col)}">
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">🍅 сюда</span></button>`;
             return;
         }
         const offT = (G.disabled && G.disabled[col] && G.disabled[col][k]) || 0;
         // «Ход — это ложь» и зеркало, пока в нём лежит эта способность: перезарядка скрыта от соперника, чтобы не выдавать применение
         const secret = k === 'lie' || FORTUNE_KEYS.includes(k) || (k === 'copy' && (G.lastAb[other(col)] === 'lie' || FORTUNE_KEYS.includes(G.lastAb[other(col)])));
-        const hideCd = secret && (NET.on ? col !== NET.me : !active);
+        const hideCd = secret && (viewerSide() ? col !== viewerSide() : !active);
         if (slowMode) {
-            h += `<button class="ab slowable" data-slow="${k}" title="${abilityDesc(k)}">
+            h += `<button class="ab slowable" data-slow="${k}" title="${abilityDescCd(k, col)}">
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}</span><span class="ab-cd">${secret ? '?' : ''} → +2</span>${(!secret && cd > 0) ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
             return;
         }
@@ -4895,7 +4918,7 @@ function panelHTML(col) {
         if (offT) sub = '🍅 отключена';
         if (hideCd) sub = 'скрыто';      // применение не должно быть видно по перезарядке
         if (eu) sub = '💡 Эврика?';
-        h += `<button class="ab ${on ? 'on' : ''}${offT ? ' tomatoed' : ''}${eu ? ' eureka-ready' : ''}" ${eu ? `data-eureka="${k}"` : `data-ab="${k}" ${can || on ? '' : 'disabled'}`} title="${abilityDesc(k)}">
+        h += `<button class="ab ${on ? 'on' : ''}${offT ? ' tomatoed' : ''}${eu ? ' eureka-ready' : ''}" ${eu ? `data-eureka="${k}"` : `data-ab="${k}" ${can || on ? '' : 'disabled'}`} title="${abilityDescCd(k, col)}">
       <span class="ab-icon">${a.icon}</span><span class="ab-name">${a.name}${a.free ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${(cd > 0 && !hideCd) ? `<span class="cd-badge">⏳${cd}</span>` : ''}${offT ? `<span class="tm-badge">🍅${tn(offT, offT === 1)}</span>` : ''}</button>`;
     });
 
@@ -4905,7 +4928,7 @@ function panelHTML(col) {
         const on = active && G.mode && G.mode.type === pk;
         const can = active && !lock && canPassive(col, pk);
         const sub = cd > 0 ? '' : (active && !can ? 'нет целей' : ((pk === 'aim' || pk === 'openbook' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? 'бесплатно' : 'готово'));
-        h += `<button class="ab passive-btn ${on ? 'on' : ''}" data-ab="${pk}" ${can || on ? '' : 'disabled'} title="${ps.desc}">
+        h += `<button class="ab passive-btn ${on ? 'on' : ''}" data-ab="${pk}" ${can || on ? '' : 'disabled'} title="${passiveDescCd(pk, col)}">
       <span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}${(pk === 'aim' || pk === 'openbook' || (pk === 'timeslow' && !CONFIG.timePassiveCostsTurn)) ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}</span><span class="ab-cd">${sub}</span>${cd > 0 ? `<span class="cd-badge">⏳${cd}</span>` : ''}</button>`;
     }
     if (hero.passive === 'sawing') {      // пассивка Фокусника: просто показывает перезарядку
@@ -5056,7 +5079,7 @@ function renderLog() {
     // Все записи одного хода (ход фигурой, способности, события) идут под одним номером
     const groups = [];
     G.log.forEach(e => {
-        if (e.only && !(NET.on ? NET.me === e.only : G.turn === e.only)) return;      // записи только для одного игрока (Гадалка, попытки на невидимку)
+        if (e.only && !(viewerSide() ? viewerSide() === e.only : G.turn === e.only)) return;      // записи только для одного игрока (Гадалка, попытки на невидимку)
         const g = groups[groups.length - 1];
         if (e.n && g && g.n === e.n) g.items.push(e); else groups.push({ n: e.n, items: [e] });
     });
@@ -5439,6 +5462,8 @@ setInterval(() => {
 $('#startBtn').addEventListener('click', () => {
     if (NET.on) { toggleReady(); return; }
     _seed = (LOCALBOARD.mode === 'fischer' && !CUSTOM) ? -1 - ((Math.random() * 2147483646) | 0) : (Math.random() * 2147483647) | 0;      // отрицательное число = шахматы Фишера
+    botSaveRec();      // прошлая недоигранная партия с ботом тоже сохраняется
+    BOT.rec = (BOT.on && !CUSTOM) ? { seed: _seed, log: [], saved: false, level: BOT.level, side: BOT.side, t: Date.now(), heroes: { ...selectedHeroes } } : null;
     startGame(); playVsIntro();
 });
 
@@ -6703,21 +6728,21 @@ Object.assign(EN, {
         doubleVision: ['Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит вместе с королём.',
             'A king that escapes check leaves an illusion on another square it could have gone to. It then moves together with the king.'],
         timeslow: ['Кнопка или второй клик по королю, затем способность врага: её перезарядка +2 сейчас и +1 до конца партии, у остальных перезаряжающихся +1 сейчас. ' + (C.timePassiveCostsTurn ? 'Тратит ход.' : 'Ход не тратится.'),
-            'A button or a second click on the king, then an enemy ability: its cooldown +2 now and +1 for the rest of the game, other abilities on cooldown +1 now. ' + (C.timePassiveCostsTurn ? 'Uses your move.' : 'Does not use your move.')],
+        'A button or a second click on the king, then an enemy ability: its cooldown +2 now and +1 for the rest of the game, other abilities on cooldown +1 now. ' + (C.timePassiveCostsTurn ? 'Uses your move.' : 'Does not use your move.')],
         pretense: ['Тайно выберите вражеского слона или коня. После ' + C.betrayAfter + '-го хода врага можно потратить ход, и она навсегда перейдёт к вам.',
-            'Secretly choose an enemy bishop or knight. After the enemy\'s ' + ord(C.betrayAfter) + ' move you can spend a move and it becomes yours for good.'],
+        'Secretly choose an enemy bishop or knight. After the enemy\'s ' + ord(C.betrayAfter) + ' move you can spend a move and it becomes yours for good.'],
         sawing: ['Левый и правый край доски соединены для ваших фигур (кроме короля). После прохода сквозь край пассивка отключается у всех ваших фигур на ' + C.sawingCooldown + ' ' + pl(C.sawingCooldown) + '.',
-            'The left and right edges of the board are connected for your pieces (except the king). After a piece passes through an edge, the passive is disabled for all your pieces for ' + C.sawingCooldown + ' ' + en(C.sawingCooldown) + '.'],
+        'The left and right edges of the board are connected for your pieces (except the king). After a piece passes through an edge, the passive is disabled for all your pieces for ' + C.sawingCooldown + ' ' + en(C.sawingCooldown) + '.'],
         eureka: ['Можно обнулить перезарядку любой своей способности: нажмите на неё и подтвердите. Сама Эврика перезаряжается 30 ходов.',
             'You can reset the cooldown of any of your abilities: press it and confirm. Eureka itself then recharges for 30 turns.'],
         openbook: ['Видно, как враг выбирает фигуры и способности (цель не видно). Раз в ' + C.cooldown.openbook + ' хода тайно выберите фигуру, которой враг, по-вашему, походит дальше: угадали, и перезарядка ваших способностей −1. Ход не тратится.',
-            'You see how the enemy picks pieces and abilities (not the target). Once every ' + C.cooldown.openbook + ' turns, secretly choose the piece you think the enemy will move next: if you are right, all your cooldowns drop by 1. Does not use your move.'],
+        'You see how the enemy picks pieces and abilities (not the target). Once every ' + C.cooldown.openbook + ' turns, secretly choose the piece you think the enemy will move next: if you are right, all your cooldowns drop by 1. Does not use your move.'],
         illusion: ['Создаёт двойника фигуры: они ходят только вместе, двойник не рубит. Рассеивается при шахе, при угрозе вражеской пешки, а также если враг пройдёт сквозь двойника или встанет на его клетку.',
             'Creates a double of a piece: they move only together, and the double cannot capture. It dissolves on check, when an enemy pawn threatens it, or when an enemy passes through it or steps on its square.'],
         raise: ['Поднимает фигуру из любого сброса как зомби на вашей первой горизонтали (пешку на любую из первых четырёх). Зомби обязаны рубить, если могут.',
             'Raises a piece from either graveyard as a zombie on your first rank (a pawn on any of the first four). Zombies must capture if they can.'],
         scream: ['Вражеская фигура (не король) ходит только на 1 клетку (конь как слон, пешка без рубки). Страх спадает после её хода, у пешки через ' + C.scaredPawnTurns + ' ' + pl(C.scaredPawnTurns) + '. Затем нужно применить другую способность.',
-            'An enemy piece (not a king) can move only 1 square (a knight like a bishop, a pawn cannot capture). The fear fades after its move, for a pawn after ' + C.scaredPawnTurns + ' ' + en(C.scaredPawnTurns) + '. Then you must use another ability.'],
+        'An enemy piece (not a king) can move only 1 square (a knight like a bishop, a pawn cannot capture). The fear fades after its move, for a pawn after ' + C.scaredPawnTurns + ' ' + en(C.scaredPawnTurns) + '. Then you must use another ability.'],
         fukashi: ['Невидима для врага, но блокирует ходы. Раскрывается, если рубит, даёт шах, ей грозит пешка или враг упирается в неё (ход врага не тратится).',
             'Invisible to the enemy, but it blocks moves. It is revealed when it captures, gives check, is threatened by a pawn, or the enemy runs into it (the enemy\'s move is not used).'],
         portals: ['Две связанные плитки: вставшая на портал фигура переносится на второй, а ход через портал продолжается из второго. Одновременно действуют две пары.',
@@ -6725,9 +6750,9 @@ Object.assign(EN, {
         ritual: ['Призрачная плитка: стоящая на ней фигура (своя или вражеская) прозрачна для ваших фигур: сквозь неё можно проходить и можно её рубить.',
             'A ghost tile: a piece standing on it (yours or the enemy\'s) is transparent to your pieces: they can pass through it and capture it.'],
         bumpuku: ['Бомба на союзной фигуре (не короле): на вашем ' + C.bumpukuTurns + '-м ходе после применения убивает всех в 3×3. Если фигуру срубят, бомба не взрывается. Ход не тратится.',
-            'A bomb on an allied piece (not the king): on your ' + ord(C.bumpukuTurns) + ' turn after use it kills everything in 3×3. If the piece is captured, the bomb does not explode. Does not use your move.'],
+        'A bomb on an allied piece (not the king): on your ' + ord(C.bumpukuTurns) + ' turn after use it kills everything in 3×3. If the piece is captured, the bomb does not explode. Does not use your move.'],
         trap: ['Невидимый капкан: вставшая на него фигура (не король) пропускает следующие ' + C.trapTurns + ' ' + pl(C.trapTurns) + '.',
-            'An invisible trap: a piece (not a king) that steps on it skips its next ' + C.trapTurns + ' ' + en(C.trapTurns) + '.'],
+        'An invisible trap: a piece (not a king) that steps on it skips its next ' + C.trapTurns + ' ' + en(C.trapTurns) + '.'],
         generator: ['Плитки плюс и минус (сначала плюс, потом минус). Фигуры, стоящие и на плюсе, и на минусе, убивает разряд.',
             'Plus and minus tiles (plus first, then minus). Pieces standing on both a plus and a minus are killed by a discharge.'],
         groundhog: ['Одноразовая ловушка: вставшая фигура (не король) возвращается, откуда пришла. На пустой клетке скрыта и ход не тратит, на фигуре видна и тратит ход.',
@@ -6737,13 +6762,13 @@ Object.assign(EN, {
         banana: ['Скрытая кожура на свободной клетке с направлением: вставшая фигура (не король) съезжает на соседнюю клетку в эту сторону. Ход не тратится.',
             'A hidden peel on a free square with a direction: a piece (not a king) that steps on it slides to the neighboring square in that direction. Does not use your move.'],
         fog: ['Дым 3×3 вокруг выбранной клетки на ' + C.fogTurns + ' ваших ' + pl(C.fogTurns) + ': фигуры (не короли) в нём невидимы для врага. Ход не тратится.',
-            'Smoke 3×3 around the chosen square for ' + C.fogTurns + ' of your ' + en(C.fogTurns) + ': pieces (not kings) in it are invisible to the enemy. Does not use your move.'],
+        'Smoke 3×3 around the chosen square for ' + C.fogTurns + ' of your ' + en(C.fogTurns) + ': pieces (not kings) in it are invisible to the enemy. Does not use your move.'],
         hatch: ['Люки на свободных клетках (первый раз сразу два, дальше по одному). Вставшая на люк фигура (не король) вылезает из другого люка на выбор ходящего.',
             'Hatches on free squares (two the first time, then one at a time). A piece (not a king) that steps on a hatch climbs out of another hatch of the mover\'s choice.'],
         hocus: ['Меняет местами две любые фигуры (кроме королей) в квадрате 5×5 вокруг первой. Ваш король не должен остаться под шахом.',
             'Swaps any two pieces (except kings) within a 5×5 square around the first one. Your king must not be left in check.'],
         assistant: ['Превращает фигуру (не короля) в зайца на ' + C.hareTurns + ' ' + pl(C.hareTurns) + ' её владельца. Заяц не рубит и ходит как ферзь, потом фигура возвращается.',
-            'Turns a piece (not a king) into a hare for ' + C.hareTurns + ' of its owner\'s ' + en(C.hareTurns) + '. The hare cannot capture and moves like a queen, then the piece returns.'],
+        'Turns a piece (not a king) into a hare for ' + C.hareTurns + ' of its owner\'s ' + en(C.hareTurns) + '. The hare cannot capture and moves like a queen, then the piece returns.'],
         assemble: ['Собираете робота на планшете; он появится на свободной клетке ваших первых двух горизонталей. Двойной клик по роботу покажет, как он ходит.',
             'You build a robot on the tablet; it appears on a free square of your first two ranks. Double-click a robot to see how it moves.'],
         charger: ['Плитка-зарядка: вставшая обычная фигура (не король) оглушается и пропускает ход. Робот получает заряд на один бесплатный ход (без шаха).',
@@ -6753,17 +6778,17 @@ Object.assign(EN, {
         reprogram: ['Тратит ход. Перестраивает робота или радиус турели на планшете. Новые клетки и направления увеличивают перезарядку, убранные уменьшают (ниже базовой не опускается).',
             'Uses your move. Rebuilds a robot or a turret\'s radius on the tablet. New squares and directions raise the cooldown, removed ones lower it (never below the base).'],
         freeze: ['Любая фигура (кроме короля) на ' + C.freezeTurns + ' ' + pl(C.freezeTurns) + ' не ходит, её нельзя срубить, и магия на неё не действует.',
-            'Any piece (except a king) cannot move for ' + C.freezeTurns + ' ' + en(C.freezeTurns) + ', cannot be captured, and magic does not affect it.'],
+        'Any piece (except a king) cannot move for ' + C.freezeTurns + ' ' + en(C.freezeTurns) + ', cannot be captured, and magic does not affect it.'],
         jaws: ['Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт ' + C.jawsTurns + ' ваших ходов.',
-            'A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for ' + C.jawsTurns + ' of your turns.'],
+        'A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for ' + C.jawsTurns + ' of your turns.'],
         blunder: ['Тайный колпак на вашей фигуре: ' + C.capTurns + ' ' + pl(C.capTurns) + ' врага она не рубит и не даёт шах. Срубивший её погибает.',
-            'A secret hat on your piece: for ' + C.capTurns + ' enemy ' + en(C.capTurns) + ' it cannot capture or give check. Whoever captures it dies.'],
+        'A secret hat on your piece: for ' + C.capTurns + ' enemy ' + en(C.capTurns) + ' it cannot capture or give check. Whoever captures it dies.'],
         prediction: ['Фигура (не король) получает предсказание: если ею не походят за ваши ' + C.predTurns + ' следующих ' + pl(C.predTurns) + ', она погибнет на ходе врага. Видно предсказание, но не видно, настоящее ли оно. Перезарядка скрыта. Ход не тратится.',
-            'A piece (not a king) gets a prediction: if it is not moved during your next ' + C.predTurns + ' ' + en(C.predTurns) + ', it dies on the enemy\'s turn. The prediction is visible, but whether it is real is not. The cooldown is hidden. Does not use your move.'],
+        'A piece (not a king) gets a prediction: if it is not moved during your next ' + C.predTurns + ' ' + en(C.predTurns) + ', it dies on the enemy\'s turn. The prediction is visible, but whether it is real is not. The cooldown is hidden. Does not use your move.'],
         charlatan: ['Фальшивое предсказание: выглядит как настоящее, но в конце ничего не происходит. Перезарядка скрыта. Ход не тратится.',
             'A fake prediction: it looks like a real one, but nothing happens at the end. The cooldown is hidden. Does not use your move.'],
         unlucky: ['Невидимая для врага ловушка на ' + C.unluckyTurns + ' ' + pl(C.unluckyTurns) + ' врага: вставшая на неё фигура получает настоящее предсказание. Если враг наступил в первые ' + C.omenRefreshTurns + ' ' + pl(C.omenRefreshTurns) + ', способность перезаряжается. Перезарядка скрыта. Ход не тратится.',
-            'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. If the enemy steps on it during its first ' + C.omenRefreshTurns + ' ' + en(C.omenRefreshTurns) + ', the ability is recharged. The cooldown is hidden. Does not use your move.'],
+        'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. If the enemy steps on it during its first ' + C.omenRefreshTurns + ' ' + en(C.omenRefreshTurns) + ', the ability is recharged. The cooldown is hidden. Does not use your move.'],
         badomen: ['То же, что Невезучий ход, но предсказание фальшивое и перезаряжается своя способность. Перезарядка скрыта. Ход не тратится.',
             'The same as Unlucky Move, but the prediction is fake and this ability is the one recharged. The cooldown is hidden. Does not use your move.']
     };
@@ -7401,7 +7426,7 @@ onModeCell = function () {
 // =====================================================================
 // Предательством можно пользоваться только после определённого хода врага
 const betrayReady = col => !!(G && G.done && (G.done[other(col)] || 0) >= CONFIG.betrayAfter);
-const jesterSees = side => !!side && showTraps && (NET.on ? side === NET.me : side === G.turn);      // скрытые вещи Шута видит только он
+const jesterSees = side => !!side && showTraps && (viewerSide() ? side === viewerSide() : side === G.turn);      // скрытые вещи Шута видит только он
 
 // Фигура ходит как своя за Шута: на время подсчёта ходов её цвет подменяется
 const asJester = (p, col, fn) => fn();      // предательской фигурой ходить нельзя: её можно только перевести на свою сторону
@@ -10931,8 +10956,13 @@ Object.assign(EN, {
     "⚫ Чёрные": "⚫ Black",
     "🎲 Случайно": "🎲 Random",
     "Сложность бота": "Bot difficulty",
-    "Обычный": "Normal",
-    "Сильный": "Strong",
+    "Лёгкий": "Easy",
+    "📼 Повторы с ботом": "📼 Replays against the bot",
+    "Повторы игр с ботом": "Replays of bot games",
+    "Пока нет записанных партий. Сыграйте с ботом, и повтор появится здесь.": "No recorded games yet. Play against the bot and the replay will appear here.",
+    "▶ Смотреть": "▶ Watch",
+    "Нормальный": "Normal",
+    "Сложный": "Hard",
     "🤖 Бот думает...": "🤖 The bot is thinking...",
     "🤖 Бот запутался и сдаётся": "🤖 The bot got confused and resigns"
 });
@@ -10941,10 +10971,11 @@ Object.assign(EN, {
 //  Ходы: оценка материала и расположения, угрозы на 2 хода вперёд (уровень «Обычный») или поиск на 3 хода (уровень «Сильный»).
 //  Способности: для каждой есть оценка «насколько это выгодно прямо сейчас», применяются только при выгоде.
 // =====================================================================
-const BOT = { on: false, want: false, side: 'b', color: 'w', level: 1, turnKey: '', tried: new Set(), idle: 0, busy: false };
+const BOT = { on: false, want: false, side: 'b', color: 'w', level: 2, turnKey: '', tried: new Set(), idle: 0, busy: false };
 const BOT_LEVELS = {
-    1: { name: 'Обычный', depth: 2, noise: 0.18 },
-    2: { name: 'Сильный', depth: 3, noise: 0.04 }
+    1: { name: 'Лёгкий', depth: 1, noise: 0.7, abil: 0.3 },       // смотрит только на ближайший результат хода, часто ошибается, редко применяет способности
+    2: { name: 'Нормальный', depth: 2, noise: 0.18, abil: 1 },    // видит ответ соперника на один ход вперёд
+    3: { name: 'Сложный', depth: 3, noise: 0.04, abil: 1 }        // считает на три хода вперёд
 };
 const BOT_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 const botVal = p => (p ? (BOT_VAL[p.t] !== undefined ? BOT_VAL[p.t] : 2) : 0);
@@ -10953,7 +10984,7 @@ const botVis = p => !!p && !hiddenFor(p, BOT.side);
 // ---------- что бот видит: невидимки, туман, «Ход — это ложь» ----------
 // Бот видит доску так же, как человек: вражеские невидимки пропадают с неё (кроме тех, чьё место он знает: они встали на месте),
 // иллюзии выглядят настоящими фигурами. Где может быть невидимка, бот прикидывает по её прошлому месту.
-BOT.mem = {}; BOT.prevVis = {}; BOT.lastMoved = null; BOT.view = null; BOT.risk = null;
+BOT.mem = {}; BOT.prevVis = {}; BOT.lastMoved = null; BOT.view = null; BOT.risk = null; BOT.lieProb = 0; BOT.lieAt = null;
 function botView() {
     const vb = visionBoard(G.board, BOT.side);
     for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
@@ -11007,6 +11038,7 @@ function botReach(vb, t, x, color, from, steps) {
 // карта опасности: насколько вероятно, что невидимая фигура врага бьёт эту клетку (с учётом того, ради чего она могла туда пойти)
 function botRisk(vb) {
     const side = BOT.side, opp = other(side);
+    BOT.lieProb = 0; BOT.lieAt = null;
     const map = Array.from({ length: N }, () => Array(N).fill(0));
     let any = false, minAtt = 99;
     const add = (t, x, cells, prob) => {
@@ -11033,7 +11065,19 @@ function botRisk(vb) {
     if (oh && oh.abilities.includes('lie') && !(G.cd[opp].lie > 0) && !(G.disabled[opp].lie > 0) && BOT.lastMoved && G.board[BOT.lastMoved.to[0]] && G.board[BOT.lastMoved.to[0]][BOT.lastMoved.to[1]]) {
         const lm = BOT.lastMoved;
         const cells = botReach(vb, lm.t, lm.x, opp, lm.from, 1).filter(([r, c]) => !(r === lm.to[0] && c === lm.to[1]));
-        add(lm.t, lm.x, cells, 0.15);
+        // чем глупее выглядит ход (особенно зевок дорогой фигуры), тем вероятнее, что это приманка
+        const bait = vb[lm.to[0]][lm.to[1]];
+        let hang = 0;
+        if (bait) {
+            botMovesOf(side).forEach(m => {
+                if (m.tr !== lm.to[0] || m.tc !== lm.to[1]) return;
+                const att = vb[m.fr][m.fc];
+                hang = Math.max(hang, botVal(bait) - (isAttacked(vb, m.tr, m.tc, opp) ? botVal(att) : 0));
+            });
+        }
+        const prob = Math.min(0.6, 0.06 + 0.54 * Math.min(1, hang / 5));
+        BOT.lieProb = prob; BOT.lieAt = lm.to;
+        add(lm.t, lm.x, cells, prob);
     }
     return any ? { map, minAtt } : null;
 }
@@ -11105,7 +11149,7 @@ function botScoreMove(mv, lv, side) {
     } else {
         res.dead.forEach(d => { score += d.c === opp ? botVal(d) : -botVal(d); });
         let worst = 0, replies = 0;
-        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        for (let r = 0; r < N && lv.depth >= 2; r++) for (let c = 0; c < N; c++) {
             const q = nb[r][c];
             if (!q || q.c !== opp) continue;
             for (const m of legalMovesAt(nb, r, c)) {
@@ -11116,8 +11160,7 @@ function botScoreMove(mv, lv, side) {
                 if (g > worst) worst = g;
             }
         }
-        if (!replies) score += !safeAfter(nb, opp) ? 1000 : -30;      // мат или пат
-        score -= worst;
+        if (lv.depth >= 2) { if (!replies) score += !safeAfter(nb, opp) ? 1000 : -30; score -= worst; }      // мат или пат; ответ соперника (только с уровня «Нормальный»)
     }
     if (mv.promo) score += 8;
     score += botPos(piece, mv.tr, mv.tc, side) - botPos(piece, mv.fr, mv.fc, side);
@@ -11126,6 +11169,7 @@ function botScoreMove(mv, lv, side) {
     if (piece.t === 'q' && !piece.moved && (G.done ? G.done[side] : 0) < 4) score -= 0.25;      // ферзём в самом начале лучше не бегать
     if (!safeAfter(nb, opp)) score += 0.4;      // шах
     if (side === BOT.side) score -= botHiddenLoss(nb, side);      // невидимка врага может ударить
+    if (side === BOT.side && BOT.lieAt && mv.tr === BOT.lieAt[0] && mv.tc === BOT.lieAt[1]) { const cap = res.dead.find(d => d.c !== side); if (cap) score -= BOT.lieProb * botVal(cap); }      // вдруг рубим приманку
     return score + Math.random() * lv.noise;
 }
 function botMovesOf(side) {
@@ -11412,6 +11456,97 @@ const BOT_EVAL = {
         });
         return best;
     },
+    apocalypse(ctx, cells) {      // Апокалипсис: лишний ход зомби (в том числе вражеским), если он что-то рубит
+        let best = null;
+        cells.forEach(([zr, zc]) => {
+            const z = G.board[zr][zc];
+            if (!z) return;
+            (zombieMoves(zr, zc, ctx.side) || []).forEach(m => {
+                const t = G.board[m.tr][m.tc];
+                if (!t || t.c !== ctx.opp || t.t === 'k') return;
+                const g = botVal(t) - (isAttacked(ctx.b, m.tr, m.tc, ctx.opp) ? botVal(z) * 0.5 : 0);
+                if (g >= 1.5 && (!best || g > best.v)) best = { v: g, cell: [zr, zc], second: [m.tr, m.tc], kind: 'free', special: 'apo' };
+            });
+        });
+        return best;
+    },
+    lure(ctx, cells) {      // Приманка: враг обязан срубить нашу фигуру, и это ему невыгодно
+        let best = null;
+        ctx.mine.forEach(({ r, c, p }) => {
+            if (p.t === 'k' || !botHas(cells, r, c)) return;
+            const caps = ctx.oppMoves.filter(x => x.m.tr === r && x.m.tc === c);
+            if (!caps.length) return;
+            const defended = isAttacked(ctx.b, r, c, ctx.side);
+            let enemyBest = -1e9;
+            caps.forEach(x => { enemyBest = Math.max(enemyBest, botVal(p) - (defended ? botVal(x.e.p) : 0)); });
+            const g = -enemyBest;
+            if (g >= 2 && (!best || g > best.v)) best = { v: g, cell: [r, c], kind: 'off' };
+        });
+        return best;
+    },
+    bumpuku(ctx, cells) {      // Бумпуку: бомба на фигуре, рядом с которой много дорогих фигур врага
+        let best = null;
+        ctx.mine.forEach(({ r, c, p }) => {
+            if (p.t === 'k' || p.bomb || !botHas(cells, r, c)) return;
+            let en = 0, me = 0;
+            for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+                const q = inb(r + dr, c + dc) && ctx.b[r + dr][c + dc];
+                if (!q) continue;
+                if (q.c === ctx.opp) en += botVal(q); else me += botVal(q);
+            }
+            const v = (en - me) * 0.5;      // враг может увести фигуры, поэтому не всё достанется
+            if (v >= 3 && (!best || v > best.v)) best = { v, cell: [r, c], kind: 'free' };
+        });
+        return best;
+    },
+    groundhog(ctx, cells) {      // Ход сурка: скрытая ловушка на пустой клетке, куда враг скорее всего пойдёт дорогой фигурой
+        let best = null;
+        cells.forEach(([r, c]) => {
+            if (ctx.b[r][c]) return;
+            const sc = botStepScore(ctx, r, c);
+            if ((sc.mx >= 5 || (sc.mx >= 3 && sc.n >= 2)) && (!best || sc.v > best.v)) best = { v: 1.5 + sc.n * 0.1, cell: [r, c], kind: 'free' };
+        });
+        return best;
+    },
+    soulmates(ctx, cells) {      // Связь душ: две соседние вражеские фигуры, одну из которых мы можем срубить
+        let best = null;
+        const myCaps = botMovesOf(ctx.side).filter(m => { const t = ctx.b[m.tr][m.tc]; return t && t.c === ctx.opp; });
+        ctx.theirs.forEach(A => {
+            if (A.p.t === 'k' || !botHas(cells, A.r, A.c)) return;
+            const cap = myCaps.find(m => m.tr === A.r && m.tc === A.c);
+            if (!cap) return;
+            const net = botVal(A.p) - (isAttacked(ctx.b, A.r, A.c, ctx.opp) ? botVal(ctx.b[cap.fr][cap.fc]) : 0);
+            if (net < -1) return;
+            ctx.theirs.forEach(B => {
+                if (B === A || B.p.t === 'k' || botVal(B.p) < 3 || Math.abs(B.r - A.r) > 1 || Math.abs(B.c - A.c) > 1 || !botHas(cells, B.r, B.c)) return;
+                const v = (net + botVal(B.p)) * 0.6;      // враг может успеть разорвать связь
+                if (v >= 2.5 && (!best || v > best.v)) best = { v, cell: [A.r, A.c], second: [B.r, B.c], kind: 'off' };
+            });
+        });
+        return best;
+    },
+    banana(ctx, cells) {      // Банановая кожура: враг съедет на клетку, где мы его срубим
+        let best = null;
+        cells.forEach(([r, c]) => {
+            if (ctx.b[r][c]) return;
+            const sc = botStepScore(ctx, r, c);
+            if (sc.mx < 3) return;
+            [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([dr, dc]) => {
+                const lr = r + dr, lc = c + dc;
+                if (!inb(lr, lc) || ctx.b[lr][lc] || !isAttacked(ctx.b, lr, lc, ctx.side)) return;
+                const v = sc.mx * 0.6;
+                if (v >= 1.8 && (!best || v > best.v)) best = { v, cell: [r, c], second: [lr, lc], kind: 'free' };
+            });
+        });
+        return best;
+    },
+    copy(ctx) {      // Зеркало: повторить последнюю способность врага, если её выгодно применить нам
+        const eff = G.lastAb && G.lastAb[ctx.opp];
+        if (!eff || eff === 'copy' || NO_TARGET.includes(eff) || !BOT_EVAL[eff] || ['tomato', 'zawarudo', 'misclick'].includes(eff)) return null;
+        const ev = BOT_EVAL[eff](ctx, botCells(eff));
+        if (!ev || !ev.cell || ev.special) return null;
+        return { ...ev, v: ev.v - 0.3, kind: ev.kind === 'free' ? 'off' : ev.kind };
+    },
     tomato(ctx) { return botTomatoList(ctx.opp).length ? { v: 1.7, kind: 'free', special: 'tomato' } : null; },
     zawarudo() { return { v: 0, kind: 'free', special: 'zw' }; }
 };
@@ -11574,6 +11709,28 @@ function botLastResort() {
     return false;
 }
 
+// Ход — это ложь: настоящий ход делается невидимой фигурой, а враг видит иллюзию на другой клетке. Сам ход при этом не пропадает,
+// поэтому бот ходит так, как собирался, и выбирает иллюзию там, где враг охотнее всего её срубит (под его ударом)
+function botTryLie(best, ctx) {
+    const side = BOT.side, k = 'lie';
+    if (!HEROES[G.hero[side]].abilities.includes(k) || !abilityAvailable(side, k) || BOT.tried.has(k)) return false;
+    BOT.tried.add(k);
+    const turnBefore = G.turn, cdBefore = G.cd[side][k];
+    applyInput({ t: 'ab', k });
+    if (!G.mode || !botHas(G.mode.cells || [], best.fr, best.fc)) { if (G.mode) cancelAbilityMode(); return false; }
+    applyInput({ t: 'cell', r: best.fr, c: best.fc });
+    if (!G.mode || !botHas(G.mode.cells || [], best.tr, best.tc)) { cancelAbilityMode(); return false; }
+    applyInput({ t: 'cell', r: best.tr, c: best.tc });
+    if (!G.mode) return G.turn !== turnBefore || G.cd[side][k] !== cdBefore;
+    const cs = G.mode.cells || [];
+    if (!cs.length) { cancelAbilityMode(); return false; }
+    const bait = cs.filter(([r, c]) => isAttacked(ctx.b, r, c, ctx.opp));      // иллюзия под ударом: врагу захочется её срубить
+    const pool = bait.length ? bait : cs;
+    const f = pool[(Math.random() * pool.length) | 0];
+    applyInput({ t: 'cell', r: f[0], c: f[1] });
+    if (G.mode) { cancelAbilityMode(); return false; }
+    return G.turn !== turnBefore || G.cd[side][k] !== cdBefore;
+}
 // ---------- один шаг бота ----------
 function botStep() {
     const side = BOT.side, lv = BOT_LEVELS[BOT.level] || BOT_LEVELS[1];
@@ -11609,7 +11766,7 @@ function botStep() {
     }
     const { best, score: bestS } = botBestOf(moves, lv, side);
     // способности: считаем выгоду каждой, применяем только когда она заметно лучше обычного хода
-    if (!G.bonus && !G.archUsed) {
+    if (!G.bonus && !G.archUsed && (lv.abil >= 1 || Math.random() < lv.abil)) {
         const ctx = botCtx();
         const cands = [];
         const consider = (k, ev) => { if (ev && !BOT.tried.has(k)) cands.push({ k, ...ev }); };
@@ -11625,7 +11782,7 @@ function botStep() {
         for (const cd of cands) {
             const free = !!(ABILITIES[cd.k] && ABILITIES[cd.k].free) || cd.k === 'openbook';
             let ok = false;
-            if ((cd.kind === 'free' || free) && cd.special !== 'zwuse' && !['guardian'].includes(cd.k) && (BOT.patience || 0) > 0.65) continue;      // не применяем сразу, как только стало можно
+            if ((cd.kind === 'free' || free) && cd.special !== 'zwuse' && !['guardian', 'apocalypse'].includes(cd.k) && (BOT.patience || 0) > 0.65) continue;      // не применяем сразу, как только стало можно
             if (cd.kind === 'off' && (BOT.patience || 0) > 0.8 && cd.v < 4) continue;
             if (cd.kind === 'free' || free) ok = cd.v >= 1.4 || cd.special === 'zwuse';
             else if (cd.kind === 'def') ok = cd.v >= 2 && bestS <= -0.9 && cd.v >= -bestS * 0.7;
@@ -11641,6 +11798,10 @@ function botStep() {
             if (done) return;      // продолжим со следующего шага
         }
     }
+    // Гипнотизёр: ложный ход вместо обычного (ход тот же, но враг видит иллюзию на другой клетке)
+    if (best && !G.bonus && !G.archUsed && hero.abilities.includes('lie') && Math.random() < 0.55 && bestS > -0.5) {
+        if (botTryLie(best, botCtx())) return;
+    }
     // Самурай: если после лучшего хода всё равно теряем много (например, шах без выхода), король телепортируется
     if (!best || (G.check && bestS <= -4)) { if (botTeleport()) return; }
     if (best) {
@@ -11648,10 +11809,11 @@ function botStep() {
         applyInput({ t: 'cell', r: best.tr, c: best.tc });
         return;
     }
-    botLastResort();
+    if (!botLastResort()) BOT.idle += 12;      // ни хода, ни способности: скоро сдаётся, а не висит
 }
 
 setInterval(() => {
+    if (BOT.rec && !BOT.rec.saved && G && G.over && !REPLAY.on) botSaveRec();
     if (!BOT.on || NET.on || BOT.busy || !G || G.over || REPLAY.on || INTRO.on) return;
     if (G.turn !== BOT.side || $('#app').classList.contains('hidden')) return;
     BOT.busy = true;
@@ -11664,5 +11826,60 @@ setInterval(() => {
     }
 }, 650);
 
+
+// ---------- повторы игр с ботом: хранятся в этом браузере ----------
+const BOTREP_KEY = 'spellschess-botgames';
+function botRepLoad() { try { return JSON.parse(localStorage.getItem(BOTREP_KEY) || '[]'); } catch (e) { return []; } }
+function botRepStore(list) {
+    for (let n = list.length; n >= 0; n--) { try { localStorage.setItem(BOTREP_KEY, JSON.stringify(list.slice(0, n))); return; } catch (e) { /* не хватило места: убираем самые старые */ } }
+}
+function botSaveRec() {
+    const rec = BOT.rec;
+    if (!rec || rec.saved || rec.log.length < 4) return;
+    rec.saved = true;
+    const list = botRepLoad();
+    list.unshift({ id: rec.t, t: rec.t, seed: rec.seed, white_hero: rec.heroes.w, black_hero: rec.heroes.b, log: rec.log, result: (G && G.over) ? G.over.text : null, level: rec.level, botSide: rec.side, plies: rec.log.filter(m => m.t === 'cell').length >> 1 });
+    botRepStore(list.slice(0, 20));
+}
+// все действия партии с ботом (и человека, и бота) записываются: игра детерминирована, этого хватает для повтора
+const _applyInputPlain = applyInput;
+applyInput = function (m) {
+    const rec = BOT.rec;
+    if (!rec || REPLAY.on || NET.on || !G || G.over) return _applyInputPlain(m);
+    lastPick = null;
+    const res = _applyInputPlain(m);
+    const e = { ...m };
+    if (lastPick) e.pick = lastPick;
+    rec.log.push(e);
+    return res;
+};
+window.addEventListener('beforeunload', () => { try { botSaveRec(); } catch (e) { /* ничего */ } });
+function botRepOpen() {
+    const box = $('#botRepList');
+    box.textContent = '';
+    const list = botRepLoad();
+    if (!list.length) box.appendChild(mkEl('p', 'sub', 'Пока нет записанных партий. Сыграйте с ботом, и повтор появится здесь.'));
+    list.forEach(g => {
+        const hw = HEROES[g.white_hero], hb = HEROES[g.black_hero];
+        if (!hw || !hb) return;
+        const row = mkEl('div', 'botrep-row');
+        const info = mkEl('div', 'botrep-info');
+        info.appendChild(mkEl('b', '', hw.icon + ' ' + hw.name + ' — ' + hb.icon + ' ' + hb.name));
+        info.appendChild(mkEl('span', '', new Date(g.t).toLocaleString() + ' · ' + L('Вы: ', 'You: ') + (g.botSide === 'w' ? L('чёрные', 'black') : L('белые', 'white')) + ' · ' + ((BOT_LEVELS[g.level] || {}).name || '') + ' · ' + (g.plies || 0) + ' ' + L('ходов', 'moves') + ' · ' + (g.result || L('не закончена', 'unfinished'))));
+        const play = mkEl('button', 'small-btn', '▶ Смотреть');
+        play.addEventListener('click', () => {
+            BOT.on = false; BOT.want = false; BOT.rec = null;
+            $('#botRep').classList.add('hidden');
+            startReplay({ seed: g.seed, white_hero: g.white_hero, black_hero: g.black_hero, log: g.log }, hw.name + ' — ' + hb.name);
+        });
+        const del = mkEl('button', 'small-btn', '🗑');
+        del.addEventListener('click', () => { botRepStore(botRepLoad().filter(x => x.id !== g.id)); botRepOpen(); });
+        row.append(info, play, del);
+        box.appendChild(row);
+    });
+    $('#botRep').classList.remove('hidden');
+}
+$('#lobbyBotRep').addEventListener('click', botRepOpen);
+$('#botRepClose').addEventListener('click', () => $('#botRep').classList.add('hidden'));
 
 tryResume();
