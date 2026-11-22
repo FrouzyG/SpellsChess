@@ -1435,6 +1435,7 @@ function applyMove(board, mv, promo) {
         board[mv.fr][mv.fc] = null; board[mv.fr][mv.rc] = null;
         board[mv.tr][mv.tc] = p; board[mv.fr][mv.rt] = rk;
         p.moved = true; rk.moved = true;
+        delete rk.preds;      // ладья тоже сходила (рокировка): предсказания на ней снимаются
         p.prev = [mv.fr, mv.fc]; rk.prev = [mv.fr, mv.rc];
         delete p.scared; delete p.scaredT;
         return res;
@@ -2586,7 +2587,7 @@ function abilityCellsRaw(key, col, t, first) {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             const p = b[r][c];
-            if (p && p.c === col && (p.ghost || (p.pair ? withBoardTemp((() => { const nb = cloneBoard(b); dropGhostOn(nb, r, c); return nb; })(), () => lieOptions(r, c, true).length) : lieOptions(r, c, true).length))) cells.push([r, c]);
+            if (p && p.c === col && !p.ghost && (p.pair ? withBoardTemp((() => { const nb = cloneBoard(b); dropGhostOn(nb, r, c); return nb; })(), () => lieOptions(r, c, true).length) : lieOptions(r, c, true).length)) cells.push([r, c]);
         }
     } else if (key === 'groundhog') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
@@ -3025,7 +3026,7 @@ function sweepBurn() {
 }
 
 // Фигура, вставшая на капкан, пропускает следующий ход своей стороны
-function sweepTraps() {
+function sweepTraps(mid) {
     G.traps = G.traps.filter(t => {
         const p = G.board[t.r][t.c];
         if (!p || kSafe(p) || p.ghost) return true;
@@ -3033,7 +3034,7 @@ function sweepTraps() {
             addLog('n', p.invis ? '✴ Невидимая фигура под защитой от магии уничтожает капкан' : `✴ ${pieceSym(p)} под защитой от магии уничтожает капкан на ${sqName(t.r, t.c)}`);
             return false;
         }
-        p.snared = CONFIG.trapTurns;      // капкан держит несколько ходов
+        p.snared = CONFIG.trapTurns + (mid && p.c === G.turn ? 1 : 0);      // капкан держит несколько ходов (посреди своего хода +1: в конце хода одна единица спадёт)
         if (!p.invis) G.fx.push({ r: t.r, c: t.c, type: 'trap' });
         sfx('trap');
         addLog('n', p.invis ? '🪤 Невидимая фигура попадает в капкан' : `🪤 ${pieceSym(p)} попадает в капкан на ${sqName(t.r, t.c)}`);
@@ -3043,6 +3044,8 @@ function sweepTraps() {
 
 // Зарядка Инженера: фигура, вставшая на плитку, получает разряд.
 // Обычная фигура (не король) оглушается и пропускает свой следующий ход (как в капкане), робот получает 1 заряд
+// Ловушки посреди хода (дополнительные ходы ZA WARUDO, Жатвы, Апокалипсиса, бесплатный ход робота): фигура, вставшая на ловушку, срабатывает сразу
+function sweepMid() { sweepTraps(true); sweepOmens(); sweepBananas(); }
 function sweepChargers(mid) {      // mid: ход ещё не закончился (доп. ход ZA WARUDO, Жатвы, Апокалипсиса, бесплатный ход заряженного робота)
     const on = new Set((G.chargers || []).map(x => x.r + ',' + x.c));
     G.board.forEach((row, r) => row.forEach((p, c) => {
@@ -3052,10 +3055,14 @@ function sweepChargers(mid) {      // mid: ход ещё не закончилс
         p.onChg = true;
         const here = sqName(r, c);
         if (p.t === 'x') {
+            const tile = (G.chargers || []).find(x => x.r === r && x.c === c);
+            if (tile && tile.spent) return;      // плитка уже разряжена для роботов (других фигур она всё ещё оглушает)
+            if (tile) tile.spent = true;
             p.chg = 1;
             G.fx.push({ r, c, type: 'zap' });
             sfx('zap');
             addLog('n', p.invis ? '🔋 Невидимый робот получает заряд' : `🔋 Робот на ${here} получает заряд: его следующий ход будет бесплатным`);
+            addLog('n', '🔋 Плитка разряжена: роботов она больше не заряжает');
             return;
         }
         if (kSafe(p)) return;
@@ -3346,7 +3353,7 @@ function tryMove(mv, ctx) {
     ctx = ctx || (G.bonus ? { bonus: true, zw: G.bonus.kind === 'zw' ? G.bonus.step : 0 } : {});
     if (!G.bonus && !ctx.pairSecond && !ctx.apo && !ctx.charge) {      // Зарядка: ход заряженного робота бесплатный (обычный ход остаётся), но им нельзя ставить шах
         const q0 = G.board[mv.fr][mv.fc];
-        if (chargeFree(q0, mv.fr, mv.fc) && !engGivesCheck(mv)) ctx = { ...ctx, charge: true, cuid: uidOf(q0), cpiece: q0 };
+        if (chargeFree(q0, mv.fr, mv.fc) && !engGivesCheck(mv) && !G.board[mv.tr][mv.tc]) ctx = { ...ctx, charge: true, cuid: uidOf(q0), cpiece: q0 };      // рубить и шаховать бесплатным ходом нельзя: такой ход обычный, заряд остаётся
     }
     G.sel = null; G.moves = [];
     if (mv.promo) {
@@ -3517,6 +3524,7 @@ function executeMove(mv, promo, ctx) {
             if (ctx.cpiece) ctx.cpiece.chg = 0;      // заряд потрачен
             addLog('n', '🔋 Заряд потрачен: бесплатный ход робота сделан, обычный ход ещё впереди');
             sweepChargers(true);      // фигура, вставшая на плитку-зарядку этим ходом, получает разряд сразу
+            sweepMid();
             continueTurn();
             return;
         }
@@ -3526,7 +3534,7 @@ function executeMove(mv, promo, ctx) {
             G.lastAb[col] = 'apocalypse';
             G.noZForce = true;
             addLog('n', '☠️ Апокалипсис: обязательная рубка зомби отменена до конца хода');
-            sweepChargers(true);
+            sweepChargers(true); sweepMid();
             continueTurn();
             return;
         }
@@ -3535,7 +3543,7 @@ function executeMove(mv, promo, ctx) {
         if (ctx.zw === 1) {
             G.bonus = { kind: 'zw', step: 2 };
             addLog('n', '🕰️ ZA WARUDO: второй ход');
-            sweepChargers(true);
+            sweepChargers(true); sweepMid();
             continueTurn();
             return;
         }
@@ -3550,7 +3558,7 @@ function executeMove(mv, promo, ctx) {
             } else {
                 G.bonus = { kind: 'harvest' };
                 addLog('n', '🌾 Жатва: дополнительный ход');
-                sweepChargers(true);
+                sweepChargers(true); sweepMid();
                 continueTurn();
             }
             return;
@@ -4757,7 +4765,7 @@ function renderBoard() {
             const htm = (G.hatches || []).find(x => x.r === r && x.c === c);
             if (htm) html += '<div class="tile-mark hatch-mark"><span></span></div>';
             const chm = (G.chargers || []).find(x => x.r === r && x.c === c);
-            if (chm) html += `<div class="tile-mark charger-mark ${chm.owner}"><span>⚡</span></div>`;
+            if (chm) html += `<div class="tile-mark charger-mark ${chm.owner}${chm.spent ? ' spent' : ''}"><span>⚡</span></div>`;
             const hg = G.hogs.find(x => x.r === r && x.c === c);
             if (hg && (hg.visible || (showTraps && (viewerSide() ? hg.owner === viewerSide() : hg.owner === G.turn)))) html += `<div class="tile-mark hog-mark ${hg.visible ? '' : 'hidden-hog'}">⏳</div>`;
 
@@ -6572,7 +6580,8 @@ Object.assign(EN, {
     "? ПОСЛЕ ЭТОГО ЭВРИКА ПЕРЕЗАРЯЖАЕТСЯ 30 ХОДОВ.": "? AFTER THAT, EUREKA RECHARGES FOR 30 TURNS.",
     "ДА": "YES",
     "НЕТ": "NO",
-    "🔋 Робот заряжен: этот ход бесплатный (шаховать им нельзя), потом вы ещё сходите как обычно.": "🔋 The robot is charged: this move is free (it cannot give check), then you still make your normal move.",
+    "🔋 Робот заряжен: этот ход бесплатный (им нельзя ни шаховать, ни рубить), потом вы ещё сходите как обычно.": "🔋 The robot is charged: this move is free (it can neither give check nor capture), then you still make your normal move.",
+    "🔋 Плитка разряжена: роботов она больше не заряжает": "🔋 The tile is discharged: it no longer charges robots",
     "🔋 Заряд потрачен: бесплатный ход робота сделан, обычный ход ещё впереди": "🔋 Charge spent: the free robot move is done, your normal move is still ahead",
     "🛠 Выберите своего робота или свою турель для перепрограммирования (это тратит ход).": "🛠 Choose your robot or your turret to reprogram (this uses your move).",
     "Перестройте фигуру на планшете.": "Rebuild the piece on the tablet.",
@@ -6771,8 +6780,8 @@ Object.assign(EN, {
         'Turns a piece (not a king) into a hare for ' + C.hareTurns + ' of its owner\'s ' + en(C.hareTurns) + '. The hare cannot capture and moves like a queen, then the piece returns.'],
         assemble: ['Собираете робота на планшете; он появится на свободной клетке ваших первых двух горизонталей. Двойной клик по роботу покажет, как он ходит.',
             'You build a robot on the tablet; it appears on a free square of your first two ranks. Double-click a robot to see how it moves.'],
-        charger: ['Плитка-зарядка: вставшая обычная фигура (не король) оглушается и пропускает ход. Робот получает заряд на один бесплатный ход (без шаха).',
-            'A charger tile: an ordinary piece (not a king) that steps on it is stunned and skips a turn. A robot gets a charge for one free move (no check).'],
+        charger: ['Плитка-зарядка: вставшая обычная фигура (не король) оглушается и пропускает ход. Первый вставший робот получает заряд на один бесплатный ход (без шаха и рубки), после чего плитка для роботов разряжена.',
+            'A charger tile: an ordinary piece (not a king) that steps on it is stunned and skips a turn. The first robot to step on it gets a charge for one free move (no check, no capture), after which the tile is discharged for robots.'],
         turret: ['Собираете неподвижную турель на планшете; она появится на свободной клетке ваших первых трёх горизонталей. Двойной клик по турели покажет, как она стреляет.',
             'You build a stationary turret on the tablet; it appears on a free square of your first three ranks. Double-click a turret to see how it shoots.'],
         reprogram: ['Тратит ход. Перестраивает робота или радиус турели на планшете. Новые клетки и направления увеличивают перезарядку, убранные уменьшают (ниже базовой не опускается).',
@@ -8348,7 +8357,7 @@ function engPaintInfo() {
     }
     // заряженный робот: его ход бесплатный
     for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) { const q = G.board[r][c]; if (q && q.t === 'x' && q.chg > 0) { const el = cellEl(r, c), pe = el && el.querySelector('.piece'); if (pe) pe.classList.add('charged'); } }
-    if (!G.mode && isActor() && G.sel && chargeFree(G.board[G.sel.r][G.sel.c], G.sel.r, G.sel.c)) ['hint', 'mHint'].forEach(id => { const h = document.getElementById(id); if (h) h.textContent = L('🔋 Робот заряжен: этот ход бесплатный (шаховать им нельзя), потом вы ещё сходите как обычно.', '🔋 The robot is charged: this move is free (it cannot give check), then you still make your normal move.'); });
+    if (!G.mode && isActor() && G.sel && chargeFree(G.board[G.sel.r][G.sel.c], G.sel.r, G.sel.c)) ['hint', 'mHint'].forEach(id => { const h = document.getElementById(id); if (h) h.textContent = L('🔋 Робот заряжен: этот ход бесплатный (им нельзя ни шаховать, ни рубить), потом вы ещё сходите как обычно.', '🔋 The robot is charged: this move is free (it can neither give check nor capture), then you still make your normal move.'); });
 }
 // Нажатие на чужого (или, когда не ваш ход, любого) робота или турель: показать, куда они дотягиваются, ничего не отправляя сопернику
 document.getElementById('board').addEventListener('click', e => {
@@ -11547,6 +11556,11 @@ const BOT_EVAL = {
         if (!ev || !ev.cell || ev.special) return null;
         return { ...ev, v: ev.v - 0.3, kind: ev.kind === 'free' ? 'off' : ev.kind };
     },
+    assemble(ctx, cells) {      // Инженер: собрать робота (ходит вперёд и в стороны, рубит по диагонали вперёд), когда нет угроз
+        const robots = ctx.mine.filter(m => m.p.t === 'x').length;
+        if (robots >= 2 || ctx.real.length || (G.done[ctx.side] || 0) < 4 || !cells.length) return null;
+        return { v: 2.6, kind: 'off', special: 'assemble' };
+    },
     tomato(ctx) { return botTomatoList(ctx.opp).length ? { v: 1.7, kind: 'free', special: 'tomato' } : null; },
     zawarudo() { return { v: 0, kind: 'free', special: 'zw' }; }
 };
@@ -11586,6 +11600,24 @@ function botTomato() {      // бросить помидор в самую оп�
     applyInput({ t: 'tomato', k: list[0] });
     if (G.mode) { cancelAbilityMode(); return false; }
     return G.cd[side].tomato !== cdBefore;
+}
+// Сборка робота на планшете: сапог с ходьбой вперёд и в стороны и рубкой по диагонали вперёд, потом клетка появления
+function botAssemble() {
+    const side = BOT.side, turnBefore = G.turn, cdBefore = G.cd[side].assemble;
+    BOT.tried.add('assemble');
+    applyInput({ t: 'ab', k: 'assemble' });
+    if (!G.mode || G.mode.type !== 'assemble') { if (G.mode) cancelAbilityMode(); return false; }
+    const eng = (a, v) => applyInput({ t: 'eng', a, v });
+    eng('pick', 'boot'); eng('next');
+    [[-1, 0], [0, -1], [0, 1]].forEach(d => eng('dir', d)); eng('next');
+    [[-1, -1], [-1, 1]].forEach(d => eng('dir', d)); eng('next');
+    eng('pick', 'x'); eng('next');
+    if (!G.mode || G.mode.stage !== 'spawn' || !(G.mode.cells || []).length) { cancelAbilityMode(); return false; }
+    let best = null, bs = -1e9;
+    G.mode.cells.forEach(([r, c]) => { const sc = -Math.abs(c - 3.5) + (Math.abs(r - (side === 'w' ? N - 1 : 0)) === 1 ? 1 : 0) + Math.random() * 0.4; if (sc > bs) { bs = sc; best = [r, c]; } });
+    applyInput({ t: 'cell', r: best[0], c: best[1] });
+    if (G.mode) { cancelAbilityMode(); return false; }
+    return G.turn !== turnBefore || G.cd[side].assemble !== cdBefore;
 }
 // Способность в два клика: сначала фигура или клетка A, потом B (клетка или функция выбора из допустимых)
 function botRunTwo(k, a, b) {
@@ -11791,6 +11823,7 @@ function botStep() {
             let done = false;
             if (cd.special === 'tomato') done = botTomato();
             else if (cd.special === 'revive') done = botDoRevive(cd.k, cd.pick);
+            else if (cd.special === 'assemble') done = botAssemble();
             else if (cd.special === 'openbook') done = botDoOpenbook(cd.cell);
             else if (cd.special === 'zwuse') { BOT.tried.add(cd.k); applyInput({ t: 'ab', k: cd.k }); done = true; }
             else if (cd.second !== undefined) done = botRunTwo(cd.k, cd.cell, cd.second);
