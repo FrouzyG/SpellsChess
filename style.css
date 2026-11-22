@@ -8544,21 +8544,21 @@ body.piece-drag {
         box-shadow: 0 0 16px #7b2cbf, 0 0 0 1px #7b2cbf;
     }
 
-    .panel.h-fortune .ab, .panel.h-fortune .ab.on, .panel.h-fortune .passive-btn {
-        border-color: #7b2cbf;
+.panel.h-fortune .ab, .panel.h-fortune .ab.on, .panel.h-fortune .passive-btn {
+    border-color: #7b2cbf;
+}
+
+    .panel.h-fortune .ab.on {
+        background: rgba(123, 44, 191, 0.38);
     }
 
-        .panel.h-fortune .ab.on {
-            background: rgba(123, 44, 191, 0.38);
-        }
+.panel.h-fortune .passive b, .panel.h-fortune .hname {
+    color: #a45df0;
+}
 
-    .panel.h-fortune .passive b, .panel.h-fortune .hname {
-        color: #a45df0;
-    }
-
-    .panel.h-fortune .passive-btn {
-        background: rgba(123, 44, 191, 0.18);
-    }
+.panel.h-fortune .passive-btn {
+    background: rgba(123, 44, 191, 0.18);
+}
 
 /* круги выбора клеток для способностей Гадалки */
 .cell.t-prediction::after, .cell.t-charlatan::after, .cell.t-unlucky::after, .cell.t-badomen::after, .cell.t-openbook::after {
@@ -8718,9 +8718,8 @@ body.piece-drag {
         font-size: 12px;
     }
 
-/* плитка-зарядка, уже отдавшая заряд роботу: тусклее, но ещё чуть светится */
-.charger-mark.spent span {
-    opacity: 0.5;
-    filter: saturate(0.45) brightness(0.75);
-    box-shadow: 0 0 4px rgba(61, 255, 122, 0.35), inset 0 0 3px rgba(61, 255, 122, 0.25);
+/* плитка-зарядка, уже отдавшая заряд роботу: та же плитка, но зелёная обводка тёмная и без свечения */
+.charger-mark.spent span, .charger-mark.b.spent span {
+    border-color: #1c5e2f;
+    box-shadow: none;
 }
