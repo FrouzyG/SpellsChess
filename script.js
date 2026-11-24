@@ -2628,8 +2628,7 @@ function abilityCellsRaw(key, col, t, first) {
     } else if (key === 'unlucky' || key === 'badomen') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);
-        }
-    } else if (key === 'trap') {
+        }    } else if (key === 'trap') {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
@@ -3789,8 +3788,7 @@ function useAbility(key, r, c, ref) {
         const life = key === 'unlucky' ? CONFIG.unluckyTurns : CONFIG.omenTurns;
         G.omens.push({ r, c, owner: col, left: life, total: life, key, real: key === 'unlucky' });
         text = '👁 Ловушка Гадалки установлена (место скрыто)';
-        sfx('trap');
-    } else if (key === 'trap') {
+        sfx('trap');    } else if (key === 'trap') {
         G.traps = G.traps.filter(x => !(x.r === r && x.c === c));      // одинаковые ловушки: действует та, что поставлена последней
         G.traps.push({ r, c, owner: col });
         text = `${A.icon} ${A.name}: капкан установлен (место скрыто)`;
@@ -6737,21 +6735,21 @@ Object.assign(EN, {
         doubleVision: ['Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит вместе с королём.',
             'A king that escapes check leaves an illusion on another square it could have gone to. It then moves together with the king.'],
         timeslow: ['Кнопка или второй клик по королю, затем способность врага: её перезарядка +2 сейчас и +1 до конца партии, у остальных перезаряжающихся +1 сейчас. ' + (C.timePassiveCostsTurn ? 'Тратит ход.' : 'Ход не тратится.'),
-        'A button or a second click on the king, then an enemy ability: its cooldown +2 now and +1 for the rest of the game, other abilities on cooldown +1 now. ' + (C.timePassiveCostsTurn ? 'Uses your move.' : 'Does not use your move.')],
+            'A button or a second click on the king, then an enemy ability: its cooldown +2 now and +1 for the rest of the game, other abilities on cooldown +1 now. ' + (C.timePassiveCostsTurn ? 'Uses your move.' : 'Does not use your move.')],
         pretense: ['Тайно выберите вражеского слона или коня. После ' + C.betrayAfter + '-го хода врага можно потратить ход, и она навсегда перейдёт к вам.',
-        'Secretly choose an enemy bishop or knight. After the enemy\'s ' + ord(C.betrayAfter) + ' move you can spend a move and it becomes yours for good.'],
+            'Secretly choose an enemy bishop or knight. After the enemy\'s ' + ord(C.betrayAfter) + ' move you can spend a move and it becomes yours for good.'],
         sawing: ['Левый и правый край доски соединены для ваших фигур (кроме короля). После прохода сквозь край пассивка отключается у всех ваших фигур на ' + C.sawingCooldown + ' ' + pl(C.sawingCooldown) + '.',
-        'The left and right edges of the board are connected for your pieces (except the king). After a piece passes through an edge, the passive is disabled for all your pieces for ' + C.sawingCooldown + ' ' + en(C.sawingCooldown) + '.'],
+            'The left and right edges of the board are connected for your pieces (except the king). After a piece passes through an edge, the passive is disabled for all your pieces for ' + C.sawingCooldown + ' ' + en(C.sawingCooldown) + '.'],
         eureka: ['Можно обнулить перезарядку любой своей способности: нажмите на неё и подтвердите. Сама Эврика перезаряжается 30 ходов.',
             'You can reset the cooldown of any of your abilities: press it and confirm. Eureka itself then recharges for 30 turns.'],
         openbook: ['Видно, как враг выбирает фигуры и способности (цель не видно). Раз в ' + C.cooldown.openbook + ' хода тайно выберите фигуру, которой враг, по-вашему, походит дальше: угадали, и перезарядка ваших способностей −1. Ход не тратится.',
-        'You see how the enemy picks pieces and abilities (not the target). Once every ' + C.cooldown.openbook + ' turns, secretly choose the piece you think the enemy will move next: if you are right, all your cooldowns drop by 1. Does not use your move.'],
+            'You see how the enemy picks pieces and abilities (not the target). Once every ' + C.cooldown.openbook + ' turns, secretly choose the piece you think the enemy will move next: if you are right, all your cooldowns drop by 1. Does not use your move.'],
         illusion: ['Создаёт двойника фигуры: они ходят только вместе, двойник не рубит. Рассеивается при шахе, при угрозе вражеской пешки, а также если враг пройдёт сквозь двойника или встанет на его клетку.',
             'Creates a double of a piece: they move only together, and the double cannot capture. It dissolves on check, when an enemy pawn threatens it, or when an enemy passes through it or steps on its square.'],
         raise: ['Поднимает фигуру из любого сброса как зомби на вашей первой горизонтали (пешку на любую из первых четырёх). Зомби обязаны рубить, если могут.',
             'Raises a piece from either graveyard as a zombie on your first rank (a pawn on any of the first four). Zombies must capture if they can.'],
         scream: ['Вражеская фигура (не король) ходит только на 1 клетку (конь как слон, пешка без рубки). Страх спадает после её хода, у пешки через ' + C.scaredPawnTurns + ' ' + pl(C.scaredPawnTurns) + '. Затем нужно применить другую способность.',
-        'An enemy piece (not a king) can move only 1 square (a knight like a bishop, a pawn cannot capture). The fear fades after its move, for a pawn after ' + C.scaredPawnTurns + ' ' + en(C.scaredPawnTurns) + '. Then you must use another ability.'],
+            'An enemy piece (not a king) can move only 1 square (a knight like a bishop, a pawn cannot capture). The fear fades after its move, for a pawn after ' + C.scaredPawnTurns + ' ' + en(C.scaredPawnTurns) + '. Then you must use another ability.'],
         fukashi: ['Невидима для врага, но блокирует ходы. Раскрывается, если рубит, даёт шах, ей грозит пешка или враг упирается в неё (ход врага не тратится).',
             'Invisible to the enemy, but it blocks moves. It is revealed when it captures, gives check, is threatened by a pawn, or the enemy runs into it (the enemy\'s move is not used).'],
         portals: ['Две связанные плитки: вставшая на портал фигура переносится на второй, а ход через портал продолжается из второго. Одновременно действуют две пары.',
@@ -6759,9 +6757,9 @@ Object.assign(EN, {
         ritual: ['Призрачная плитка: стоящая на ней фигура (своя или вражеская) прозрачна для ваших фигур: сквозь неё можно проходить и можно её рубить.',
             'A ghost tile: a piece standing on it (yours or the enemy\'s) is transparent to your pieces: they can pass through it and capture it.'],
         bumpuku: ['Бомба на союзной фигуре (не короле): на вашем ' + C.bumpukuTurns + '-м ходе после применения убивает всех в 3×3. Если фигуру срубят, бомба не взрывается. Ход не тратится.',
-        'A bomb on an allied piece (not the king): on your ' + ord(C.bumpukuTurns) + ' turn after use it kills everything in 3×3. If the piece is captured, the bomb does not explode. Does not use your move.'],
+            'A bomb on an allied piece (not the king): on your ' + ord(C.bumpukuTurns) + ' turn after use it kills everything in 3×3. If the piece is captured, the bomb does not explode. Does not use your move.'],
         trap: ['Невидимый капкан: вставшая на него фигура (не король) пропускает следующие ' + C.trapTurns + ' ' + pl(C.trapTurns) + '.',
-        'An invisible trap: a piece (not a king) that steps on it skips its next ' + C.trapTurns + ' ' + en(C.trapTurns) + '.'],
+            'An invisible trap: a piece (not a king) that steps on it skips its next ' + C.trapTurns + ' ' + en(C.trapTurns) + '.'],
         generator: ['Плитки плюс и минус (сначала плюс, потом минус). Фигуры, стоящие и на плюсе, и на минусе, убивает разряд.',
             'Plus and minus tiles (plus first, then minus). Pieces standing on both a plus and a minus are killed by a discharge.'],
         groundhog: ['Одноразовая ловушка: вставшая фигура (не король) возвращается, откуда пришла. На пустой клетке скрыта и ход не тратит, на фигуре видна и тратит ход.',
@@ -6771,13 +6769,13 @@ Object.assign(EN, {
         banana: ['Скрытая кожура на свободной клетке с направлением: вставшая фигура (не король) съезжает на соседнюю клетку в эту сторону. Ход не тратится.',
             'A hidden peel on a free square with a direction: a piece (not a king) that steps on it slides to the neighboring square in that direction. Does not use your move.'],
         fog: ['Дым 3×3 вокруг выбранной клетки на ' + C.fogTurns + ' ваших ' + pl(C.fogTurns) + ': фигуры (не короли) в нём невидимы для врага. Ход не тратится.',
-        'Smoke 3×3 around the chosen square for ' + C.fogTurns + ' of your ' + en(C.fogTurns) + ': pieces (not kings) in it are invisible to the enemy. Does not use your move.'],
+            'Smoke 3×3 around the chosen square for ' + C.fogTurns + ' of your ' + en(C.fogTurns) + ': pieces (not kings) in it are invisible to the enemy. Does not use your move.'],
         hatch: ['Люки на свободных клетках (первый раз сразу два, дальше по одному). Вставшая на люк фигура (не король) вылезает из другого люка на выбор ходящего.',
             'Hatches on free squares (two the first time, then one at a time). A piece (not a king) that steps on a hatch climbs out of another hatch of the mover\'s choice.'],
         hocus: ['Меняет местами две любые фигуры (кроме королей) в квадрате 5×5 вокруг первой. Ваш король не должен остаться под шахом.',
             'Swaps any two pieces (except kings) within a 5×5 square around the first one. Your king must not be left in check.'],
         assistant: ['Превращает фигуру (не короля) в зайца на ' + C.hareTurns + ' ' + pl(C.hareTurns) + ' её владельца. Заяц не рубит и ходит как ферзь, потом фигура возвращается.',
-        'Turns a piece (not a king) into a hare for ' + C.hareTurns + ' of its owner\'s ' + en(C.hareTurns) + '. The hare cannot capture and moves like a queen, then the piece returns.'],
+            'Turns a piece (not a king) into a hare for ' + C.hareTurns + ' of its owner\'s ' + en(C.hareTurns) + '. The hare cannot capture and moves like a queen, then the piece returns.'],
         assemble: ['Собираете робота на планшете; он появится на свободной клетке ваших первых двух горизонталей. Двойной клик по роботу покажет, как он ходит.',
             'You build a robot on the tablet; it appears on a free square of your first two ranks. Double-click a robot to see how it moves.'],
         charger: ['Плитка-зарядка: вставшая обычная фигура (не король) оглушается и пропускает ход. Первый вставший робот получает заряд на один бесплатный ход (без шаха и рубки), после чего плитка для роботов разряжена.',
@@ -6787,17 +6785,17 @@ Object.assign(EN, {
         reprogram: ['Тратит ход. Перестраивает робота или радиус турели на планшете. Новые клетки и направления увеличивают перезарядку, убранные уменьшают (ниже базовой не опускается).',
             'Uses your move. Rebuilds a robot or a turret\'s radius on the tablet. New squares and directions raise the cooldown, removed ones lower it (never below the base).'],
         freeze: ['Любая фигура (кроме короля) на ' + C.freezeTurns + ' ' + pl(C.freezeTurns) + ' не ходит, её нельзя срубить, и магия на неё не действует.',
-        'Any piece (except a king) cannot move for ' + C.freezeTurns + ' ' + en(C.freezeTurns) + ', cannot be captured, and magic does not affect it.'],
+            'Any piece (except a king) cannot move for ' + C.freezeTurns + ' ' + en(C.freezeTurns) + ', cannot be captured, and magic does not affect it.'],
         jaws: ['Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт ' + C.jawsTurns + ' ваших ходов.',
-        'A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for ' + C.jawsTurns + ' of your turns.'],
+            'A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for ' + C.jawsTurns + ' of your turns.'],
         blunder: ['Тайный колпак на вашей фигуре: ' + C.capTurns + ' ' + pl(C.capTurns) + ' врага она не рубит и не даёт шах. Срубивший её погибает.',
-        'A secret hat on your piece: for ' + C.capTurns + ' enemy ' + en(C.capTurns) + ' it cannot capture or give check. Whoever captures it dies.'],
+            'A secret hat on your piece: for ' + C.capTurns + ' enemy ' + en(C.capTurns) + ' it cannot capture or give check. Whoever captures it dies.'],
         prediction: ['Фигура (не король) получает предсказание: если ею не походят за ваши ' + C.predTurns + ' следующих ' + pl(C.predTurns) + ', она погибнет на ходе врага. Видно предсказание, но не видно, настоящее ли оно. Перезарядка скрыта. Ход не тратится.',
-        'A piece (not a king) gets a prediction: if it is not moved during your next ' + C.predTurns + ' ' + en(C.predTurns) + ', it dies on the enemy\'s turn. The prediction is visible, but whether it is real is not. The cooldown is hidden. Does not use your move.'],
+            'A piece (not a king) gets a prediction: if it is not moved during your next ' + C.predTurns + ' ' + en(C.predTurns) + ', it dies on the enemy\'s turn. The prediction is visible, but whether it is real is not. The cooldown is hidden. Does not use your move.'],
         charlatan: ['Фальшивое предсказание: выглядит как настоящее, но в конце ничего не происходит. Перезарядка скрыта. Ход не тратится.',
             'A fake prediction: it looks like a real one, but nothing happens at the end. The cooldown is hidden. Does not use your move.'],
         unlucky: ['Невидимая для врага ловушка на ' + C.unluckyTurns + ' ' + pl(C.unluckyTurns) + ' врага: вставшая на неё фигура получает настоящее предсказание. Если враг наступил в первые ' + C.omenRefreshTurns + ' ' + pl(C.omenRefreshTurns) + ', способность перезаряжается. Перезарядка скрыта. Ход не тратится.',
-        'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. If the enemy steps on it during its first ' + C.omenRefreshTurns + ' ' + en(C.omenRefreshTurns) + ', the ability is recharged. The cooldown is hidden. Does not use your move.'],
+            'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. If the enemy steps on it during its first ' + C.omenRefreshTurns + ' ' + en(C.omenRefreshTurns) + ', the ability is recharged. The cooldown is hidden. Does not use your move.'],
         badomen: ['То же, что Невезучий ход, но предсказание фальшивое и перезаряжается своя способность. Перезарядка скрыта. Ход не тратится.',
             'The same as Unlucky Move, but the prediction is fake and this ability is the one recharged. The cooldown is hidden. Does not use your move.']
     };
@@ -11149,6 +11147,18 @@ function botNega(b, side, depth, alpha, beta, dl) {
     }
     return best;
 }
+// Штраф за ход в зону мгновенной турели врага: фигура, которая входит в радиус извне, погибает сразу
+function botTurretPenalty(mv, piece, side) {
+    const vb = BOT.view || G.board;
+    let pen = 0;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const t = vb[r][c];
+        if (!t || t.t !== 'u' || !t.tur || t.c === side || t.tur.kind !== 'instant') continue;
+        const inRange = (rr, cc) => t.tur.cells.some(([dr, dc]) => r + dr === rr && c + dc === cc);
+        if (inRange(mv.tr, mv.tc) && !inRange(mv.fr, mv.fc)) pen = Math.max(pen, botVal(piece) + 0.5);
+    }
+    return pen;
+}
 // Оценка хода mv для стороны side (по умолчанию бот): чем больше, тем лучше
 function botScoreMove(mv, lv, side) {
     side = side || BOT.side;
@@ -11156,12 +11166,20 @@ function botScoreMove(mv, lv, side) {
     const piece = G.board[mv.fr][mv.fc];
     const nb = cloneBoard(BOT.view || G.board);
     const res = applyMove(nb, mv, 'q');
-    let score = 0;
+    let score = 0, discharge = 0;
+    if (G.gens && G.gens.length) {      // плитки короткого замыкания: ход может запустить разряд
+        const mat = bb => { let q = 0; bb.forEach(row => row.forEach(x => { if (x && x.t !== 'k') q += (x.c === side ? 1 : -1) * botVal(x); })); return q; };
+        const before = mat(nb);
+        gensDischargeOnBoard(nb);
+        discharge = mat(nb) - before;
+        if (!findKing(nb, side)) discharge -= 1000; else if (!findKing(nb, opp)) discharge += 1000;
+    }
     if (lv.depth >= 3) {
         const dl = performance.now() + 1800;      // на один ход отводим не больше пары секунд
         score = -botNega(nb, opp, lv.depth - 1, -1e9, 1e9, dl);
     } else {
         res.dead.forEach(d => { score += d.c === opp ? botVal(d) : -botVal(d); });
+        score += discharge;      // разряд плиток замыкания
         let worst = 0, replies = 0;
         for (let r = 0; r < N && lv.depth >= 2; r++) for (let c = 0; c < N; c++) {
             const q = nb[r][c];
@@ -11182,7 +11200,7 @@ function botScoreMove(mv, lv, side) {
     if (piece.t === 'k') score += mv.castle ? 0.7 : -0.35;
     if (piece.t === 'q' && !piece.moved && (G.done ? G.done[side] : 0) < 4) score -= 0.25;      // ферзём в самом начале лучше не бегать
     if (!safeAfter(nb, opp)) score += 0.4;      // шах
-    if (side === BOT.side) score -= botHiddenLoss(nb, side);      // невидимка врага может ударить
+    if (side === BOT.side) score -= botHiddenLoss(nb, side) + botTurretPenalty(mv, piece, side);      // невидимка врага может ударить; турель врага убивает входящих
     if (side === BOT.side && BOT.lieAt && mv.tr === BOT.lieAt[0] && mv.tc === BOT.lieAt[1]) { const cap = res.dead.find(d => d.c !== side); if (cap) score -= BOT.lieProb * botVal(cap); }      // вдруг рубим приманку
     return score + Math.random() * lv.noise;
 }
@@ -11250,6 +11268,75 @@ function botStepScore(ctx, r, c) {
 }
 function botMyPreds() { let n = 0; G.board.forEach(row => row.forEach(p => { if (p && p.preds && p.preds.some(x => x.by === BOT.side)) n++; })); return n; }
 
+// Лучшая рубка стороны side на доске b (с учётом порталов и конвейеров, которые сейчас в игре): выигрыш материала за вычетом ответной потери
+function botCapGain(b, side) {
+    const opp = other(side);
+    let best = 0;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const p = b[r][c];
+        if (!p || p.c !== side || p.ghost) continue;
+        pseudoMoves(b, r, c).forEach(m => {
+            const t = b[m.tr][m.tc];
+            if (!t || t.c !== opp || t.t === 'k') return;
+            best = Math.max(best, botVal(t) - (isAttacked(b, m.tr, m.tc, opp) ? botVal(p) : 0));
+        });
+    }
+    return best;
+}
+// Что даёт фигура p, если встанет на (r,c): лучшая рубка, шах королю, вилка. Исходную клетку фигуры снимаем с доски заранее
+function botThreatAt(b, r, c, p) {
+    const opp = other(p.c);
+    const nb = cloneBoard(b);
+    nb[r][c] = p;
+    let gain = 0, forks = 0, check = false;
+    pseudoMoves(nb, r, c).forEach(m => {
+        const t = nb[m.tr][m.tc];
+        if (!t || t.c !== opp) return;
+        if (t.t === 'k') { check = true; return; }
+        const g = botVal(t) - (isAttacked(nb, m.tr, m.tc, opp) ? botVal(p) : 0);
+        if (g > 0) { forks++; gain = Math.max(gain, g); }
+    });
+    const hang = isAttacked(nb, r, c, opp) && !isAttacked(nb, r, c, p.c) ? botVal(p) : 0;      // там её просто срубят
+    return gain + (check ? 1.5 : 0) + (forks >= 2 ? 1.5 : 0) - hang;
+}
+// Самые вероятные ходы врага на пустые клетки (по его оценке хода): для конвейеров и плиток замыкания
+function botEnemyTop(ctx, n) {
+    const key = (G.turnNo || 0) + ':' + G.turn + ':' + (G.done ? G.done.w + G.done.b : 0) + ':' + G.log.length;
+    if (BOT.etKey === key && BOT.et) return BOT.et.slice(0, n);
+    const list = [];
+    botMovesOf(ctx.opp).forEach(m => {
+        if (ctx.b[m.tr][m.tc]) return;
+        list.push({ m, s: botScoreMove(m, { depth: 1, noise: 0 }, ctx.opp) });
+    });
+    list.sort((a, b2) => b2.s - a.s);
+    BOT.etKey = key; BOT.et = list;
+    return list.slice(0, n);
+}
+// Оценка расстановки плиток для нас: слабый удар врага, сильный наш, разряд замыкания в нашу пользу или против
+function botTileScore(ctx) {
+    const b = ctx.b, side = ctx.side, opp = ctx.opp;
+    let sc = -botCapGain(b, opp) + 0.7 * botCapGain(b, side);
+    const g = G.gens || [];
+    const occ = (sign, col) => g.filter(x => x.sign === sign && b[x.r][x.c] && !b[x.r][x.c].ghost && b[x.r][x.c].c === col);
+    const free = sign => g.filter(x => x.sign === sign && !b[x.r][x.c]);
+    // риск: враг жертвует фигуру, вставая на свободную плитку противоположного знака, и разряд убивает наши фигуры на плитках
+    ['+', '-'].forEach(have => {
+        const need = have === '+' ? '-' : '+';
+        const mine = occ(have, side);
+        if (!mine.length) return;
+        const loss = mine.reduce((a, x) => a + botVal(b[x.r][x.c]), 0);
+        free(need).forEach(t => ctx.oppMoves.forEach(({ m, e }) => { if (m.tr === t.r && m.tc === t.c) sc -= Math.max(0, loss - botVal(e.p)) * 0.8; }));
+    });
+    // выгода: вражеские фигуры на плитках одного знака, а свободную противоположную плитку наша дешёвая фигура может занять
+    ['+', '-'].forEach(have => {
+        const need = have === '+' ? '-' : '+';
+        const en = occ(have, opp);
+        if (!en.length) return;
+        const gain = en.reduce((a, x) => a + botVal(b[x.r][x.c]), 0);
+        free(need).forEach(t => { if (botMovesOf(side).some(m => m.tr === t.r && m.tc === t.c && !b[m.tr][m.tc] && botVal(b[m.fr][m.fc]) <= 1)) sc += 0.65 * gain; });
+    });
+    return sc;
+}
 // ---------- оценки способностей: возвращают { v, cell, kind } или null ----------
 // kind: 'def' (спасаемся, когда иначе теряем материал), 'off' (нападаем, если выгоднее обычного хода), 'free' (ход не тратится)
 const BOT_EVAL = {
@@ -11589,13 +11676,25 @@ const BOT_EVAL = {
         });
         return best;
     },
-    fukashi(ctx, cells) {      // Фукаши: спрятать от врага свою дорогую фигуру, которой угрожает не пешка
+    fukashi(ctx, cells) {      // Фукаши: спрятать дорогую фигуру под ударом (оборона) или, если всё спокойно и позиция равна, сделать невидимой ключевую агрессивную фигуру
         let best = null;
         ctx.real.forEach(t => {
             const [r, c] = t.to;
             if (botVal(t.tgt) < 3 || t.att.t === 'p' || t.tgt.invis || !botHas(cells, r, c)) return;      // пешка раскроет невидимку
             const v = t.loss * 0.8;
             if (!best || v > best.v) best = { v, cell: [r, c], kind: 'def' };
+        });
+        if (best || ctx.real.some(t => t.loss >= 2)) return best;      // серьёзная угроза: только оборона; мелкие неприятности не мешают
+        let mat = 0;
+        ctx.b.forEach(row => row.forEach(p => { if (p && p.t !== 'k') mat += (p.c === ctx.side ? 1 : -1) * botVal(p); }));
+        if (Math.abs(mat) > 2 || (G.done[ctx.side] || 0) < 5 || ctx.mine.some(m => m.p.invis && m.p.t !== 'k')) return null;      // позиция неравная или уже есть невидимка
+        const fwd = r => (ctx.side === 'w' ? N - 1 - r : r);
+        ctx.mine.forEach(({ r, c, p }) => {
+            if (p.t === 'k' || p.t === 'p' || botVal(p) < 3 || p.invis || !botHas(cells, r, c)) return;
+            let agg = 0;
+            attackSquares(ctx.b, r, c).forEach(([ar, ac]) => { const q = ctx.b[ar][ac]; if (q && q.c === ctx.opp) agg += q.t === 'k' ? 3 : botVal(q) * 0.6; else if (fwd(ar) >= 4) agg += 0.25; });
+            agg += Math.max(0, fwd(r) - 3) * 0.4;      // чем дальше вперёд, тем агрессивнее
+            if (agg >= 3.2 && (!best || agg > best.v)) best = { v: Math.min(agg, 3.2) + 0.1, cell: [r, c], kind: 'off' };
         });
         return best;
     },
@@ -11625,6 +11724,136 @@ const BOT_EVAL = {
                     const v = baseLoss - worst;
                     if (v >= 2 && (!best || v > best.v)) best = { v, cell: [r, c], seq: [[o.m1.tr, o.m1.tc], [m2.tr, m2.tc]], kind: 'def' };
                 });
+            });
+        });
+        return best;
+    },
+    turret(ctx, cells) {      // Инженер: турель мгновенной стрельбы перед собой, пока нет угроз
+        if (ctx.mine.some(m => m.p.t === 'u') || ctx.real.length || (G.done[ctx.side] || 0) < 6 || !cells.length) return null;
+        return { v: 2.7, kind: 'off', special: 'turret' };
+    },
+    conveyor(ctx, cells) {      // Конвейер: ускорить свою пешку, откинуть вражескую, вывести коня или слона на сильную клетку, испортить вражеский ход
+        const side = ctx.side, opp = ctx.opp, b = ctx.b, fwd = side === 'w' ? -1 : 1;
+        const adv = (r, col) => (col === 'w' ? N - 1 - r : r);
+        let best = null;
+        const take = (v, cell, dir) => { if (v >= 2.2 && (!best || v > best.v)) best = { v, cell, second: [cell[0] + dir[0], cell[1] + dir[1]], kind: 'off' }; };
+        // 1) пешки: ускорение своей и отбрасывание вражеской на этой вертикали
+        cells.forEach(([r, c]) => {
+            if (b[r][c]) return;
+            const nr = r + fwd;
+            if (!inb(nr, c)) return;
+            let v = 0;
+            const mine = inb(r - fwd, c) ? b[r - fwd][c] : null;
+            if (mine && mine.c === side && mine.t === 'p' && !b[nr][c]) v += 0.8 + 0.35 * adv(r - fwd, side);
+            const en = b[nr][c];
+            if (en && en.c === opp && en.t === 'p') v += 0.7 + 0.3 * adv(nr, opp);
+            take(v, [r, c], [fwd, 0]);
+        });
+        // 2) конь, слон и другие: встать на конвейер и оказаться на клетке с вилкой, шахом или угрозой, куда обычным ходом не попасть
+        ctx.mine.forEach(({ r, c, p }) => {
+            if (!['n', 'b', 'r', 'q'].includes(p.t)) return;
+            const base = b.map(row => row.slice()); base[r][c] = null;
+            let baseBest = botThreatAt(base, r, c, p);
+            botMovesOf(side).filter(m => m.fr === r && m.fc === c && !b[m.tr][m.tc]).forEach(m => { baseBest = Math.max(baseBest, botThreatAt(base, m.tr, m.tc, p)); });      // чего фигура добьётся и без конвейера
+            botMovesOf(side).filter(m => m.fr === r && m.fc === c && !b[m.tr][m.tc] && botHas(cells, m.tr, m.tc)).forEach(m => {
+                conveyorDirs(m.tr, m.tc, side).forEach(d => {
+                    const fr = m.tr + d[0], fc = m.tc + d[1];
+                    if (!inb(fr, fc) || b[fr][fc]) return;
+                    const gain = botThreatAt(base, fr, fc, p) - baseBest;
+                    take(gain * 0.8, [m.tr, m.tc], d);
+                });
+            });
+        });
+        // 3) испортить вероятный ход врага: на клетке его лучшего хода конвейер уносит фигуру туда, где она бесполезна или под ударом
+        botEnemyTop(ctx, 4).forEach(({ m }) => {
+            const E = b[m.fr][m.fc];
+            if (!E || E.t === 'k' || !botHas(cells, m.tr, m.tc)) return;
+            const base = b.map(row => row.slice()); base[m.fr][m.fc] = null;
+            const atX = botThreatAt(base, m.tr, m.tc, E);
+            conveyorDirs(m.tr, m.tc, side).forEach(d => {
+                const lr = m.tr + d[0], lc = m.tc + d[1];
+                if (!inb(lr, lc) || base[lr][lc]) return;
+                const at = botThreatAt(base, lr, lc, E);      // с учётом того, что там её могут срубить (штраф внутри)
+                take((atX - at) * 0.7, [m.tr, m.tc], d);      // враг увидит плитку и может не идти туда, поэтому не на все 100%
+            });
+        });
+        return best;
+    },
+    portals(ctx, cells) {      // Порталы: одновременно перекрыть удар врага и открыть свой, считая настоящие ходы с порталами
+        const side = ctx.side, b = ctx.b;
+        const empty = cells.filter(([r, c]) => !b[r][c]);
+        if (empty.length < 2) return null;
+        const baseE = botCapGain(b, ctx.opp), baseM = botCapGain(b, side);
+        const A = [];
+        const addA = (r, c) => { if (botHas(empty, r, c) && !A.some(x => x[0] === r && x[1] === c)) A.push([r, c]); };
+        ctx.real.forEach(t => {      // клетки на пути удара по нашей фигуре
+            const dr = Math.sign(t.to[0] - t.from[0]), dc = Math.sign(t.to[1] - t.from[1]);
+            let r = t.from[0] + dr, c = t.from[1] + dc;
+            while ((r !== t.to[0] || c !== t.to[1]) && inb(r, c)) { addA(r, c); r += dr; c += dc; }
+        });
+        ctx.mine.forEach(({ r, c, p }) => {      // первые клетки на лучах наших дальнобойных фигур
+            const dirs = p.t === 'q' ? [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] : p.t === 'r' ? [[1, 0], [-1, 0], [0, 1], [0, -1]] : p.t === 'b' ? [[1, 1], [1, -1], [-1, 1], [-1, -1]] : [];
+            dirs.forEach(([dr, dc]) => { for (let k = 1; k <= 3; k++) { const rr = r + dr * k, cc = c + dc * k; if (!inb(rr, cc) || b[rr][cc]) break; addA(rr, cc); } });
+        });
+        const B = empty.filter(([r, c]) => ctx.theirs.some(e => e.p.t !== 'k' && botVal(e.p) >= 3 && Math.max(Math.abs(e.r - r), Math.abs(e.c - c)) <= 2)).slice(0, 14);
+        if (!A.length || !B.length) return null;
+        const old = G.portals;
+        let best = null;
+        try {
+            A.slice(0, 10).forEach(a => B.forEach(b2 => {
+                if (a[0] === b2[0] && a[1] === b2[1]) return;
+                G.portals = old;      // portalsWith добавляет пару к тому, что уже в G.portals, поэтому каждый раз начинаем с исходных
+                G.portals = portalsWith(side, a, b2, -1);
+                const e2 = botCapGain(b, ctx.opp), m2 = botCapGain(b, side);
+                const v = (baseE - e2) + 0.7 * (m2 - baseM) - 0.3;      // свою угрозу враг успеет парировать, поэтому она весит меньше
+                if (v >= 2.4 && (!best || v > best.v)) best = { v, cell: a, second: b2, kind: 'off' };
+            }));
+        } finally { G.portals = old; }
+        return best;
+    },
+    generator(ctx, cells) {      // Короткое замыкание: добить уже стоящих на плитках или расставить плитки там, куда враг сам захочет пойти
+        const g = G.gens || [];
+        const occ = (sign, col) => g.filter(x => x.sign === sign && ctx.b[x.r][x.c] && !ctx.b[x.r][x.c].ghost && ctx.b[x.r][x.c].c === col);
+        let best = null;
+        // 1) вражеские фигуры уже на плитках одного знака: ставим противоположную там, куда шагнёт наша дешёвая фигура
+        ['+', '-'].forEach(have => {
+            const need = have === '+' ? '-' : '+';
+            const en = occ(have, ctx.opp);
+            if (!en.length || occ(need, ctx.opp).length || occ(need, ctx.side).length || occ(have, ctx.side).length) return;
+            const gain = en.reduce((a, x) => a + botVal(ctx.b[x.r][x.c]), 0);
+            botMovesOf(ctx.side).forEach(m => {
+                const q = ctx.b[m.fr][m.fc];
+                if (ctx.b[m.tr][m.tc] || q.t === 'k' || botVal(q) > 1 || !botHas(cells, m.tr, m.tc)) return;
+                const v = (gain - botVal(q)) * 0.65;
+                if (v >= 2.4 && (!best || v > best.v)) best = { v, X: [m.tr, m.tc], need, mode: 'combo' };
+            });
+        });
+        if (best) {
+            let Y = null, ys = -1;
+            cells.forEach(([r, c]) => { if (ctx.b[r][c] || (r === best.X[0] && c === best.X[1])) return; const sc = botStepScore(ctx, r, c).v + Math.random() * 0.2; if (sc > ys) { ys = sc; Y = [r, c]; } });
+            if (!Y) return null;
+            return { v: best.v, cell: best.need === '+' ? best.X : Y, second: best.need === '+' ? Y : best.X, kind: 'off' };      // первая клетка — плюс, вторая — минус
+        }
+        // 2) расстановка заранее: плитки на клетках двух лучших ходов врага разными фигурами, чтобы ему пришлось встать на обе
+        const top = botEnemyTop(ctx, 8).filter(x => x.s >= 0.8 && botHas(cells, x.m.tr, x.m.tc) && ctx.b[x.m.fr][x.m.fc].t !== 'k');      // только по-настоящему хорошие ходы врага
+        for (let i = 0; i < top.length; i++) for (let k = i + 1; k < top.length; k++) {
+            const A = top[i].m, B2 = top[k].m;
+            if ((A.tr === B2.tr && A.tc === B2.tc) || (A.fr === B2.fr && A.fc === B2.fc)) continue;
+            const v = 0.35 * (botVal(ctx.b[A.fr][A.fc]) + botVal(ctx.b[B2.fr][B2.fc]));
+            if (v >= 2.4 && (!best || v > best.v)) best = { v, A, B2 };
+        }
+        return best ? { v: best.v, cell: [best.A.tr, best.A.tc], second: [best.B2.tr, best.B2.tc], kind: 'off' } : null;      // плюс на лучший ход, минус на второй
+    },
+    relocate(ctx, cells) {      // Перенос плитки: спасти позицию или перенести плитку туда, где она сработает на нас
+        const base = botTileScore(ctx);
+        let best = null;
+        cells.forEach(([r, c]) => {
+            const tiles = cellProps(r, c).tiles;
+            if (!tiles.length || tiles.some(t => !G.gens.includes(t) && !G.portals.includes(t))) return;      // переносим только порталы и плитки замыкания
+            relocateDests(r, c, ctx.side).slice(0, 24).forEach(([dr, dc]) => {
+                let undo = null;
+                try { undo = moveProps([r, c], [dr, dc]); const v = botTileScore(ctx) - base - 0.3; if (v >= 2.2 && (!best || v > best.v)) best = { v, cell: [r, c], second: [dr, dc], kind: 'def' }; }
+                finally { if (undo) undo(); }
             });
         });
         return best;
@@ -11703,6 +11932,26 @@ function botRunSeq(k, a, rest) {
     }
     if (G.mode) { cancelAbilityMode(); return false; }
     return G.turn !== turnBefore || G.cd[side][k] !== cdBefore;
+}
+// Сборка турели мгновенной стрельбы: три клетки впереди (вперёд-влево, вперёд, вперёд-вправо). Враг, вставший в эти клетки, погибает сразу
+function botBuildTurret() {
+    const side = BOT.side, turnBefore = G.turn, cdBefore = G.cd[side].turret;
+    BOT.tried.add('turret');
+    applyInput({ t: 'ab', k: 'turret' });
+    if (!G.mode || G.mode.type !== 'turret') { if (G.mode) cancelAbilityMode(); return false; }
+    const eng = (a, v) => applyInput({ t: 'eng', a, v });
+    eng('pick', 'instant'); eng('next');
+    [[-1, -1], [-1, 0], [-1, 1]].forEach(d => eng('jump', d)); eng('next');
+    if (!G.mode || G.mode.stage !== 'spawn' || !(G.mode.cells || []).length) { cancelAbilityMode(); return false; }
+    let best = null, bs = -1e9;
+    G.mode.cells.forEach(([r, c]) => {
+        const fwd = side === 'w' ? N - 1 - r : r;      // чем дальше вперёд (до третьей горизонтали), тем шире зона перед турелью
+        const sc = -Math.abs(c - 3.5) + Math.min(fwd, 2) * 0.8 + Math.random() * 0.4;
+        if (sc > bs) { bs = sc; best = [r, c]; }
+    });
+    applyInput({ t: 'cell', r: best[0], c: best[1] });
+    if (G.mode) { cancelAbilityMode(); return false; }
+    return G.turn !== turnBefore || G.cd[side].turret !== cdBefore;
 }
 // Способность в два клика: сначала фигура или клетка A, потом B (клетка или функция выбора из допустимых)
 function botRunTwo(k, a, b) {
@@ -11848,6 +12097,47 @@ function botTryLie(best, ctx) {
     if (G.mode) { cancelAbilityMode(); return false; }
     return G.turn !== turnBefore || G.cd[side][k] !== cdBefore;
 }
+// Оценка и применение способностей. chain: Архитектор уже применил способность в этом ходу (ходить фигурой нельзя),
+// поэтому вторая и третья способности ничего не стоят по ходу, и порог выгоды ниже
+function botAbilityPhase(ctx, bestS, chain) {
+    const side = BOT.side, lv = BOT_LEVELS[BOT.level] || BOT_LEVELS[1], hero = HEROES[G.hero[side]];
+    const cands = [];
+    const consider = (k, ev) => { if (ev && !BOT.tried.has(k)) cands.push({ k, ...ev }); };
+    hero.abilities.forEach(k => {
+        if (k === 'resurrect' || k === 'raise') { if (abilityAvailable(side, k)) consider(k, botRevive(k, ctx)); return; }
+        const fn = BOT_EVAL[k];
+        if (!fn || !abilityAvailable(side, k)) return;
+        if (fn === BOT_EVAL.zawarudo) { const plan = botZwPlan(); if (plan.v >= 3 && plan.v >= bestS + 1.5) consider(k, { v: plan.v, kind: 'free', special: 'zwuse' }); return; }
+        consider(k, fn(ctx, botCells(k)));
+    });
+    if (hero.passive === 'openbook' && !chain) consider('openbook', botOpenbook(ctx, lv));
+    cands.sort((a, b2) => b2.v - a.v);
+    for (const cd of cands) {
+        const free = !!(ABILITIES[cd.k] && ABILITIES[cd.k].free) || cd.k === 'openbook';
+        let ok = false;
+        if (!chain) {
+            if ((cd.kind === 'free' || free) && cd.special !== 'zwuse' && !['guardian', 'apocalypse'].includes(cd.k) && (BOT.patience || 0) > 0.65) continue;      // не применяем сразу, как только стало можно
+            if (cd.kind === 'off' && (BOT.patience || 0) > 0.8 && cd.v < 4) continue;
+        }
+        if (cd.kind === 'free' || free) ok = cd.v >= 1.4 || cd.special === 'zwuse';
+        else if (chain) ok = cd.v >= (cd.kind === 'def' ? 1.5 : 1.8);
+        else if (cd.kind === 'def') ok = cd.v >= 2 && bestS <= -0.9 && cd.v >= -bestS * 0.7;
+        else ok = cd.v >= Math.max(2.2, bestS + 1.6);
+        if (!ok) continue;
+        let done = false;
+        if (cd.special === 'tomato') done = botTomato();
+        else if (cd.special === 'revive') done = botDoRevive(cd.k, cd.pick);
+        else if (cd.special === 'assemble') done = botAssemble();
+        else if (cd.special === 'turret') done = botBuildTurret();
+        else if (cd.special === 'openbook') done = botDoOpenbook(cd.cell);
+        else if (cd.special === 'zwuse') { BOT.tried.add(cd.k); applyInput({ t: 'ab', k: cd.k }); done = true; }
+        else if (cd.seq) done = botRunSeq(cd.k, cd.cell, cd.seq);
+        else if (cd.second !== undefined) done = botRunTwo(cd.k, cd.cell, cd.second);
+        else if (cd.cell) done = botRunCell(cd.k, cd.cell);
+        if (done) return true;      // продолжим со следующего шага
+    }
+    return false;
+}
 // ---------- один шаг бота ----------
 function botStep() {
     const side = BOT.side, lv = BOT_LEVELS[BOT.level] || BOT_LEVELS[1];
@@ -11863,7 +12153,10 @@ function botStep() {
         if (cells.length) { const c = cells[(Math.random() * cells.length) | 0]; applyInput({ t: 'cell', r: c[0], c: c[1] }); return; }
     }
     if (G.mode) { cancelAbilityMode(); return; }
-    if (G.archUsed && !G.check && !G.pendingPromo) { applyInput({ t: 'end' }); return; }      // способность без хода уже применена: закончить ход
+    if (G.archUsed && !G.check && !G.pendingPromo) {      // способность без хода уже применена
+        if (BOT_LEVELS[BOT.level] && botAbilityPhase(botCtx(), 0, true)) return;      // Архитектор может применить ещё способности в этот же ход
+        applyInput({ t: 'end' }); return;
+    }
     if (G.pairStep) {      // иллюзия Экстрасенса: нужно сходить второй фигурой пары
         const ps = G.pairStep;
         applyInput({ t: 'cell', r: ps.r, c: ps.c });
@@ -11883,40 +12176,7 @@ function botStep() {
     }
     const { best, score: bestS } = botBestOf(moves, lv, side);
     // способности: считаем выгоду каждой, применяем только когда она заметно лучше обычного хода
-    if (!G.bonus && !G.archUsed && (lv.abil >= 1 || Math.random() < lv.abil)) {
-        const ctx = botCtx();
-        const cands = [];
-        const consider = (k, ev) => { if (ev && !BOT.tried.has(k)) cands.push({ k, ...ev }); };
-        hero.abilities.forEach(k => {
-            if (k === 'resurrect' || k === 'raise') { if (abilityAvailable(side, k)) consider(k, botRevive(k, ctx)); return; }
-            const fn = BOT_EVAL[k];
-            if (!fn || !abilityAvailable(side, k)) return;
-            if (fn === BOT_EVAL.zawarudo) { const plan = botZwPlan(); if (plan.v >= 3 && plan.v >= bestS + 1.5) consider(k, { v: plan.v, kind: 'free', special: 'zwuse' }); return; }
-            consider(k, fn(ctx, botCells(k)));
-        });
-        if (hero.passive === 'openbook') consider('openbook', botOpenbook(ctx, lv));
-        cands.sort((a, b2) => b2.v - a.v);
-        for (const cd of cands) {
-            const free = !!(ABILITIES[cd.k] && ABILITIES[cd.k].free) || cd.k === 'openbook';
-            let ok = false;
-            if ((cd.kind === 'free' || free) && cd.special !== 'zwuse' && !['guardian', 'apocalypse'].includes(cd.k) && (BOT.patience || 0) > 0.65) continue;      // не применяем сразу, как только стало можно
-            if (cd.kind === 'off' && (BOT.patience || 0) > 0.8 && cd.v < 4) continue;
-            if (cd.kind === 'free' || free) ok = cd.v >= 1.4 || cd.special === 'zwuse';
-            else if (cd.kind === 'def') ok = cd.v >= 2 && bestS <= -0.9 && cd.v >= -bestS * 0.7;
-            else ok = cd.v >= Math.max(2.2, bestS + 1.6);
-            if (!ok) continue;
-            let done = false;
-            if (cd.special === 'tomato') done = botTomato();
-            else if (cd.special === 'revive') done = botDoRevive(cd.k, cd.pick);
-            else if (cd.special === 'assemble') done = botAssemble();
-            else if (cd.special === 'openbook') done = botDoOpenbook(cd.cell);
-            else if (cd.special === 'zwuse') { BOT.tried.add(cd.k); applyInput({ t: 'ab', k: cd.k }); done = true; }
-            else if (cd.seq) done = botRunSeq(cd.k, cd.cell, cd.seq);
-            else if (cd.second !== undefined) done = botRunTwo(cd.k, cd.cell, cd.second);
-            else if (cd.cell) done = botRunCell(cd.k, cd.cell);
-            if (done) return;      // продолжим со следующего шага
-        }
-    }
+    if (!G.bonus && !G.archUsed && (lv.abil >= 1 || Math.random() < lv.abil)) { if (botAbilityPhase(botCtx(), bestS, false)) return; }
     // Гипнотизёр: ложный ход вместо обычного (ход тот же, но враг видит иллюзию на другой клетке)
     if (best && !G.bonus && !G.archUsed && hero.abilities.includes('lie') && Math.random() < 0.55 && bestS > -0.5) {
         if (botTryLie(best, botCtx())) return;
