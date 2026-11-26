@@ -526,6 +526,10 @@ Object.assign(ABILITIES, {
     }
 });
 HEROES.fortune = { icon: '👁️', name: 'Гадалка', tag: 'Предсказания и гадания', passive: 'openbook', abilities: ['prediction', 'charlatan', 'unlucky', 'badomen'] };
+// Принцесса: закрытый герой (пока в разработке). В выборе героев и в коллекции видна, но выбрать её нельзя нигде
+PASSIVES.stockholm = { icon: '💞', name: 'Стокгольмский синдром', desc: 'Пока в разработке.' };
+ABILITIES.charm = { icon: '💘', name: 'Очарование', desc: 'Пока в разработке.' };
+HEROES.princess = { icon: '👸', name: 'Принцесса', tag: 'Скоро в игре', passive: 'stockholm', abilities: ['charm'], closed: true };
 // В зеркале Мага настоящая и фальшивая версии выглядят одинаково: название со знаком вопроса и описание настоящей
 // чёрный кот есть не на всех устройствах: если не нарисуется одним значком, берём зеркало
 (function () {
@@ -1597,6 +1601,8 @@ function applyEffects(b, log, forSide) {      // forSide: проверка ша�
         b[a.r][a.c] = pb;
         b[c2.r][c2.c] = pa;
         [pa, pb].forEach(q => { if (q) { q.moved = true; touched.add(q); } });
+        if (pa && pa.t === 'p' && c2.r === (pa.c === 'w' ? 0 : N - 1)) pa.noPromo = true;      // перенос порталом на последнюю горизонталь: пешка не превращается
+        if (pb && pb.t === 'p' && a.r === (pb.c === 'w' ? 0 : N - 1)) pb.noPromo = true;
         if (log) G.fx.push({ r: a.r, c: a.c, type: 'ghost' }, { r: c2.r, c: c2.c, type: 'ghost' });
     });
     // 3. Ход сурка ещё раз: фигура, которую конвейер или портал поставили на ловушку, тоже возвращается
@@ -3300,9 +3306,11 @@ function endTurn() {
 // Пешку, которую конвейер, портал, кожура или люк унесли на последнюю горизонталь, превращаем в ферзя сразу
 function promoteStray() {
     G.board.forEach((row, r) => row.forEach((p, c) => {
-        if (!p || p.t !== 'p' || p.ghost || p.promoPending || r !== (p.c === 'w' ? 0 : N - 1)) return;
-        p.t = 'q';
-        if (!p.invis) { G.fx.push({ r, c, type: 'land' }); addLog('n', `♟ Пешка на ${sqName(r, c)} превращается: ${pieceSym(p)}`); }
+        if (!p || p.t !== 'p' || p.ghost) return;
+        if (r !== (p.c === 'w' ? 0 : N - 1)) { if (p.noPromo) delete p.noPromo; return; }      // ушла с последней горизонтали: метка «не превращать» снимается
+        if (p.noPromo || p.promoPending) return;      // пришла порталом или люком: не превращается (или уже ждёт выбора)
+        p.promoPending = true;      // конвейер, кожура: владелец выберет фигуру в начале своего хода
+        if (!p.invis) { G.fx.push({ r, c, type: 'land' }); addLog('n', `♟ Пешка на ${sqName(r, c)} дошла до края: выбор фигуры в начале хода`); }
     }));
 }
 // После раскрытия ловушки у игрока могло не остаться ходов: тогда мат (или пат) засчитывается сразу
@@ -5130,7 +5138,7 @@ const psFreeDot = pk => ((pk === 'aim' || pk === 'openbook' || (pk === 'timeslow
 /* ---------- Замки героев и магические шары ---------- */
 // Замки работают только в рейтинговых онлайн-партиях. В дружеских комнатах и на одном экране открыты все герои.
 const lockActive = () => !!(NET.on && NET.rated);
-const heroOpen = id => !(HEROES[id] && HEROES[id].dev) && (CONFIG.freeHeroes.includes(id) || UNL.heroes.includes(id));      // герои с пометкой dev в рейтинге закрыты (сервер их пока не знает)
+const heroOpen = id => !(HEROES[id] && (HEROES[id].dev || HEROES[id].closed)) && (CONFIG.freeHeroes.includes(id) || UNL.heroes.includes(id));      // герои с пометкой dev в рейтинге закрыты (сервер их пока не знает)
 
 async function loadUnlocks() {
     if (!SB || !ACC.user) { UNL.orbs = 0; UNL.heroes = []; UNL.items = []; return; }
@@ -5160,6 +5168,7 @@ function showOrbNote(gained) {
 // Открыть героя за шар: подтверждение, запрос в Supabase, анимация замка
 async function tryUnlock(id, card) {
     if (UNL.busy) return;
+    if (HEROES[id] && HEROES[id].closed) { uiAlert(L('Этот герой пока закрыт: он ещё в разработке.', 'This hero is closed for now: it is still in development.')); return; }
     if (HEROES[id] && HEROES[id].dev) { uiAlert(L('Этот герой пока доступен только в дружеских партиях и на одном экране.', 'This hero is only available in friendly games and on one screen for now.')); return; }
     if (!SB || !ACC.user) { uiAlert(L('Нужен вход в аккаунт.', 'Please sign in first.')); return; }
     await loadUnlocks();
@@ -5207,7 +5216,7 @@ function heroesCollHTML() {
     let html = ACC.user
         ? orbBarHTML()
         : `<div class="orb-bar"><div class="orb-sub">${L('Войдите в аккаунт, чтобы получать магические шары и открывать героев. В дружеских партиях и на одном экране доступны все герои.', 'Sign in to earn magic orbs and unlock heroes. In friendly games and on one screen every hero is available.')}</div></div>`;
-    html += `<p class="sub">${L('Открыто для рейтинговых партий', 'Unlocked for rated games')}: <b>${have}/${ids.length}</b></p>`;
+    html += `<p class="sub">${L('Открыто для рейтинговых партий', 'Unlocked for rated games')}: <b>${have}/${ids.filter(i => !HEROES[i].closed).length}</b></p>`;
     html += ids.map(id => {
         const h = HEROES[id], ps = PASSIVES[h.passive], open = collOpen.has(id), locked = !heroOpen(id);
         return `
@@ -5218,7 +5227,7 @@ function heroesCollHTML() {
         <button class="hc-more" type="button">${open ? 'Скрыть ▴' : 'Подробнее ▾'}</button>
         ${open ? `<div class="hc-details"><div class="hc-passive"><b>${ps.icon} Особая сила: ${ps.name}${psFreeDot(h.passive)}</b><br><span>${ps.desc}</span>${cdBadgeHTML(CONFIG.cooldown[h.passive])}</div>
         <ul>${h.abilities.map(k => `<li><b>${ABILITIES[k].icon} ${ABILITIES[k].name}${abFreeDot(k)}</b><br><span>${abilityDesc(k)}</span>${cdBadgeHTML(CONFIG.cooldown[k])}</li>`).join('')}</ul></div>` : ''}
-        ${locked ? `<button class="hc-unlock" type="button">🔓 ${L('Открыть за 1 шар', 'Unlock for 1 orb')}</button>` : ''}
+        ${locked && !h.closed ? `<button class="hc-unlock" type="button">🔓 ${L('Открыть за 1 шар', 'Unlock for 1 orb')}</button>` : ''}
       </div>`;
     }).join('');
     return html;
@@ -5345,7 +5354,7 @@ function buildSetup() {
             return;
         }
         $(`.side-pick[data-side="${side}"] .hero-list`).innerHTML = (lockActive() ? orbBarHTML() : '') + '<button class="rand-hero" type="button">🎲 Случайный герой</button>' + Object.entries(HEROES).map(([id, h]) => {
-            const ps = PASSIVES[h.passive], open = openHeroes.has(id), locked = lockActive() && !heroOpen(id);
+            const ps = PASSIVES[h.passive], open = openHeroes.has(id), locked = (lockActive() && !heroOpen(id)) || !!h.closed;
             return `
       <div class="hero-card ${selectedHeroes[side] === id ? 'chosen' : ''} ${open ? 'open' : ''} ${locked ? 'locked' : ''}" data-hero="${id}">${locked ? '<div class="hero-lock">🔒</div>' : ''}
         <div class="hc-head"><span class="hc-icon">${h.icon}</span>
@@ -5443,7 +5452,7 @@ $('#setup').addEventListener('click', e => {
     if (rb) {
         const sd = rb.closest('.side-pick').dataset.side;
         if (NET.on && (sd !== NET.me || NET.ready)) return;
-        const ids = Object.keys(HEROES).filter(hid => !lockActive() || heroOpen(hid));
+        const ids = Object.keys(HEROES).filter(hid => !HEROES[hid].closed && (!lockActive() || heroOpen(hid)));
         selectedHeroes[sd] = ids[Math.floor(Math.random() * ids.length)];
         buildSetup();
         setTimeout(() => { const ch = document.querySelector(`.side-pick[data-side="${sd}"] .hero-card.chosen`); if (ch) ch.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 50);
@@ -5453,6 +5462,7 @@ $('#setup').addEventListener('click', e => {
     if (!card) return;
     const side = card.closest('.side-pick').dataset.side;
     if (NET.on && (side !== NET.me || NET.ready)) return;   // онлайн: героя выбираете только за себя и до нажатия «Готов»
+    if (HEROES[card.dataset.hero] && HEROES[card.dataset.hero].closed) { uiAlert(L('Этот герой пока закрыт: он ещё в разработке.', 'This hero is closed for now: it is still in development.')); return; }
     if (lockActive() && !heroOpen(card.dataset.hero)) { tryUnlock(card.dataset.hero, card); return; }   // замок: предложить открыть за шар
     selectedHeroes[side] = card.dataset.hero;
     buildSetup();
@@ -6699,6 +6709,15 @@ Object.assign(EN, {
     "перенастроен": "reconfigured"
 });
 
+// Принцесса: английский перевод
+Object.assign(EN, {
+    "Принцесса": "Princess",
+    "Скоро в игре": "Coming soon",
+    "Стокгольмский синдром": "Stockholm Syndrome",
+    "Очарование": "Charm",
+    "Пока в разработке.": "Coming soon."
+});
+
 // Гадалка: английский перевод
 Object.assign(EN, {
     "Гадалка": "Fortune Teller",
@@ -7682,6 +7701,7 @@ function hatchFall(from, to, pp) {
     if (!pp) G.board[from[0]][from[1]] = null;
     G.board[to[0]][to[1]] = p;
     p.prev = [from[0], from[1]];
+    if (p.t === 'p' && to[0] === (p.c === 'w' ? 0 : N - 1)) p.noPromo = true;      // вылезла из люка на последнюю горизонталь: не превращается
     G.fx.push({ r: to[0], c: to[1], type: 'ghost' });
     const hid = p.invis || fogAt(from[0], from[1]) || fogAt(to[0], to[1]);
     if (!hid) { queueAnim({ k: 'hatch', from: [from[0], from[1]], to: [to[0], to[1]] }); sfx('poof'); }      // в тумане ни анимации, ни звука
@@ -7929,10 +7949,9 @@ function revertHare(r, c, p) {
     const edge = p.t === 'p' && r === (p.c === 'w' ? 0 : N - 1);      // пешка оказалась на последней горизонтали: превращается сразу, как только заяц исчез
     G.fx.push({ r, c, type: 'poof' });
     addLog('n', p.invis ? '🐇 Заяц снова становится фигурой' : `🐇 Заяц на ${sqName(r, c)} снова становится фигурой: ${pieceSym(p)}${note}`);
-    if (edge) {
-        p.t = 'q';
-        delete p.promoPending;
-        if (!p.invis) { G.fx.push({ r, c, type: 'land' }); addLog('n', `♟ Пешка на ${sqName(r, c)} превращается: ${pieceSym(p)}`); }
+    if (edge && !p.noPromo) {
+        p.promoPending = true;      // выбор фигуры в начале хода владельца
+        if (!p.invis) { G.fx.push({ r, c, type: 'land' }); addLog('n', `♟ Пешка на ${sqName(r, c)} дошла до края: выбор фигуры в начале хода`); }
     }
 }
 
@@ -9322,7 +9341,7 @@ function avaNode(avatar) {
 }
 const ACH = { beta: { name: 'Бета-тестер', desc: 'Участвовал в бета-тестировании SpellsChess', img: 'achievements/beta.png' } };
 const heroLabel = id => (HEROES[id] ? HEROES[id].icon + ' ' + HEROES[id].name : '—');
-const AVATARS = [...new Set([...Object.values(HEROES).map(h => h.icon), '😎', '😀', '😈', '🤖', '👽', '👻', '💀', '🤡', '🦊', '🐺', '🦁', '🐯', '🐼', '🐸', '🐵', '🦉', '🦅', '🐙', '🦇', '🐉', '🐲', '🦄', '🧙', '🧛', '🧟', '🥷', '🧝', '🧞', '🎭', '🎩', '👑', '🎲', '♟️', '🏆', '💎', '🔮', '🪄', '🗡️', '🛡️', '🏹', '🔥', '❄️', '⚡', '🌙', '☀️', '🌈', '🍀', '🍕', '🍩', '🚀', '🛸', '🎯', '🧿'])];
+const AVATARS = [...new Set([...Object.values(HEROES).filter(h => !h.closed).map(h => h.icon), '😎', '😀', '😈', '🤖', '👽', '👻', '💀', '🤡', '🦊', '🐺', '🦁', '🐯', '🐼', '🐸', '🐵', '🦉', '🦅', '🐙', '🦇', '🐉', '🐲', '🦄', '🧙', '🧛', '🧟', '🥷', '🧝', '🧞', '🎭', '🎩', '👑', '🎲', '♟️', '🏆', '💎', '🔮', '🪄', '🗡️', '🛡️', '🏹', '🔥', '❄️', '⚡', '🌙', '☀️', '🌈', '🍀', '🍕', '🍩', '🚀', '🛸', '🎯', '🧿'])];
 
 async function openProfile(uid, selMode) {
     if (!SB || !/^[0-9a-f-]{36}$/i.test(uid || '')) return;
@@ -12349,7 +12368,7 @@ SFX.zawarudo = () => {
     if (!CONFIG.sound) return;
     try {
         zwAudio = zwAudio || new Audio(ZW_SOUND);
-        zwAudio.volume = 0.9;
+        zwAudio.volume = 0.45;
         zwAudio.currentTime = 0;
         const pr = zwAudio.play();
         if (pr && pr.catch) pr.catch(() => { /* браузер не разрешил звук до первого нажатия */ });
