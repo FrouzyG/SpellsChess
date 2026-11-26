@@ -31,23 +31,23 @@ const DONATE_URL = 'https://boosty.to/frouzyg';
 const CONFIG = {
     // Перезарядка способностей (в ходах владельца)
     cooldown: {
-        resurrect: 11, shield: 5, rescue: 9,         // Паладин
+        resurrect: 12, shield: 5, rescue: 9,         // Паладин
         fireball: 8, freeze: 7, copy: 15,            // Маг
         illusion: 7, hypnosis: 8, confusion: 7,      // Экстрасенс
-        raise: 8, frankenstein: 1, apocalypse: 8,    // Некромант
+        raise: 9, frankenstein: 1, apocalypse: 12,    // Некромант
         trap: 4, arrow: 4, lure: 7,                  // Охотник
         aim: 3,                                      // пассивка Охотника «Меткий глаз»
-        conveyor: 5, portals: 8, relocate: 2,        // Архитектор
+        conveyor: 5, portals: 8, relocate: 3,        // Архитектор
         shomen: 9, fukashi: 7, fenyan: 6,            // Самурай
         teleport: 10,                                // пассивка Самурая «Кагэватари»
-        phase: 4, soulmates: 7, scream: 6,           // Призрак
-        zawarudo: 12, misclick: 12, superposition: 6,  // Повелитель времени
-        groundhog: 7,                                // Ход сурка
+        phase: 4, soulmates: 7, scream: 8,           // Призрак
+        zawarudo: 13, misclick: 15, superposition: 6,  // Повелитель времени
+        groundhog: 10,                               // Ход сурка
         timeslow: 5,                                 // пассивка Повелителя времени
         guardian: 9, purify: 9, lie: 9, virus: 8,  // новые способности
         vine: 5, ritual: 4, bumpuku: 3, generator: 7,
-        blunder: 7, banana: 7, jaws: 8, tomato: 4,       // Шут
-        fog: 5, hatch: 4, hocus: 9, assistant: 6,        // Фокусник
+        blunder: 8, banana: 8, jaws: 8, tomato: 4,       // Шут
+        fog: 5, hatch: 6, hocus: 9, assistant: 7,        // Фокусник
         openbook: 2, prediction: 5, charlatan: 2, unlucky: 4, badomen: 2,   // Гадалка
         assemble: 3, charger: 7, turret: 5, reprogram: 4  // Инженер (сборка робота: 3 + надбавки за выбранные улучшения)
     },
@@ -64,6 +64,7 @@ const CONFIG = {
     capTurns: 4,             // Шут: сколько ходов ВРАГА держится шутовской колпак (колпак держится на 1 меньше)
     jawsTurns: 5,            // Шут: сколько своих ходов живут заводные челюсти
     fogTurns: 5,             // Фокусник: сколько ходов владельца держится дым
+    harvestCooldown: 5,      // Некромант: после Жатвы (рубка своей пешки с доп. ходом) она недоступна столько своих ходов
     sawingCooldown: 4,       // Фокусник: на сколько своих ходов пассивка «Распиливание» отключается у ВСЕХ фигур после прохода через край доски
     hareTurns: 3,            // Фокусник: на сколько своих ходов фигура становится зайцем
     tomatoTurns: 5,          // Шут: сколько ходов ВРАГА способность остаётся отключённой
@@ -1153,7 +1154,7 @@ function pseudoMoves(b, r, c) {
     const p = b[r][c], mv = [], seen = new Set();
     if (!p || p.frozen > 0 || p.snared > 0 || p.t === 'u') return mv;      // турель не ходит
     const ghost = !!p.ghost;                                   // иллюзия ходит, но никого не рубит
-    const harvest = !ghost && !p.orig && G.hero[p.c] === 'necromancer';   // Жатва: рубит свои пешки
+    const harvest = !ghost && !p.orig && G.hero[p.c] === 'necromancer' && !(G.cd && G.cd[p.c] && G.cd[p.c].harvest > 0);   // Жатва: рубит свои пешки (если не на перезарядке)
     const add = (tr, tc, extra = {}) => {
         if (wallAt(tr, tc)) return;
         const k = tr + ',' + tc + (extra.castle ? 'c' : '') + (extra.ep ? 'e' : '') + (extra.double ? 'd' : '');
@@ -2628,7 +2629,8 @@ function abilityCellsRaw(key, col, t, first) {
     } else if (key === 'unlucky' || key === 'badomen') {
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);
-        }    } else if (key === 'trap') {
+        }
+    } else if (key === 'trap') {
         if (!safeNow) return [];
         for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
             if (!b[r][c] || hiddenUnknown(b[r][c], r, c, col) || probeCell(r, c, col)) cells.push([r, c]);      // чужая скрытая ловушка не мешает: новая ляжет поверх
@@ -3258,6 +3260,7 @@ function endTurn() {
         sweepBananas(); sweepBurn(); sweepTraps(); sweepOmens(); sweepChargers(); sweepVirus(); sweepVines(); sweepLures(); sweepSharp(true);
     }
     applyEffects(G.board, true);
+    promoteStray();
     sweepBananas();
     sweepBurn();
     sweepTraps(); sweepOmens();
@@ -3267,6 +3270,7 @@ function endTurn() {
     sweepLures();
     sweepSharp();
     sweepGens();
+    promoteStray();
     turretScan();      // турели Инженера: мгновенные убивают врагов в радиусе, артиллерия наводится на новых
     if (G.omens && G.omens.length) { G.omens.forEach(o => { if (o.owner !== c) o.left--; }); G.omens = G.omens.filter(o => o.left > 0); }      // ловушки Гадалки живут столько ходов врага
     G.vines.forEach(v => { if (v.owner === c) v.left--; });
@@ -3293,6 +3297,14 @@ function endTurn() {
     startTurn();
 }
 
+// Пешку, которую конвейер, портал, кожура или люк унесли на последнюю горизонталь, превращаем в ферзя сразу
+function promoteStray() {
+    G.board.forEach((row, r) => row.forEach((p, c) => {
+        if (!p || p.t !== 'p' || p.ghost || p.promoPending || r !== (p.c === 'w' ? 0 : N - 1)) return;
+        p.t = 'q';
+        if (!p.invis) { G.fx.push({ r, c, type: 'land' }); addLog('n', `♟ Пешка на ${sqName(r, c)} превращается: ${pieceSym(p)}`); }
+    }));
+}
 // После раскрытия ловушки у игрока могло не остаться ходов: тогда мат (или пат) засчитывается сразу
 function afterTrapReveal() {
     const c = G.turn;
@@ -3475,7 +3487,7 @@ function executeMove(mv, promo, ctx) {
         sfx(kgBs.length ? 'illusion' : (cap || own ? 'capture' : 'move'));
     }
 
-    const harvest = !!(own && own.t === 'p' && !res.thorn && !res.burned && !extra && G.hero[col] === 'necromancer');
+    const harvest = !!(own && own.t === 'p' && !res.thorn && !res.burned && !extra && G.hero[col] === 'necromancer' && !(G.cd[col].harvest > 0));
     if (harvest) text += ' 🌾';
 
     G.ep = (mv.double && !wasGhost) ? { r: (mv.fr + mv.tr) / 2, c: mv.fc, pr: mv.tr, pc: mv.tc } : null;
@@ -3549,6 +3561,7 @@ function executeMove(mv, promo, ctx) {
 
         // Жатва: срубили свою пешку
         if (harvest) {
+            G.cd[col].harvest = CONFIG.harvestCooldown;      // после срабатывания Жатва уходит на перезарядку, как Распиливание
             sfx('harvest');
             if (kingAttacked(b, other(col))) {
                 Object.keys(G.cd[col]).forEach(k => { if (G.cd[col][k] > 0) G.cd[col][k]--; });
@@ -3680,7 +3693,7 @@ function finishAbility(key, text) {
     G.cd[col][cdKey] = cdOf(col, cdKey);
     G.lastAb[col] = key;
     addLog(col, text);
-    if (G.screamed && key !== 'scream') { G.screamed = false; G.archUsed = false; }      // обязательная способность после Скримера применена: дальше как обычно
+    if (G.screamed && key !== 'scream') { G.screamed = false; G.archUsed = false; G.ep = null; endTurn(); return; }      // после Скримера любая способность, даже бесплатная (Ритуал), заканчивает ход
     if (key === 'fenyan' || key === 'ritual' || key === 'bumpuku' || key === 'fog' || key === 'guardian' || key === 'virus' || FORTUNE_KEYS.includes(key)) { continueTurn(); return; }   // свободное действие: после него обычный ход
     G.ep = null;
     if (key === 'scream' && G.hero[col] !== 'architect') {      // после Скримера обязательно нужна другая способность; ходить фигурой нельзя, нет способностей: ход пропускается
@@ -3788,7 +3801,8 @@ function useAbility(key, r, c, ref) {
         const life = key === 'unlucky' ? CONFIG.unluckyTurns : CONFIG.omenTurns;
         G.omens.push({ r, c, owner: col, left: life, total: life, key, real: key === 'unlucky' });
         text = '👁 Ловушка Гадалки установлена (место скрыто)';
-        sfx('trap');    } else if (key === 'trap') {
+        sfx('trap');
+    } else if (key === 'trap') {
         G.traps = G.traps.filter(x => !(x.r === r && x.c === c));      // одинаковые ловушки: действует та, что поставлена последней
         G.traps.push({ r, c, owner: col });
         text = `${A.icon} ${A.name}: капкан установлен (место скрыто)`;
@@ -4124,7 +4138,7 @@ function instantAbility(k, via) {
         G.lastAb[col] = k;
         G.bonus = { kind: 'zw', step: 1 };
         abilityBanner('zawarudo');
-        sfx('rewind');
+        sfx('zawarudo');      // голос из видео
         addLog(col, `${ABILITIES.zawarudo.icon} ZA WARUDO! Время остановлено: два хода подряд, первым нельзя ни шаховать, ни рубить`);
         continueTurn();
     } else if (k === 'misclick') {
@@ -4885,7 +4899,7 @@ function panelHTML(col) {
     let h = `<div class="panel-head"><span class="hero-icon">${hero.icon}</span>
     <div><div class="pname">${colorName(col)}</div><div class="hname">${hero.name}</div>${panelNick(col)}${rematchBadge(col)}</div>
     ${isTurn ? '<span class="turn-dot">ход</span>' : ''}${clockHTML(col)}${hero.plain ? '' : '<button class="pn-info" data-info title="Описание способностей">i</button>'}</div>`;
-    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Особая сила: <b>${ps.name}</b>${hero.passive === 'eureka' && !eurekaReady(col) ? ' (' + L('КД ', 'CD ') + eurekaLeft(col) + ')' : ''}</div>${hero.passive === 'openbook' && NET.on && col === NET.me ? `<button class="peek-toggle${PEEK_ON ? ' on' : ''}" data-peek title="Показывать ли вам, как враг выбирает фигуры и способности">👁 Намерения врага: ${PEEK_ON ? 'вкл' : 'выкл'}</button>` : ''}<div class="abilities">`;
+    h += hero.plain ? '<div class="abilities">' : `<div class="passive" title="${ps.desc}"><span>${ps.icon}</span> Особая сила: <b>${ps.name}</b>${hero.passive === 'eureka' ? '<i class="free-dot" title="Не тратит ход"></i>' : ''}${hero.passive === 'eureka' && !eurekaReady(col) ? ' (' + L('КД ', 'CD ') + eurekaLeft(col) + ')' : ''}</div>${hero.passive === 'openbook' && NET.on && col === NET.me ? `<button class="peek-toggle${PEEK_ON ? ' on' : ''}" data-peek title="Показывать ли вам, как враг выбирает фигуры и способности">👁 Намерения врага: ${PEEK_ON ? 'вкл' : 'выкл'}</button>` : ''}<div class="abilities">`;
 
     const slowMode = !G.over && G.mode && G.mode.type === 'timeslow' && col !== G.turn && isActor();
     const tomMode = !G.over && G.mode && G.mode.type === 'tomato' && col !== G.turn && isActor();
@@ -4939,6 +4953,10 @@ function panelHTML(col) {
     }
     if (hero.passive === 'sawing') {      // пассивка Фокусника: просто показывает перезарядку
         const scd = G.cd[col].sawing | 0;
+        h += `<button class="ab passive-btn" disabled title="${ps.desc}"><span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}</span><span class="ab-cd">${scd > 0 ? '' : 'готово'}</span>${scd > 0 ? `<span class="cd-badge">⏳${scd}</span>` : ''}</button>`;
+    }
+    if (hero.passive === 'harvest') {      // пассивка Некроманта: просто показывает перезарядку
+        const scd = G.cd[col].harvest | 0;
         h += `<button class="ab passive-btn" disabled title="${ps.desc}"><span class="ab-icon">${ps.icon}</span><span class="ab-name">${ps.name}</span><span class="ab-cd">${scd > 0 ? '' : 'готово'}</span>${scd > 0 ? `<span class="cd-badge">⏳${scd}</span>` : ''}</button>`;
     }
     h += '</div>';
@@ -5053,7 +5071,7 @@ function renderStatus() {
     } else if (G.sel && G.board[G.sel.r][G.sel.c] && G.board[G.sel.r][G.sel.c].betray === G.turn && G.board[G.sel.r][G.sel.c].c !== G.turn) {
         h = '🃏 Нажмите на фигуру ещё раз: она навсегда перейдёт на вашу сторону. Это тратит ход.';
     } else if (G.archUsed && G.screamed) {
-        h = '😱 Скример применён: теперь нужно применить другую способность, ходить фигурой нельзя.';
+        h = '😱 Скример применён: теперь нужно применить другую способность (она закончит ход), ходить фигурой нельзя.';
     } else if (G.archUsed) {
         h = '🧰 Ходить фигурой уже нельзя: можно применить ещё способность или нажать «Завершить ход».';
     } else if (G.bonus) {
@@ -6735,21 +6753,21 @@ Object.assign(EN, {
         doubleVision: ['Король, ушедший из-под шаха, оставляет иллюзию на другой клетке, куда мог уйти. Дальше она ходит вместе с королём.',
             'A king that escapes check leaves an illusion on another square it could have gone to. It then moves together with the king.'],
         timeslow: ['Кнопка или второй клик по королю, затем способность врага: её перезарядка +2 сейчас и +1 до конца партии, у остальных перезаряжающихся +1 сейчас. ' + (C.timePassiveCostsTurn ? 'Тратит ход.' : 'Ход не тратится.'),
-            'A button or a second click on the king, then an enemy ability: its cooldown +2 now and +1 for the rest of the game, other abilities on cooldown +1 now. ' + (C.timePassiveCostsTurn ? 'Uses your move.' : 'Does not use your move.')],
+        'A button or a second click on the king, then an enemy ability: its cooldown +2 now and +1 for the rest of the game, other abilities on cooldown +1 now. ' + (C.timePassiveCostsTurn ? 'Uses your move.' : 'Does not use your move.')],
         pretense: ['Тайно выберите вражеского слона или коня. После ' + C.betrayAfter + '-го хода врага можно потратить ход, и она навсегда перейдёт к вам.',
-            'Secretly choose an enemy bishop or knight. After the enemy\'s ' + ord(C.betrayAfter) + ' move you can spend a move and it becomes yours for good.'],
+        'Secretly choose an enemy bishop or knight. After the enemy\'s ' + ord(C.betrayAfter) + ' move you can spend a move and it becomes yours for good.'],
         sawing: ['Левый и правый край доски соединены для ваших фигур (кроме короля). После прохода сквозь край пассивка отключается у всех ваших фигур на ' + C.sawingCooldown + ' ' + pl(C.sawingCooldown) + '.',
-            'The left and right edges of the board are connected for your pieces (except the king). After a piece passes through an edge, the passive is disabled for all your pieces for ' + C.sawingCooldown + ' ' + en(C.sawingCooldown) + '.'],
+        'The left and right edges of the board are connected for your pieces (except the king). After a piece passes through an edge, the passive is disabled for all your pieces for ' + C.sawingCooldown + ' ' + en(C.sawingCooldown) + '.'],
         eureka: ['Можно обнулить перезарядку любой своей способности: нажмите на неё и подтвердите. Сама Эврика перезаряжается 30 ходов.',
             'You can reset the cooldown of any of your abilities: press it and confirm. Eureka itself then recharges for 30 turns.'],
         openbook: ['Видно, как враг выбирает фигуры и способности (цель не видно). Раз в ' + C.cooldown.openbook + ' хода тайно выберите фигуру, которой враг, по-вашему, походит дальше: угадали, и перезарядка ваших способностей −1. Ход не тратится.',
-            'You see how the enemy picks pieces and abilities (not the target). Once every ' + C.cooldown.openbook + ' turns, secretly choose the piece you think the enemy will move next: if you are right, all your cooldowns drop by 1. Does not use your move.'],
+        'You see how the enemy picks pieces and abilities (not the target). Once every ' + C.cooldown.openbook + ' turns, secretly choose the piece you think the enemy will move next: if you are right, all your cooldowns drop by 1. Does not use your move.'],
         illusion: ['Создаёт двойника фигуры: они ходят только вместе, двойник не рубит. Рассеивается при шахе, при угрозе вражеской пешки, а также если враг пройдёт сквозь двойника или встанет на его клетку.',
             'Creates a double of a piece: they move only together, and the double cannot capture. It dissolves on check, when an enemy pawn threatens it, or when an enemy passes through it or steps on its square.'],
         raise: ['Поднимает фигуру из любого сброса как зомби на вашей первой горизонтали (пешку на любую из первых четырёх). Зомби обязаны рубить, если могут.',
             'Raises a piece from either graveyard as a zombie on your first rank (a pawn on any of the first four). Zombies must capture if they can.'],
-        scream: ['Вражеская фигура (не король) ходит только на 1 клетку (конь как слон, пешка без рубки). Страх спадает после её хода, у пешки через ' + C.scaredPawnTurns + ' ' + pl(C.scaredPawnTurns) + '. Затем нужно применить другую способность.',
-            'An enemy piece (not a king) can move only 1 square (a knight like a bishop, a pawn cannot capture). The fear fades after its move, for a pawn after ' + C.scaredPawnTurns + ' ' + en(C.scaredPawnTurns) + '. Then you must use another ability.'],
+        scream: ['Вражеская фигура (не король) ходит только на 1 клетку (конь как слон, пешка без рубки). Страх спадает после её хода, у пешки через ' + C.scaredPawnTurns + ' ' + pl(C.scaredPawnTurns) + '. Затем нужно применить другую способность, и она закончит ход.',
+        'An enemy piece (not a king) can move only 1 square (a knight like a bishop, a pawn cannot capture). The fear fades after its move, for a pawn after ' + C.scaredPawnTurns + ' ' + en(C.scaredPawnTurns) + '. Then you must use another ability, and it ends your turn.'],
         fukashi: ['Невидима для врага, но блокирует ходы. Раскрывается, если рубит, даёт шах, ей грозит пешка или враг упирается в неё (ход врага не тратится).',
             'Invisible to the enemy, but it blocks moves. It is revealed when it captures, gives check, is threatened by a pawn, or the enemy runs into it (the enemy\'s move is not used).'],
         portals: ['Две связанные плитки: вставшая на портал фигура переносится на второй, а ход через портал продолжается из второго. Одновременно действуют две пары.',
@@ -6757,9 +6775,11 @@ Object.assign(EN, {
         ritual: ['Призрачная плитка: стоящая на ней фигура (своя или вражеская) прозрачна для ваших фигур: сквозь неё можно проходить и можно её рубить.',
             'A ghost tile: a piece standing on it (yours or the enemy\'s) is transparent to your pieces: they can pass through it and capture it.'],
         bumpuku: ['Бомба на союзной фигуре (не короле): на вашем ' + C.bumpukuTurns + '-м ходе после применения убивает всех в 3×3. Если фигуру срубят, бомба не взрывается. Ход не тратится.',
-            'A bomb on an allied piece (not the king): on your ' + ord(C.bumpukuTurns) + ' turn after use it kills everything in 3×3. If the piece is captured, the bomb does not explode. Does not use your move.'],
+        'A bomb on an allied piece (not the king): on your ' + ord(C.bumpukuTurns) + ' turn after use it kills everything in 3×3. If the piece is captured, the bomb does not explode. Does not use your move.'],
+        harvest: ['Можно рубить свои пешки: это даёт дополнительный ход (при шахе доп. хода нет, зато перезарядка способностей −1). После срабатывания Жатва уходит на перезарядку ' + C.harvestCooldown + ' ' + pl(C.harvestCooldown) + '.',
+        'You can capture your own pawns: it gives an extra move (with check there is no extra move, but ability cooldowns drop by 1). After it triggers, Harvest goes on cooldown for ' + C.harvestCooldown + ' ' + en(C.harvestCooldown) + '.'],
         trap: ['Невидимый капкан: вставшая на него фигура (не король) пропускает следующие ' + C.trapTurns + ' ' + pl(C.trapTurns) + '.',
-            'An invisible trap: a piece (not a king) that steps on it skips its next ' + C.trapTurns + ' ' + en(C.trapTurns) + '.'],
+        'An invisible trap: a piece (not a king) that steps on it skips its next ' + C.trapTurns + ' ' + en(C.trapTurns) + '.'],
         generator: ['Плитки плюс и минус (сначала плюс, потом минус). Фигуры, стоящие и на плюсе, и на минусе, убивает разряд.',
             'Plus and minus tiles (plus first, then minus). Pieces standing on both a plus and a minus are killed by a discharge.'],
         groundhog: ['Одноразовая ловушка: вставшая фигура (не король) возвращается, откуда пришла. На пустой клетке скрыта и ход не тратит, на фигуре видна и тратит ход.',
@@ -6769,13 +6789,13 @@ Object.assign(EN, {
         banana: ['Скрытая кожура на свободной клетке с направлением: вставшая фигура (не король) съезжает на соседнюю клетку в эту сторону. Ход не тратится.',
             'A hidden peel on a free square with a direction: a piece (not a king) that steps on it slides to the neighboring square in that direction. Does not use your move.'],
         fog: ['Дым 3×3 вокруг выбранной клетки на ' + C.fogTurns + ' ваших ' + pl(C.fogTurns) + ': фигуры (не короли) в нём невидимы для врага. Ход не тратится.',
-            'Smoke 3×3 around the chosen square for ' + C.fogTurns + ' of your ' + en(C.fogTurns) + ': pieces (not kings) in it are invisible to the enemy. Does not use your move.'],
+        'Smoke 3×3 around the chosen square for ' + C.fogTurns + ' of your ' + en(C.fogTurns) + ': pieces (not kings) in it are invisible to the enemy. Does not use your move.'],
         hatch: ['Люки на свободных клетках (первый раз сразу два, дальше по одному). Вставшая на люк фигура (не король) вылезает из другого люка на выбор ходящего.',
             'Hatches on free squares (two the first time, then one at a time). A piece (not a king) that steps on a hatch climbs out of another hatch of the mover\'s choice.'],
         hocus: ['Меняет местами две любые фигуры (кроме королей) в квадрате 5×5 вокруг первой. Ваш король не должен остаться под шахом.',
             'Swaps any two pieces (except kings) within a 5×5 square around the first one. Your king must not be left in check.'],
         assistant: ['Превращает фигуру (не короля) в зайца на ' + C.hareTurns + ' ' + pl(C.hareTurns) + ' её владельца. Заяц не рубит и ходит как ферзь, потом фигура возвращается.',
-            'Turns a piece (not a king) into a hare for ' + C.hareTurns + ' of its owner\'s ' + en(C.hareTurns) + '. The hare cannot capture and moves like a queen, then the piece returns.'],
+        'Turns a piece (not a king) into a hare for ' + C.hareTurns + ' of its owner\'s ' + en(C.hareTurns) + '. The hare cannot capture and moves like a queen, then the piece returns.'],
         assemble: ['Собираете робота на планшете; он появится на свободной клетке ваших первых двух горизонталей. Двойной клик по роботу покажет, как он ходит.',
             'You build a robot on the tablet; it appears on a free square of your first two ranks. Double-click a robot to see how it moves.'],
         charger: ['Плитка-зарядка: вставшая обычная фигура (не король) оглушается и пропускает ход. Первый вставший робот получает заряд на один бесплатный ход (без шаха и рубки), после чего плитка для роботов разряжена.',
@@ -6785,17 +6805,17 @@ Object.assign(EN, {
         reprogram: ['Тратит ход. Перестраивает робота или радиус турели на планшете. Новые клетки и направления увеличивают перезарядку, убранные уменьшают (ниже базовой не опускается).',
             'Uses your move. Rebuilds a robot or a turret\'s radius on the tablet. New squares and directions raise the cooldown, removed ones lower it (never below the base).'],
         freeze: ['Любая фигура (кроме короля) на ' + C.freezeTurns + ' ' + pl(C.freezeTurns) + ' не ходит, её нельзя срубить, и магия на неё не действует.',
-            'Any piece (except a king) cannot move for ' + C.freezeTurns + ' ' + en(C.freezeTurns) + ', cannot be captured, and magic does not affect it.'],
+        'Any piece (except a king) cannot move for ' + C.freezeTurns + ' ' + en(C.freezeTurns) + ', cannot be captured, and magic does not affect it.'],
         jaws: ['Фигура на первых трёх горизонталях вашей стороны: ходит и рубит на 1 клетку по вертикали и горизонтали, живёт ' + C.jawsTurns + ' ваших ходов.',
-            'A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for ' + C.jawsTurns + ' of your turns.'],
+        'A piece on the first three ranks of your side: moves and captures 1 square vertically and horizontally, lives for ' + C.jawsTurns + ' of your turns.'],
         blunder: ['Тайный колпак на вашей фигуре: ' + C.capTurns + ' ' + pl(C.capTurns) + ' врага она не рубит и не даёт шах. Срубивший её погибает.',
-            'A secret hat on your piece: for ' + C.capTurns + ' enemy ' + en(C.capTurns) + ' it cannot capture or give check. Whoever captures it dies.'],
+        'A secret hat on your piece: for ' + C.capTurns + ' enemy ' + en(C.capTurns) + ' it cannot capture or give check. Whoever captures it dies.'],
         prediction: ['Фигура (не король) получает предсказание: если ею не походят за ваши ' + C.predTurns + ' следующих ' + pl(C.predTurns) + ', она погибнет на ходе врага. Видно предсказание, но не видно, настоящее ли оно. Перезарядка скрыта. Ход не тратится.',
-            'A piece (not a king) gets a prediction: if it is not moved during your next ' + C.predTurns + ' ' + en(C.predTurns) + ', it dies on the enemy\'s turn. The prediction is visible, but whether it is real is not. The cooldown is hidden. Does not use your move.'],
+        'A piece (not a king) gets a prediction: if it is not moved during your next ' + C.predTurns + ' ' + en(C.predTurns) + ', it dies on the enemy\'s turn. The prediction is visible, but whether it is real is not. The cooldown is hidden. Does not use your move.'],
         charlatan: ['Фальшивое предсказание: выглядит как настоящее, но в конце ничего не происходит. Перезарядка скрыта. Ход не тратится.',
             'A fake prediction: it looks like a real one, but nothing happens at the end. The cooldown is hidden. Does not use your move.'],
         unlucky: ['Невидимая для врага ловушка на ' + C.unluckyTurns + ' ' + pl(C.unluckyTurns) + ' врага: вставшая на неё фигура получает настоящее предсказание. Если враг наступил в первые ' + C.omenRefreshTurns + ' ' + pl(C.omenRefreshTurns) + ', способность перезаряжается. Перезарядка скрыта. Ход не тратится.',
-            'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. If the enemy steps on it during its first ' + C.omenRefreshTurns + ' ' + en(C.omenRefreshTurns) + ', the ability is recharged. The cooldown is hidden. Does not use your move.'],
+        'A trap invisible to the enemy for ' + C.unluckyTurns + ' enemy ' + en(C.unluckyTurns) + ': a piece that steps on it gets a real prediction. If the enemy steps on it during its first ' + C.omenRefreshTurns + ' ' + en(C.omenRefreshTurns) + ', the ability is recharged. The cooldown is hidden. Does not use your move.'],
         badomen: ['То же, что Невезучий ход, но предсказание фальшивое и перезаряжается своя способность. Перезарядка скрыта. Ход не тратится.',
             'The same as Unlucky Move, but the prediction is fake and this ability is the one recharged. The cooldown is hidden. Does not use your move.']
     };
@@ -6809,6 +6829,7 @@ Object.assign(EN, {
     // подсказка при выборе цели для предсказания (теперь можно и на свою фигуру)
     add['🔮 Выберите фигуру (не короля): она получит предсказание на ' + C.predTurns + ' ' + pl(C.predTurns) + '. Враг видит его, но не знает, настоящее оно или нет. Ход не тратится.'] =
         '🔮 Choose a piece (not a king): it gets a prediction for ' + C.predTurns + ' ' + en(C.predTurns) + '. The enemy sees it but does not know whether it is real. Does not use your move.';
+    add['😱 Скример применён: теперь нужно применить другую способность (она закончит ход), ходить фигурой нельзя.'] = '😱 Scream used: now you must use another ability (it ends your turn), you cannot move a piece.';
     add['🍀 Ловушка сработала в первые ходы: способность готова снова'] = '🍀 The trap went off early: the ability is ready again';
     Object.assign(EN, add);
 })();
@@ -11793,7 +11814,7 @@ const BOT_EVAL = {
         });
         ctx.mine.forEach(({ r, c, p }) => {      // первые клетки на лучах наших дальнобойных фигур
             const dirs = p.t === 'q' ? [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] : p.t === 'r' ? [[1, 0], [-1, 0], [0, 1], [0, -1]] : p.t === 'b' ? [[1, 1], [1, -1], [-1, 1], [-1, -1]] : [];
-            dirs.forEach(([dr, dc]) => { for (let k = 1; k <= 3; k++) { const rr = r + dr * k, cc = c + dc * k; if (!inb(rr, cc) || b[rr][cc]) break; addA(rr, cc); } });
+            dirs.forEach(([dr, dc]) => { for (let k = 1; k <= 4; k++) { const rr = r + dr * k, cc = c + dc * k; if (!inb(rr, cc) || b[rr][cc]) break; addA(rr, cc); } });
         });
         const B = empty.filter(([r, c]) => ctx.theirs.some(e => e.p.t !== 'k' && botVal(e.p) >= 3 && Math.max(Math.abs(e.r - r), Math.abs(e.c - c)) <= 2)).slice(0, 14);
         if (!A.length || !B.length) return null;
@@ -11805,8 +11826,8 @@ const BOT_EVAL = {
                 G.portals = old;      // portalsWith добавляет пару к тому, что уже в G.portals, поэтому каждый раз начинаем с исходных
                 G.portals = portalsWith(side, a, b2, -1);
                 const e2 = botCapGain(b, ctx.opp), m2 = botCapGain(b, side);
-                const v = (baseE - e2) + 0.7 * (m2 - baseM) - 0.3;      // свою угрозу враг успеет парировать, поэтому она весит меньше
-                if (v >= 2.4 && (!best || v > best.v)) best = { v, cell: a, second: b2, kind: 'off' };
+                const v = (baseE - e2) + 0.9 * (m2 - baseM) - 0.3;      // порталы нужны и для атаки: свою угрозу враг успеет парировать лишь частично
+                if (v >= 2.2 && (!best || v > best.v)) best = { v, cell: a, second: b2, kind: 'off' };
             }));
         } finally { G.portals = old; }
         return best;
@@ -11855,6 +11876,46 @@ const BOT_EVAL = {
                 try { undo = moveProps([r, c], [dr, dc]); const v = botTileScore(ctx) - base - 0.3; if (v >= 2.2 && (!best || v > best.v)) best = { v, cell: [r, c], second: [dr, dc], kind: 'def' }; }
                 finally { if (undo) undo(); }
             });
+        });
+        return best;
+    },
+    ritual(ctx, cells) {      // Ритуал (бесплатно, ставим часто): призрачная плитка там, куда враг вероятно встанет, особенно чтобы закрыться от нашей угрозы
+        if ((G.rituals || []).filter(x => x.owner === ctx.side).length >= 3) return null;
+        const b = ctx.b;
+        const byCell = new Map();
+        ctx.oppMoves.forEach(({ m, e }) => { if (!b[m.tr][m.tc]) { const kk = m.tr + ',' + m.tc; if (!byCell.has(kk)) byCell.set(kk, []); byCell.get(kk).push({ m, e }); } });
+        let best = null;
+        byCell.forEach((list, kk) => {
+            const [r, c] = kk.split(',').map(Number);
+            if (!botHas(cells, r, c)) return;
+            let delta = 0;
+            list.slice(0, 4).forEach(({ m, e }) => {
+                const nb = cloneBoard(b); nb[m.fr][m.fc] = null; nb[r][c] = e.p;
+                const without = botCapGain(nb, ctx.side);
+                G.rituals.push({ r, c, owner: ctx.side });
+                let withT = without;
+                try { withT = botCapGain(nb, ctx.side); } finally { G.rituals.pop(); }
+                delta += Math.max(0, withT - without) * botVal(e.p) / 5;      // чем дороже фигура врага, тем вероятнее он туда не пойдёт, но тем больнее ошибка
+            });
+            const v = 1.45 + Math.min(2, delta) * 0.4 + Math.min(list.length, 3) * 0.1 + Math.random() * 0.1;
+            if (!best || v > best.v) best = { v, cell: [r, c], kind: 'free' };
+        });
+        return best;
+    },
+    scream(ctx, cells) {      // Скример: ослабить ключевую фигуру врага (защитника или фигуру в идеальной позиции), дальше нужна ещё способность
+        const b = ctx.b;
+        const baseE = botCapGain(b, ctx.opp), baseM = botCapGain(b, ctx.side);
+        let best = null;
+        cells.forEach(([r, c]) => {
+            const E = b[r][c];
+            if (!E || E.t === 'k' || E.scared || E.ghost) return;
+            const nb = cloneBoard(b); nb[r][c] = { ...E, scared: true };
+            const e2 = botCapGain(nb, ctx.opp), m2 = botCapGain(nb, ctx.side);
+            const mob0 = pseudoMoves(b, r, c).length, mob1 = pseudoMoves(nb, r, c).length;
+            let v = (baseE - e2) + 0.7 * (m2 - baseM);      // ослабленный защитник пропускает нашу рубку, ослабленный нападающий меньше угрожает
+            if (botVal(E) >= 3) v += Math.max(0, mob0 - mob1) * 0.12;      // фигура теряет простор
+            v -= 0.4;
+            if (v >= 2.2 && (!best || v > best.v)) best = { v, cell: [r, c], kind: 'off' };
         });
         return best;
     },
@@ -12116,10 +12177,11 @@ function botAbilityPhase(ctx, bestS, chain) {
         const free = !!(ABILITIES[cd.k] && ABILITIES[cd.k].free) || cd.k === 'openbook';
         let ok = false;
         if (!chain) {
-            if ((cd.kind === 'free' || free) && cd.special !== 'zwuse' && !['guardian', 'apocalypse'].includes(cd.k) && (BOT.patience || 0) > 0.65) continue;      // не применяем сразу, как только стало можно
+            if ((cd.kind === 'free' || free) && cd.special !== 'zwuse' && !['guardian', 'apocalypse', 'ritual'].includes(cd.k) && (BOT.patience || 0) > 0.65) continue;      // не применяем сразу, как только стало можно
             if (cd.kind === 'off' && (BOT.patience || 0) > 0.8 && cd.v < 4) continue;
         }
         if (cd.kind === 'free' || free) ok = cd.v >= 1.4 || cd.special === 'zwuse';
+        else if (chain === 'force') ok = cd.v > 0.5;      // после Скримера нужна любая способность, берём лучшую из подходящих
         else if (chain) ok = cd.v >= (cd.kind === 'def' ? 1.5 : 1.8);
         else if (cd.kind === 'def') ok = cd.v >= 2 && bestS <= -0.9 && cd.v >= -bestS * 0.7;
         else ok = cd.v >= Math.max(2.2, bestS + 1.6);
@@ -12138,6 +12200,21 @@ function botAbilityPhase(ctx, bestS, chain) {
     }
     return false;
 }
+// После Скримера обязательна ещё одна способность (она закончит ход): берём выгодную, иначе безвредную (Ритуал в пустую клетку, Прозрачность), иначе любую
+function botScreamFollow() {
+    const side = BOT.side;
+    if (botAbilityPhase(botCtx(), 0, 'force')) return true;
+    const hero = HEROES[G.hero[side]];
+    if (hero.abilities.includes('ritual') && abilityAvailable(side, 'ritual') && !BOT.tried.has('ritual')) {
+        const empties = botCells('ritual').filter(([r, c]) => !G.board[r][c]);
+        if (empties.length && botRunCell('ritual', empties[(Math.random() * empties.length) | 0])) return true;
+    }
+    if (hero.abilities.includes('phase') && abilityAvailable(side, 'phase') && !BOT.tried.has('phase')) {
+        const own = botCells('phase');
+        if (own.length && botRunCell('phase', own[(Math.random() * own.length) | 0])) return true;
+    }
+    return botLastResort();
+}
 // ---------- один шаг бота ----------
 function botStep() {
     const side = BOT.side, lv = BOT_LEVELS[BOT.level] || BOT_LEVELS[1];
@@ -12153,6 +12230,10 @@ function botStep() {
         if (cells.length) { const c = cells[(Math.random() * cells.length) | 0]; applyInput({ t: 'cell', r: c[0], c: c[1] }); return; }
     }
     if (G.mode) { cancelAbilityMode(); return; }
+    if (G.archUsed && G.screamed && !G.pendingPromo) {      // после Скримера обязательна ещё одна способность, она закончит ход
+        if (botScreamFollow()) return;
+        applyInput({ t: 'end' }); return;
+    }
     if (G.archUsed && !G.check && !G.pendingPromo) {      // способность без хода уже применена
         if (BOT_LEVELS[BOT.level] && botAbilityPhase(botCtx(), 0, true)) return;      // Архитектор может применить ещё способности в этот же ход
         applyInput({ t: 'end' }); return;
@@ -12261,4 +12342,17 @@ function botRepOpen() {
 $('#lobbyBotRep').addEventListener('click', botRepOpen);
 $('#botRepClose').addEventListener('click', () => $('#botRep').classList.add('hidden'));
 
+// ---------- Звук ZA WARUDO (из видео, встроен в файл, отдельный файл не нужен) ----------
+const ZW_SOUND = 'data:audio/mpeg;base64,SUQzBAAAAAAJFVRYWFgAAAASAAADbWFqb3JfYnJhbmQAaXNvbQBUWFhYAAAAEwAAA21pbm9yX3ZlcnNpb24ANTEyAFRYWFgAAAAkAAADY29tcGF0aWJsZV9icmFuZHMAaXNvbWlzbzJhdmMxbXA0MQBUWFhYAAAABgAAA0h3ADEAVFhYWAAABmEAAANMdk1ldGFJbmZvAHsiZGF0YSI6eyJhZHNUZW1wbGF0ZUlkIjoiIiwiYXBwVmVyc2lvbiI6IjIwLjMuMCIsImJ1c2luZXNzQ29tcG9uZW50SWQiOiIiLCJidXNpbmVzc1RlbXBsYXRlSWQiOiIiLCJjYXBhYmlsaXR5TmFtZSI6IiIsImNvbW1lcmNpYWxfcGFyYW1zIjp7fSwiZHJhZnRJbmZvIjp7fSwiZWRpdFNvdXJjZSI6IiIsImVkaXRUeXBlIjoiZWRpdCIsImVudGVyRnJvbSI6Im5ldyIsImV4cG9ydFR5cGUiOiJleHBvcnQiLCJleHRlbmRUZW1wbGF0ZUlkIjoiIiwiZXh0ZW5kVGVtcGxhdGVUeXBlIjowLCJmaWx0ZXJJZCI6IiIsImdyZWVuc2NyZWVuTGF5b3V0VHlwZSI6IiIsImluZm9TdGlja2VySWQiOiIiLCJsYXVuY2hNb2RlIjoibGF1bmNoIiwibGF1bmNoX2VudGVyX2Zyb20iOiJlbnRlcl9sYXVuY2giLCJsb2NrX2NudF9saXN0IjoiIiwibW92aWUzZFRleHRUZW1wbGF0ZUlkIjoiIiwib3JpZ2luYWxfdm9sdW1lIjoxMDAsIm9zIjoiYW5kcm9pZCIsInByb2R1Y3QiOiJ2aWN1dCIsInJlZ2lvbiI6IlJVIiwic2xvd01vdGlvbiI6Im5vbmUiLCJzb3VyY2VfcGxhdGZvcm0iOiJtb2JpbGVfMiIsInN0aWNrZXJJZCI6IiIsInRlbXBsYXRlSWQiOiIiLCJ0ZXh0U3BlY2lhbEVmZmVjdCI6IiIsInRoZW1lX3BhcmFtcyI6IltdIiwidHJhbnNmZXJNZXRob2QiOiIiLCJ0cmFuc2l0aW9ucyI6IiIsInVzZWRfdWdjX3RpbWJyZV9pbmZvIjoie1widGV4dF90b19zcGVlY2hcIjpbXSxcInZvaWNlX2NvbnZlcnNpb25cIjpbXX0iLCJ2aWRlb0Fu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kjy0t8CAEH1kKjLjIP0xim+WwvyoG2eA6yQG6fidcD/ZTjNA3ktjTennBwZKuelHFZn8LMGIqqP5tZ19wrOVoF7bki6w47r4+Zp8+FjV9f/WcMx4Ii2VxUQgkEBQ/F1hj6aP10EAAEBJUlFZ2yWxxggADIRmpdQ/ulVOArBYy0nEoKyWpcBt1HM9Ayy/F0J/CjE4BSmXYhSEwa4Qo3g/IKCVaGHW2waXC1BG0OIs9RxMZVM50nkgIMzFCgtRpp1iUSXhodBMUy1AfyJci5KmFvGNwf/7SMTiAwx4xzpsMG9B8JXlyZww+K9P4anUmPM11V7GpEWT0uyhVLtWZz/msL/E/3vW/fGP6MCLUkKXbkrEPX1I3q3H/+c4zn4/////////tTV6Yzi00cCBdn//8yYBwVSZRmXKTEFNRTMuMTAwqqqqqqoAAJrVSEUilDkoxpYiRJhUAofSKitFA2AWAWBqKqqioqKirMzNZIcg1Fr//+VVVVf9VWvYWFhY4GlAqdiUFluq6zv//rO9X/4lDfrxF//8qdlg75UFtQNVTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7SMTlgA60xTRVl4AC9y4ntzDwAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7SMS4A8rsmvpclAAAAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==';
+let zwAudio = null;
+SFX.zawarudo = () => {
+    if (!CONFIG.sound) return;
+    try {
+        zwAudio = zwAudio || new Audio(ZW_SOUND);
+        zwAudio.volume = 0.9;
+        zwAudio.currentTime = 0;
+        const pr = zwAudio.play();
+        if (pr && pr.catch) pr.catch(() => { /* браузер не разрешил звук до первого нажатия */ });
+    } catch (e) { /* звук не критичен */ }
+};
 tryResume();
