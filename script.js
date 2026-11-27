@@ -11030,7 +11030,18 @@ const BOT_LEVELS = {
     3: { name: 'Сложный', depth: 3, noise: 0.04, abil: 1 }        // считает на три хода вперёд
 };
 const BOT_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-const botVal = p => (p ? (BOT_VAL[p.t] !== undefined ? BOT_VAL[p.t] : 2) : 0);
+// Цена набора ходов: ладья+слон считается ферзём (9, а не 8), остальное складывается с небольшой надбавкой за универсальность
+const botTypesVal = ts => {
+    const set = new Set(ts);
+    set.delete('p'); set.delete('k');
+    if (set.has('q')) { set.delete('r'); set.delete('b'); }
+    let v = 0, parts = set.size;
+    if (set.has('r') && set.has('b')) { v += 9; set.delete('r'); set.delete('b'); parts = set.size + 1; }
+    set.forEach(t => { v += BOT_VAL[t] !== undefined ? BOT_VAL[t] : 1; });
+    return v * (1 + 0.05 * Math.max(0, parts - 1));
+};
+// Цена фигуры: сшитая (Франкенштейн) стоит по сумме всех своих ходов, а не только по первому типу
+const botVal = p => (p ? ((p.x && p.x.length && p.t !== 'p') ? botTypesVal([p.t, ...p.x]) : (BOT_VAL[p.t] !== undefined ? BOT_VAL[p.t] : 2)) : 0);
 const botVis = p => !!p && !hiddenFor(p, BOT.side);
 
 // ---------- что бот видит: невидимки, туман, «Ход — это ложь» ----------
@@ -11159,7 +11170,7 @@ function botEval(b, side) {      // оценка позиции глазами s
     let s = 0;
     for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
         const p = b[r][c];
-        if (!p) continue;
+        if (!p || (p.ghost && p.c === BOT.side)) continue;      // своя иллюзия материала не добавляет
         const v = botVal(p) + botPos(p, r, c, p.c);
         s += p.c === side ? v : -v;
     }
@@ -11204,8 +11215,12 @@ function botScoreMove(mv, lv, side) {
     side = side || BOT.side;
     const opp = other(side);
     const piece = G.board[mv.fr][mv.fc];
-    const nb = cloneBoard(BOT.view || G.board);
+    let nb = cloneBoard(BOT.view || G.board);
     const res = applyMove(nb, mv, 'q');
+    if (G.hatches && G.hatches.length && nb[mv.tr][mv.tc] && nb[mv.tr][mv.tc].c === side && !res.thorn && !res.burned) {      // ход на плитку-люк: фигура проваливается и вылезает из лучшего люка
+        const fl = botHatchExitBest(nb, mv.tr, mv.tc, side);
+        if (fl) nb = fl.b2;
+    }
     let score = 0, discharge = 0;
     if (G.gens && G.gens.length) {      // плитки короткого замыкания: ход может запустить разряд
         const mat = bb => { let q = 0; bb.forEach(row => row.forEach(x => { if (x && x.t !== 'k') q += (x.c === side ? 1 : -1) * botVal(x); })); return q; };
@@ -11236,6 +11251,7 @@ function botScoreMove(mv, lv, side) {
     }
     if (mv.promo) score += 8;
     score += botPos(piece, mv.tr, mv.tc, side) - botPos(piece, mv.fr, mv.fc, side);
+    if (piece.pair && side === BOT.side) score -= piece.ghost ? 0.8 : 0.3;      // фигура с иллюзией: вторая фигура пары обязана сходить следом
     if (piece.t === 'n' || piece.t === 'b') score += piece.moved ? 0 : 0.2;
     if (piece.t === 'k') score += mv.castle ? 0.7 : -0.35;
     if (piece.t === 'q' && !piece.moved && (G.done ? G.done[side] : 0) < 4) score -= 0.25;      // ферзём в самом начале лучше не бегать
@@ -11994,8 +12010,8 @@ function botCanFlee(nb, er, ec, side) {
     return false;
 }
 // Сколько мы выигрываем на доске nb, если вражеские фигуры под ударом уйти не могут (или их две и спасти можно только одну)
-function botTrapValue(nb, side, before) {
-    const after = botCapMap(nb, side), trapped = [], loose = [];
+function botTrapValue(nb, side, before, afterMap) {
+    const after = afterMap || botCapMap(nb, side), trapped = [], loose = [];
     Object.keys(after).forEach(k => {
         const e = after[k];
         if (e.g < 1.2) return;
@@ -12096,6 +12112,205 @@ BOT_EVAL.fenyan = function (ctx, cells) {
     const key = (G.turnNo || 0) + ':' + G.turn + ':' + (G.done ? G.done.w + G.done.b : 0);
     const plan = best.o.col !== undefined ? { key, ab: 'shomen', col: best.o.col } : { key, m: best.o.m };
     return { v, cell, kind: 'free', plan };
+};
+// Франкенштейн: наша фигура A рубит свою фигуру V и получает её ходы (V гибнет). Бот применяет редко:
+// 1) спасение: A под ударом, а срубив свою фигуру она уходит на безопасную клетку (и A дороже жертвы);
+// 2) выгодное перемещение: A получает НОВЫЕ ходы, от нового положения есть польза (угроза, вилка), и враг не убьёт её на новом месте
+// Слияние без новых ходов (конь+конь, ферзь+слон) бот делает только как спасение более сильной фигуры
+BOT_EVAL.frankenstein = function (ctx, cells) {
+    const side = ctx.side, opp = ctx.opp;
+    if (!cells.length) return null;
+    const t0 = performance.now();
+    const before = botCapMap(ctx.b, side), mapOpp0 = botCapMap(ctx.b, opp), risk0 = botMapMax(mapOpp0);
+    const act = (map, r, c) => Object.values(map).reduce((a, e) => (e.fr === r && e.fc === c && e.g >= 0.7 ? Math.max(a, e.g) : a), 0);      // лучшая угроза от фигуры на (r,c)
+    let best = null;
+    for (const [r, c] of cells) {
+        const A = ctx.b[r][c];
+        if (!A || A.c !== side) continue;
+        for (const [tr, tc] of frankTargets(r, c)) {
+            if (performance.now() - t0 > 1800) return best;
+            const V = ctx.b[tr][tc];
+            if (!V || V.c !== side) continue;
+            const nb = cloneBoard(ctx.b);
+            eatApply(nb, r, c, tr, tc);
+            const F = nb[tr][tc];
+            const newTypes = moveTypes(F).filter(t => !moveTypes(A).includes(t)).length;
+            const mat = botVal(F) - botVal(A) - botVal(V);      // итог самого слияния: потеряли V, получили новые ходы
+            const mapOpp1 = botCapMap(nb, opp), risk1 = botMapMax(mapOpp1);
+            const lossA = (mapOpp0[r + ',' + c] || { g: 0 }).g, lossF = (mapOpp1[tr + ',' + tc] || { g: 0 }).g;
+            let cand = null;
+            if (lossA >= 1.5 && botVal(A) > botVal(V) && lossA - lossF >= 1.5) {      // спасение более сильной фигуры
+                cand = { v: lossA - lossF + mat, cell: [r, c], second: [tr, tc], kind: 'def' };
+            } else if (newTypes >= 1) {      // выгодное слияние: новые ходы + польза от нового места - риск
+                const gain = botTrapValue(nb, side, before) + Math.max(0, act(botCapMap(nb, side), tr, tc) - act(before, r, c)) * 0.25;
+                const v = gain + mat - Math.max(0, risk1 - risk0) * 0.9 - 0.5;      // -0,5: слияние редкое, нужен явный выигрыш
+                if (v > 0) cand = { v, cell: [r, c], second: [tr, tc], kind: 'off' };
+            }
+            if (cand && (!best || cand.v > best.v)) best = cand;
+        }
+    }
+    return best;
+};
+// ---------- Потайные люки Фокусника ----------
+// Фигура, вставшая на плитку, проваливается и вылезает из другой свободной плитки (выбирает тот, кто ходит). Люки общие: ими пользуется и враг.
+// Лучший выход для фигуры на (tr,tc) доски b (стоящей там после хода): оцениваем доску после падения ответом врага. cellsOpt: допустимые выходы
+function botHatchExitBest(b, tr, tc, side, cellsOpt) {
+    const hx = hatchSafeExits(b, tr, tc, side);
+    if (!hx) return null;
+    let list = hx.safe.length ? hx.safe : hx.exits;
+    if (cellsOpt) list = list.filter(h => botHas(cellsOpt, h.r, h.c));
+    let best = null;
+    for (const h of list) {
+        const o = b[h.r][h.c];
+        if (o && !o.ghost) continue;      // занято невидимкой: ход отменился бы
+        const b2 = cloneBoard(b);
+        b2[h.r][h.c] = b2[tr][tc]; b2[tr][tc] = null;
+        const sc = -botNega(b2, other(side), 1, -1e9, 1e9, performance.now() + 300);
+        if (!best || sc > best.sc) best = { sc, h, b2 };
+    }
+    return best;
+}
+// Поставить люк(и) там, где это выгодно нам: неожиданно перебросить фигуру на опасное для врага место (вилка, шах с угрозой, фигура в ловушке)
+// и при этом не дать то же самое врагу (он ходит первым и пользуется люками тоже). Считаем лучший заброс фигуры для обеих сторон по всем люкам
+BOT_EVAL.hatch = function (ctx, cells) {
+    const side = ctx.side, opp = ctx.opp, b = ctx.b;
+    if (!cells.length) return null;
+    const t0 = performance.now(), over = () => performance.now() - t0 > 2400;
+    const need2 = !(G.hatchUsed && G.hatchUsed[side]);
+    const old = (G.hatches || []).map(h => [h.r, h.c]);
+    const mapUs0 = botCapMap(b, side), mapThem0 = botCapMap(b, opp);
+    const riskUs0 = botMapMax(mapThem0), riskThem0 = botMapMax(mapUs0);
+    // куда можно сходить на пустую клетку (не пешкой и не королём): по клетке список фигур
+    const entries = { [side]: {}, [opp]: {} };
+    const addEntries = (sd, moves) => moves.forEach(m => {
+        const p = b[m.fr][m.fc];
+        if (!p || p.t === 'p' || p.t === 'k' || kSafe(p) || b[m.tr][m.tc]) return;
+        (entries[sd][m.tr + ',' + m.tc] = entries[sd][m.tr + ',' + m.tc] || []).push([m.fr, m.fc]);
+    });
+    addEntries(side, botMovesOf(side));
+    addEntries(opp, ctx.oppMoves.map(x => x.m));
+    // ценность заброса фигуры sd с (fr,fc) на пустую клетку x
+    const cache = {};
+    const val = (sd, fr, fc, x) => {
+        const key = sd + fr + ',' + fc + '>' + x[0] + ',' + x[1];
+        if (key in cache) return cache[key];
+        const o = other(sd), nb = cloneBoard(b);
+        nb[x[0]][x[1]] = nb[fr][fc]; nb[fr][fc] = null;
+        let v = -1e9;
+        if (safeAfter(nb, sd)) {
+            const aft = botCapMap(nb, sd), bef = sd === side ? mapUs0 : mapThem0;
+            v = botTrapValue(nb, sd, bef, aft);
+            if (!safeAfter(nb, o)) {      // шах и при этом новая угроза: шах надо отбивать, а потом мы рубим
+                let nm = 0;
+                Object.keys(aft).forEach(k => { if (!bef[k] || bef[k].g < aft[k].g - 0.5) nm = Math.max(nm, aft[k].g); });
+                v += nm * 0.8;
+            }
+            v -= Math.max(0, botMapMax(botCapMap(nb, o)) - (sd === side ? riskUs0 : riskThem0)) * 0.9;
+            if (sd === opp) {      // враг уводит из-под нашего удара фигуру, которой иначе некуда деться
+                const L = (mapUs0[fr + ',' + fc] || { g: 0 }).g;
+                if (L >= 1.5 && !botCanFlee(b, fr, fc, side) && ((botCapMap(nb, side)[x[0] + ',' + x[1]] || { g: 0 }).g < 0.5)) v += L;
+            }
+        }
+        return (cache[key] = v);
+    };
+    // лучший заброс стороны sd при наборе люков H
+    const tele = (sd, H) => {
+        let best = 0;
+        for (const h of H) {
+            const ents = entries[sd][h[0] + ',' + h[1]];
+            if (!ents) continue;
+            for (const x of H) {
+                if (x === h || (x[0] === h[0] && x[1] === h[1]) || b[x[0]][x[1]]) continue;
+                for (const [fr, fc] of ents) best = Math.max(best, val(sd, fr, fc, x));
+            }
+        }
+        return best;
+    };
+    const judge = news => {
+        const H = old.concat(news);
+        if (H.length < 2) return null;
+        const ours = tele(side, H) * 0.7 - 0.3;      // враг ходит раньше и может помешать, поэтому скидка
+        if (ours < 1.5) return null;
+        return ours - tele(opp, H);
+    };
+    let best = null;
+    if (need2) {
+        // первый люк (вход) обязательно там, куда мы можем сходить; второй (выход) среди клеток поближе к фигурам врага
+        const near = c => ctx.theirs.reduce((m, e) => (e.p.t === 'p' ? m : Math.min(m, Math.abs(e.r - c[0]) + Math.abs(e.c - c[1]))), 99);
+        const exitsC = cells.slice().sort((p, q) => near(p) - near(q)).slice(0, 24);
+        for (const A of cells) {
+            if (!entries[side][A[0] + ',' + A[1]] && !old.length) continue;
+            for (const B of exitsC) {
+                if (over()) break;
+                if (A[0] === B[0] && A[1] === B[1]) continue;
+                const v = judge([A, B]);
+                if (v !== null && (!best || v > best.v)) best = { v, cell: A, second: B, kind: 'off' };
+            }
+        }
+    } else {
+        for (const Y of cells) {
+            if (over()) break;
+            const v = judge([Y]);
+            if (v !== null && (!best || v > best.v)) best = { v, cell: Y, kind: 'off' };
+        }
+    }
+    return best;
+};
+// ---------- Иллюзия Экстрасенса ----------
+// Оригинал сходит на A (тихо, без шаха и рубки: иначе двойник тут же рассеется), двойник встаёт на B. Двойник никого не рубит, но враг не знает, кто из двоих настоящий.
+// Ставим так, чтобы оба выглядели полезно (нападали на фигуры врага или прикрывали наши, которым грозят), настоящий стоял в безопасности,
+// а двойник мог стоять и под боем (его потеря ничего не стоит, а враг, срубивший его на защищённой клетке, подставится). Сравниваем с лучшим обычным ходом.
+BOT_EVAL.illusion = function (ctx, cells) {
+    const side = ctx.side, opp = ctx.opp, b = ctx.b;
+    if (!cells.length) return null;
+    if (b.some(row => row.some(p => p && p.ghost && p.c === side))) return null;      // одной иллюзии хватает
+    const t0 = performance.now(), over = () => performance.now() - t0 > 2200;
+    const best0 = BOT.curBestS === undefined ? 0 : BOT.curBestS;
+    const lv = BOT_LEVELS[BOT.level] || BOT_LEVELS[1], low = { depth: Math.min(2, lv.depth), noise: 0 };
+    // фигура того же типа на (r,c): чем она «полезна» (нападает на фигуры врага, прикрывает наши под ударом)
+    const useful = (bd, r, c) => {
+        let att = 0, def = 0;
+        attackSquares(bd, r, c).forEach(([x, y]) => {
+            const t = bd[x][y];
+            if (!t || t.t === 'k' || t.ghost) return;
+            if (t.c === opp) att = Math.max(att, botVal(t));
+            else if (t.c === side && isAttacked(bd, x, y, opp)) def = Math.max(def, botVal(t) * 0.8);
+        });
+        return att + def;
+    };
+    const first = [];
+    for (const [r, c] of cells) {
+        const p = b[r][c];
+        if (!p || p.t === 'p' || p.ghost || p.pair) continue;
+        illusionOptions(r, c).forEach(o => {
+            if (b[o.A.tr][o.A.tc]) return;      // рубка оригиналом рассеяла бы двойника
+            const nb = cloneBoard(b);
+            applyMove(nb, o.A, 'q');
+            if (!nb[o.A.tr][o.A.tc] || !safeAfter(nb, opp)) return;      // шах тоже рассеивает
+            first.push({ r, c, p, o, nb, base: botScoreMove(o.A, low, side) });
+        });
+        if (over()) break;
+    }
+    first.sort((x, y) => y.base - x.base);
+    let best = null;
+    for (const f of first.slice(0, 6)) {
+        if (f.base < best0 - 1.5) break;      // сам ход оригинала слишком слабый
+        const uA = useful(f.nb, f.o.A.tr, f.o.A.tc);
+        for (const B of f.o.Bs) {
+            if (over()) break;
+            if (!ghostViable(f.nb, B.tr, B.tc, f.p, f.o.A.tr, f.o.A.tc)) continue;
+            const tmp = cloneBoard(f.nb);
+            tmp[B.tr][B.tc] = { ...mk(f.p.t, side), x: [...(f.p.x || [])] };
+            const uB = useful(tmp, B.tr, B.tc);
+            const lo = Math.min(uA, uB);
+            let bluff = lo >= 1 ? lo * 0.3 - Math.abs(uA - uB) * 0.1 : lo * 0.1;      // оба должны выглядеть полезно и примерно одинаково
+            if (isAttacked(f.nb, B.tr, B.tc, opp) && isAttacked(f.nb, B.tr, B.tc, side)) bluff += 0.4;      // двойник под боем на защищённой клетке: срубивший его подставится
+            const total = f.base + bluff;
+            if (!best || total > best.total) best = { total, r: f.r, c: f.c, A: f.o.A, B };
+        }
+    }
+    if (!best) return null;
+    return { v: best.total - best0, cell: [best.r, best.c], seq: [[best.A.tr, best.A.tc], [best.B.tr, best.B.tc]], kind: 'cmp' };
 };
 const BOT_DANGER = { fireball: 3, freeze: 3, hypnosis: 3, arrow: 3, shomen: 3, prediction: 3, apocalypse: 3, zawarudo: 3, hocus: 3, confusion: 3, resurrect: 3, raise: 3, fenyan: 3, bumpuku: 3, misclick: 3, shield: 2.5, trap: 2.5, lure: 2.5, assistant: 2.5, scream: 2.5, soulmates: 2.5, illusion: 2.5, lie: 2.5, turret: 2.5, charger: 2.5, jaws: 2.5, blunder: 2.5 };
 // опасные способности врага, которые сейчас готовы: только их стоит отключать помидором
@@ -12314,6 +12529,7 @@ function botTryLie(best, ctx) {
 // Оценка и применение способностей. chain: Архитектор уже применил способность в этом ходу (ходить фигурой нельзя),
 // поэтому вторая и третья способности ничего не стоят по ходу, и порог выгоды ниже
 function botAbilityPhase(ctx, bestS, chain) {
+    BOT.curBestS = bestS;      // лучший обычный ход: с ним сравнивают способности, которые сами заменяют ход (Иллюзия)
     const side = BOT.side, lv = BOT_LEVELS[BOT.level] || BOT_LEVELS[1], hero = HEROES[G.hero[side]];
     const cands = [];
     const consider = (k, ev) => { if (ev && !BOT.tried.has(k)) cands.push({ k, ...ev }); };
@@ -12336,6 +12552,7 @@ function botAbilityPhase(ctx, bestS, chain) {
         if (cd.kind === 'free' || free) ok = cd.v >= 1.4 || cd.special === 'zwuse';
         else if (chain === 'force') ok = cd.v > 0.5;      // после Скримера нужна любая способность, берём лучшую из подходящих
         else if (chain) ok = cd.v >= (cd.kind === 'def' ? 1.5 : 1.8);
+        else if (cd.kind === 'cmp') ok = cd.v >= 0.9;      // уже посчитано относительно лучшего обычного хода
         else if (cd.kind === 'def') ok = cd.v >= 2 && bestS <= -0.9 && cd.v >= -bestS * 0.7;
         else ok = cd.v >= Math.max(2.2, bestS + 1.6);
         if (!ok) continue;
@@ -12381,6 +12598,10 @@ function botStep() {
     if (G.pendingPromo) { applyInput({ t: 'promo', p: 'q' }); return; }
     if (G.mode && G.mode.locked) {      // обязательный выбор (Притворство Шута и т. п.)
         const cells = G.mode.cells || [];
+        if (G.mode.type === 'hatchexit' && G.mode.from && cells.length) {      // выход из люка: берём тот, который лучше всего для нас
+            const hb = botHatchExitBest(G.board, G.mode.from[0], G.mode.from[1], G.turn, cells);
+            if (hb) { applyInput({ t: 'cell', r: hb.h.r, c: hb.h.c }); return; }
+        }
         if (cells.length) { const c = cells[(Math.random() * cells.length) | 0]; applyInput({ t: 'cell', r: c[0], c: c[1] }); return; }
     }
     if (G.mode) { cancelAbilityMode(); return; }
@@ -12396,7 +12617,12 @@ function botStep() {
         const ps = G.pairStep;
         applyInput({ t: 'cell', r: ps.r, c: ps.c });
         const mvs = (G.moves || []).filter(m => !m.decoy);
-        if (mvs.length) { const m = mvs[(Math.random() * mvs.length) | 0]; applyInput({ t: 'cell', r: m.tr, c: m.tc }); }
+        if (mvs.length) {      // второй фигурой пары ходим лучшим ходом, а не случайным
+            const low = { depth: Math.min(2, (BOT_LEVELS[BOT.level] || BOT_LEVELS[1]).depth), noise: 0 };
+            let m = mvs[0], bs = -1e9;
+            mvs.forEach(x => { const sc = botScoreMove(x, low, side); if (sc > bs) { bs = sc; m = x; } });
+            applyInput({ t: 'cell', r: m.tr, c: m.tc });
+        }
         return;
     }
     const hero = HEROES[G.hero[side]];
