@@ -32,7 +32,7 @@ const CONFIG = {
     // Перезарядка способностей (в ходах владельца)
     cooldown: {
         resurrect: 12, shield: 5, rescue: 9,         // Паладин
-        fireball: 8, freeze: 7, copy: 15,            // Маг
+        fireball: 8, freeze: 9, copy: 15,            // Маг
         illusion: 7, hypnosis: 8, confusion: 7,      // Экстрасенс
         raise: 9, frankenstein: 1, apocalypse: 12,    // Некромант
         trap: 4, arrow: 4, lure: 7,                  // Охотник
@@ -1241,7 +1241,7 @@ function pseudoMoves(b, r, c) {
         const open1 = inb(r + d, c) && passable(f1);
         if (open1 && !(ghost && r + d === last)) add(r + d, c, { promo: r + d === last });
         // двойной ход: первая клетка свободна ИЛИ на ней прозрачная для нас фигура (призрачная, на Ритуале)
-        if ((open1 || (f1 && (f1.ghost || passThru(f1, p.c, r + d, c)))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c) && !wallAt(r + d, c)) add(r + 2 * d, c, { double: true });
+        if ((open1 || (f1 && (f1.ghost || passThru(f1, p.c, r + d, c)))) && r === start && inb(r + 2 * d, c) && passable(b[r + 2 * d][c]) && !vineAt(r + d, c) && !wallAt(r + d, c) && !G.portals.some(x => x.r === r + d && x.c === c)) add(r + 2 * d, c, { double: true });
         [-1, 1].forEach(dc => {
             const tr = r + d, tc = wcol(p, c + dc), wr = tc !== c + dc ? { path: [] } : {};
             if (tr < 0 || tr >= N || tc < 0) return;
@@ -11963,6 +11963,140 @@ function botRunCell(k, cell) {
     if (G.mode) { cancelAbilityMode(); return false; }
     return G.turn !== turnBefore || G.cd[side][k] !== cdBefore;
 }
+// ---------- Челюсти Шута и Фен-Янь Самурая: бот ловит фигуры ----------
+// Что сторона side может срубить на доске nb: «ряд,столбец» цели -> лучшая рубка и её чистый выигрыш (с учётом защиты цели)
+function botCapMap(nb, side) {
+    const opp = other(side), map = {}, def = {};
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const p = nb[r][c];
+        if (!p || p.c !== side || p.ghost) continue;
+        pseudoMoves(nb, r, c).forEach(m => {
+            const t = nb[m.tr][m.tc];
+            if (!t || t.c !== opp || t.t === 'k' || t.ghost) return;
+            const k = m.tr + ',' + m.tc;
+            if (def[k] === undefined) def[k] = isAttacked(nb, m.tr, m.tc, opp);
+            const g = botVal(t) - (def[k] ? botVal(p) : 0);
+            if (!map[k] || g > map[k].g) map[k] = { g, fr: r, fc: c, tr: m.tr, tc: m.tc };
+        });
+    }
+    return map;
+}
+const botMapMax = map => Object.values(map).reduce((a, x) => Math.max(a, x.g), 0);
+// Может ли вражеская фигура на (er,ec) уйти от удара стороны side: на клетку, которую мы не бьём (острая клетка тоже смертельна) или срубив что-то
+function botCanFlee(nb, er, ec, side) {
+    const e = nb[er][ec];
+    for (const m of legalMovesAt(nb, er, ec)) {
+        const t = nb[m.tr][m.tc];
+        if (t) { if (!isAttacked(nb, m.tr, m.tc, side) || botVal(t) >= botVal(e)) return true; continue; }
+        if (G.sharp.length && sharpAt(m.tr, m.tc)) continue;      // острая клетка: фигура погибнет
+        if (!isAttacked(nb, m.tr, m.tc, side)) return true;
+    }
+    return false;
+}
+// Сколько мы выигрываем на доске nb, если вражеские фигуры под ударом уйти не могут (или их две и спасти можно только одну)
+function botTrapValue(nb, side, before) {
+    const after = botCapMap(nb, side), trapped = [], loose = [];
+    Object.keys(after).forEach(k => {
+        const e = after[k];
+        if (e.g < 1.2) return;
+        if (before && before[k] && before[k].g >= e.g - 0.5) return;      // эту угрозу мы и так имели
+        (botCanFlee(nb, e.tr, e.tc, side) ? loose : trapped).push(e.g);
+    });
+    const sum = a => a.reduce((x, y) => x + y, 0);
+    let v = sum(trapped) * 0.9;
+    if (loose.length >= 2 || (loose.length && trapped.length)) v += (sum(loose) - Math.max(...loose)) * 0.8;      // враг успеет спасти только одну
+    else if (loose.length) v += loose[0] * 0.15;
+    return v;
+}
+// Заводные челюсти: поймать фигуру (угроза, от которой некуда уйти, или вилка), а если нам грозит потеря, то экстренно закрыть или прикрыть
+BOT_EVAL.jaws = function (ctx, cells) {
+    const side = ctx.side, opp = ctx.opp;
+    if (!cells.length || !ctx.theirs.length) return null;
+    const t0 = performance.now();
+    const before = botCapMap(ctx.b, side), risk0 = botMapMax(botCapMap(ctx.b, opp));
+    let best = null;
+    for (const [r, c] of cells) {
+        if (performance.now() - t0 > 1500) break;
+        if (ctx.b[r][c]) continue;
+        const nb = cloneBoard(ctx.b);
+        nb[r][c] = { ...mk('j', side), moved: true, life: CONFIG.jawsTurns + 1 };
+        const risk1 = botMapMax(botCapMap(nb, opp));
+        const defV = risk0 - risk1;      // на сколько челюсти уменьшили нашу ближайшую потерю (закрыли линию удара или прикрыли фигуру)
+        let offV = 0;
+        if (!isAttacked(nb, r, c, opp)) offV = botTrapValue(nb, side, before) - Math.max(0, risk1 - risk0) * 0.9;      // сами челюсти враг срубить не может
+        let cand = null;
+        if (risk0 >= 2 && defV >= 1.5 && defV - 0.1 >= offV) cand = { v: defV - 0.1, cell: [r, c], kind: 'def' };
+        else if (offV > 0) cand = { v: offV, cell: [r, c], kind: 'off' };
+        if (cand && (!best || cand.v > best.v)) best = cand;
+    }
+    return best;
+};
+// Вертикаль col для Сёмен-ути: что враг потеряет (он уводит одну самую ценную фигуру, которая может покинуть вертикаль) минус наши потери
+function botShomenColScore(b, side, col) {
+    let en = 0, me = 0, maxF = 0;
+    for (let r = 0; r < N; r++) {
+        const p = b[r][col];
+        if (!p || p.t === 'k' || p.ghost) continue;
+        if (p.c === side) { me += botVal(p); continue; }
+        en += botVal(p);
+        const out = legalMovesAt(b, r, col).some(m => m.tc !== col && (b[m.tr][m.tc] || !(G.sharp.length && sharpAt(m.tr, m.tc))));
+        if (out) maxF = Math.max(maxF, botVal(p));
+    }
+    const s = en - maxF - me;
+    return en && s >= 3 ? s : -1e9;
+}
+// Фен-Янь: острые клетки одного цвета на наш ход и ход врага. Ловим фигуру: ходом создаём угрозу, а уйти можно только на острые клетки
+// (конь бьёт, а слон, которому некуда уйти по своему цвету, стоит), либо ставим Сёмен-ути и перекрываем фигурам на вертикали пути отхода.
+// Считаем лучший ход или Сёмен с острыми клетками и без них; применяем, если выигрыш не меньше 1,4. Задуманное запоминаем в BOT.plan
+BOT_EVAL.fenyan = function (ctx, cells) {
+    const side = ctx.side, opp = ctx.opp;
+    if (!cells.length) return null;
+    const t0 = performance.now();
+    const skip = [];
+    G.board.forEach((row, r) => row.forEach((p, c) => { if (p) skip.push(r + ',' + c); }));
+    const options = botAllMoves().filter(m => !m.decoy).map(m => ({ m }));
+    if (HEROES[G.hero[side]].abilities.includes('shomen') && abilityAvailable(side, 'shomen') && !BOT.tried.has('shomen')) {
+        for (let c = 0; c < N; c++) options.push({ col: c });
+    }
+    if (!options.length) return null;
+    const score = o => {
+        if (o.col !== undefined) return botShomenColScore(ctx.b, side, o.col);
+        const nb = cloneBoard(ctx.b);
+        const res = applyMove(nb, o.m, 'q');
+        if (res.dead.some(d => d.c === side)) return -1e9;      // ход на острую клетку убил бы нашу же фигуру
+        let s = 0;
+        res.dead.forEach(d => { if (d.c === opp) s += botVal(d); });
+        s += botTrapValue(nb, side, null);
+        return s - 0.9 * botMapMax(botCapMap(nb, opp));
+    };
+    const run = () => {
+        let b = null;
+        for (const o of options) {
+            if (performance.now() - t0 > 2500) return null;      // не успели: честного сравнения нет
+            const sc = score(o);
+            if (!b || sc > b.s) b = { s: sc, o };
+        }
+        return b;
+    };
+    const base = run();
+    if (!base) return null;
+    let best = null;
+    for (const parity of [0, 1]) {
+        G.sharp.push({ parity, owner: side, left: 2, skip });
+        let r1 = null;
+        try { r1 = run(); } finally { G.sharp.pop(); }
+        if (!r1) return null;
+        if (r1.s > -1e8 && (!best || r1.s > best.s)) best = { s: r1.s, o: r1.o, parity };
+    }
+    if (!best) return null;
+    const v = best.s - Math.max(base.s, 0);
+    if (v < 1.4) return null;
+    const cell = cells.find(([r, c]) => (r + c) % 2 === best.parity);
+    if (!cell) return null;
+    const key = (G.turnNo || 0) + ':' + G.turn + ':' + (G.done ? G.done.w + G.done.b : 0);
+    const plan = best.o.col !== undefined ? { key, ab: 'shomen', col: best.o.col } : { key, m: best.o.m };
+    return { v, cell, kind: 'free', plan };
+};
 const BOT_DANGER = { fireball: 3, freeze: 3, hypnosis: 3, arrow: 3, shomen: 3, prediction: 3, apocalypse: 3, zawarudo: 3, hocus: 3, confusion: 3, resurrect: 3, raise: 3, fenyan: 3, bumpuku: 3, misclick: 3, shield: 2.5, trap: 2.5, lure: 2.5, assistant: 2.5, scream: 2.5, soulmates: 2.5, illusion: 2.5, lie: 2.5, turret: 2.5, charger: 2.5, jaws: 2.5, blunder: 2.5 };
 // опасные способности врага, которые сейчас готовы: только их стоит отключать помидором
 const botTomatoList = opp => HEROES[G.hero[opp]].abilities.filter(k => !(G.cd[opp][k] > 0) && !(G.disabled[opp][k] > 0) && (BOT_DANGER[k] || 1) >= 3 && abilityAvailable(opp, k)).sort((a, b2) => (BOT_DANGER[b2] || 1) - (BOT_DANGER[a] || 1));
@@ -12215,6 +12349,7 @@ function botAbilityPhase(ctx, bestS, chain) {
         else if (cd.seq) done = botRunSeq(cd.k, cd.cell, cd.seq);
         else if (cd.second !== undefined) done = botRunTwo(cd.k, cd.cell, cd.second);
         else if (cd.cell) done = botRunCell(cd.k, cd.cell);
+        if (done && cd.plan) BOT.plan = cd.plan;      // Фен-Янь: что бот собирается сделать следом
         if (done) return true;      // продолжим со следующего шага
     }
     return false;
@@ -12267,6 +12402,13 @@ function botStep() {
     const hero = HEROES[G.hero[side]];
     const zw = G.bonus && G.bonus.kind === 'zw';
     const moves = botAllMoves();
+    if (BOT.plan) {      // Фен-Янь только что применён: доводим задуманное (ход или Сёмен-ути)
+        const pl = BOT.plan; BOT.plan = null;
+        if (pl.key === key && !G.bonus) {
+            if (pl.ab) { const pc = botCells(pl.ab).find(x => x[1] === pl.col); if (pc && abilityAvailable(side, pl.ab) && botRunCell(pl.ab, pc)) return; }
+            else { const pm = moves.find(x => sameMove(x, pl.m)); if (pm) { applyInput({ t: 'cell', r: pm.fr, c: pm.fc }); applyInput({ t: 'cell', r: pm.tr, c: pm.tc }); return; } }
+        }
+    }
     // ход ZA WARUDO: первым тихим ходом готовим взятие
     if (zw && G.bonus.step === 1 && moves.length) {
         const plan = botZwPlan();
@@ -12368,7 +12510,7 @@ SFX.zawarudo = () => {
     if (!CONFIG.sound) return;
     try {
         zwAudio = zwAudio || new Audio(ZW_SOUND);
-        zwAudio.volume = 0.45;
+        zwAudio.volume = 0.225;
         zwAudio.currentTime = 0;
         const pr = zwAudio.play();
         if (pr && pr.catch) pr.catch(() => { /* браузер не разрешил звук до первого нажатия */ });
