@@ -12312,6 +12312,132 @@ BOT_EVAL.illusion = function (ctx, cells) {
     if (!best) return null;
     return { v: best.total - best0, cell: [best.r, best.c], seq: [[best.A.tr, best.A.tc], [best.B.tr, best.B.tc]], kind: 'cmp' };
 };
+// ---------- Перепрограммирование робота Инженера ----------
+const BOT_DIRS8 = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+const BOT_ORTH4 = [[-1, 0], [0, -1], [0, 1], [1, 0]], BOT_DIAG4 = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+const BOT_KNIGHT = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]];
+// У стороны col нет ни одного хода (мат, если ещё и шах)
+function botNoMoves(b, col) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const p = b[r][c];
+        if (p && p.c === col && !p.ghost && legalMovesAt(b, r, c).length) return false;
+    }
+    return true;
+}
+// Перестроить робота, если от этого явная польза: вилка, шах (или мат) новыми ходами, новая угроза, либо робот сейчас бесполезен (забился в угол, почти не может ходить)
+// и после перестройки получит много ходов. Перебираем готовые схемы и по одному изменению от лучшей; считаем по настоящим ходам робота. Тратит ход, поэтому сравниваем с лучшим обычным
+BOT_EVAL.reprogram = function (ctx, cells) {
+    const side = ctx.side, opp = ctx.opp, b = ctx.b;
+    const robots = cells.filter(([r, c]) => b[r][c] && b[r][c].t === 'x' && b[r][c].rob && !b[r][c].frozen && !b[r][c].snared);
+    if (!robots.length) return null;
+    const t0 = performance.now(), over = () => performance.now() - t0 > 2300;
+    const ui = d => engAbs(side, d), cp = arr => arr.map(d => [d[0], d[1]]);
+    const before = botCapMap(b, side), best0 = BOT.curBestS === undefined ? 0 : BOT.curBestS;
+    let best = null;
+    for (const [r, c] of robots) {
+        const R = b[r][c], rb = R.rob;
+        const cur = rb.kind === 'wing'
+            ? { kind: 'wing', ja: cp(rb.ja.map(ui)), jw: cp(rb.jw.map(ui)), walk: [], atk: [], wr: 1 }
+            : { kind: 'boot', walk: cp(rb.walk.map(ui)), atk: cp(rb.atk.map(ui)), wr: rb.wr, ja: [], jw: [] };
+        const old = { walk: cp(cur.walk), atk: cp(cur.atk), wr: cur.wr, ja: cp(cur.ja), jw: cp(cur.jw) };
+        const score = sp => {
+            const nb = cloneBoard(b);
+            nb[r][c] = { ...R, rob: engBuild(sp, side) };
+            const moves = pseudoMoves(nb, r, c).length;
+            const aft = botCapMap(nb, side);
+            let v = (moves === 0 ? -0.8 : 0.15 * Math.min(10, moves)) + botTrapValue(nb, side, before, aft);      // робот без ходов бесполезен
+            v -= 0.04 * engReproRobState({ ...sp, old }).added;      // небольшой штраф за рост перезарядки
+            if (!safeAfter(nb, opp)) {      // шах роботом: мат или шах с новой угрозой
+                if (botNoMoves(nb, opp)) v += 30;
+                else { let nm = 0; Object.keys(aft).forEach(k => { if (!before[k] || before[k].g < aft[k].g - 0.5) nm = Math.max(nm, aft[k].g); }); v += 0.8 * nm; }
+            }
+            return v;
+        };
+        const norm = sp => ({ ...sp, walk: cp(sp.walk), atk: cp(sp.atk), ja: cp(sp.ja), jw: cp(sp.jw) });
+        const base = score(cur);
+        const cands = [];
+        if (cur.kind === 'wing') {
+            cands.push({ ...cur, ja: cp(BOT_KNIGHT), jw: [] });
+        } else {
+            cands.push({ ...cur, walk: cp(BOT_DIRS8), atk: cp(BOT_DIRS8), wr: 1 });
+            [3, 5].forEach(w => { cands.push({ ...cur, walk: cp(BOT_ORTH4), atk: cp(BOT_ORTH4), wr: w }); cands.push({ ...cur, walk: cp(BOT_DIAG4), atk: cp(BOT_DIAG4), wr: w }); });
+            [2, 3].forEach(w => cands.push({ ...cur, walk: cp(BOT_DIRS8), atk: cp(BOT_DIRS8), wr: w }));
+        }
+        // по одному изменению от текущей и от лучшей схемы
+        const neighbors = sp => {
+            const out = [];
+            if (sp.kind === 'wing') {
+                for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+                    if (!i && !j) continue;
+                    const ja = cp(sp.ja), k = ja.findIndex(x => x[0] === i && x[1] === j);
+                    if (k >= 0) ja.splice(k, 1); else if (ja.length + sp.jw.length < ENG_MAX_JUMP) ja.push([i, j]); else continue;
+                    if (ja.length) out.push({ ...sp, ja, jw: sp.jw.filter(x => !(x[0] === i && x[1] === j)) });
+                }
+            } else {
+                BOT_DIRS8.forEach(d => {
+                    [['walk', 'atk'], ['atk', 'walk']].forEach(([f]) => {
+                        const arr = cp(sp[f]), k = arr.findIndex(x => x[0] === d[0] && x[1] === d[1]);
+                        if (k >= 0) arr.splice(k, 1); else arr.push([d[0], d[1]]);
+                        const n2 = { ...sp, [f]: arr };
+                        if (n2.walk.length + n2.atk.length >= 1) out.push(n2);
+                    });
+                });
+                if (sp.wr > 1) out.push({ ...sp, wr: sp.wr - 1 });
+                if (sp.wr < N - 1) out.push({ ...sp, wr: sp.wr + 1 });
+            }
+            return out;
+        };
+        const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+        const evalList = list => {
+            let bs = null;
+            for (const sp of list) {
+                if (over()) break;
+                const sc = score(sp);
+                if (!bs || sc > bs.sc) bs = { sp, sc };
+            }
+            return bs;
+        };
+        let top = evalList(cands.concat(neighbors(cur)));
+        for (let step = 0; step < 4 && top && !over(); step++) {      // дожимаем лучшую схему ещё несколькими шагами (в том числе убираем лишние направления)
+            const nx = evalList(neighbors(top.sp));
+            if (nx && nx.sc > top.sc + 0.02) top = nx; else break;
+        }
+        if (!top || same(norm(top.sp), norm(cur))) continue;
+        const stt = engReproRobState({ ...top.sp, old });
+        if (!stt.changed) continue;
+        const gain = top.sc - base;      // штраф за перезарядку уже внутри оценки
+        if (!best || gain > best.gain) best = { gain, plan: { cell: [r, c], kind: cur.kind, walk: top.sp.walk, atk: top.sp.atk, wr: top.sp.wr, ja: top.sp.ja } };
+    }
+    if (!best) return null;
+    return { v: best.gain - best0, kind: 'cmp', special: 'repro', plan: best.plan };
+};
+// Выполнить перепрограммирование на планшете: переключаем направления до нужных, потом дальность
+function botDoRepro(pl) {
+    const side = BOT.side, turnBefore = G.turn, cdBefore = G.cd[side].reprogram;
+    BOT.tried.add('reprogram');
+    applyInput({ t: 'ab', k: 'reprogram' });
+    if (!G.mode || G.mode.type !== 'reprogram' || !botHas(G.mode.cells || [], pl.cell[0], pl.cell[1])) { if (G.mode) cancelAbilityMode(); return false; }
+    applyInput({ t: 'cell', r: pl.cell[0], c: pl.cell[1] });
+    if (!G.mode || !G.mode.rb || G.mode.kind !== pl.kind) { if (G.mode) cancelAbilityMode(); return false; }
+    const eng = (a, v) => applyInput({ t: 'eng', a, v });
+    const key = d => d[0] + ',' + d[1];
+    const sync = (cur, want, act) => {      // переключаем те направления, где текущее не совпало с нужным
+        const c0 = cur.map(key), w0 = want.map(key);
+        BOT_DIRS8.concat(BOT_KNIGHT, [[-2, 0], [2, 0], [0, -2], [0, 2], [-2, -2], [-2, 2], [2, -2], [2, 2]]).forEach(d => { if (c0.includes(key(d)) !== w0.includes(key(d))) eng(act, d); });
+    };
+    if (pl.kind === 'boot') {
+        sync(G.mode.walk, pl.walk, 'dir'); eng('next');
+        sync(G.mode.atk, pl.atk, 'dir'); eng('next');
+        eng('pick', 'boot'); eng('next');
+        for (let i = 0; i < 10 && G.mode && G.mode.stage === 'range' && G.mode.wr !== pl.wr; i++) eng('range', G.mode.wr < pl.wr ? 1 : -1);
+        eng('next');
+    } else {
+        sync(G.mode.ja, pl.ja, 'jump'); eng('next');
+        eng('pick', 'x'); eng('next');
+    }
+    if (G.mode) { cancelAbilityMode(); return false; }
+    return G.turn !== turnBefore || G.cd[side].reprogram !== cdBefore;
+}
 const BOT_DANGER = { fireball: 3, freeze: 3, hypnosis: 3, arrow: 3, shomen: 3, prediction: 3, apocalypse: 3, zawarudo: 3, hocus: 3, confusion: 3, resurrect: 3, raise: 3, fenyan: 3, bumpuku: 3, misclick: 3, shield: 2.5, trap: 2.5, lure: 2.5, assistant: 2.5, scream: 2.5, soulmates: 2.5, illusion: 2.5, lie: 2.5, turret: 2.5, charger: 2.5, jaws: 2.5, blunder: 2.5 };
 // опасные способности врага, которые сейчас готовы: только их стоит отключать помидором
 const botTomatoList = opp => HEROES[G.hero[opp]].abilities.filter(k => !(G.cd[opp][k] > 0) && !(G.disabled[opp][k] > 0) && (BOT_DANGER[k] || 1) >= 3 && abilityAvailable(opp, k)).sort((a, b2) => (BOT_DANGER[b2] || 1) - (BOT_DANGER[a] || 1));
@@ -12560,6 +12686,7 @@ function botAbilityPhase(ctx, bestS, chain) {
         if (cd.special === 'tomato') done = botTomato();
         else if (cd.special === 'revive') done = botDoRevive(cd.k, cd.pick);
         else if (cd.special === 'assemble') done = botAssemble();
+        else if (cd.special === 'repro') done = botDoRepro(cd.plan);
         else if (cd.special === 'turret') done = botBuildTurret();
         else if (cd.special === 'openbook') done = botDoOpenbook(cd.cell);
         else if (cd.special === 'zwuse') { BOT.tried.add(cd.k); applyInput({ t: 'ab', k: cd.k }); done = true; }
